@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>МГП</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header>
+  <h1>МГП</h1>
+  <div class="breadcrumb" id="breadcrumb">
+    <span onclick="goBack()">Казахстан</span>
+  </div>
+  <label class="theme-toggle" title="Светлая / тёмная тема">
+    <input type="checkbox" id="theme-switch" onchange="toggleTheme(this.checked)">
+    <span class="toggle-slider"></span>
+  </label>
+</header>
+
+<div class="main-layout">
+
+  <!-- KPI Panel -->
+  <div class="kpi-panel">
+
+    <div class="kpi-card">
+      <div class="label">Сумма</div>
+      <div class="value accent" id="kpi-dec">—</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="label">Услугополучатели</div>
+      <div class="value" id="kpi-recipients">—</div>
+    </div>
+
+    <div class="gender-row">
+      <div class="gender-item male">
+        <div class="label">Мужчины</div>
+        <div class="value" id="kpi-male">—</div>
+      </div>
+      <div class="gender-item female">
+        <div class="label">Женщины</div>
+        <div class="value" id="kpi-female">—</div>
+      </div>
+    </div>
+
+    <div class="kpi-card kpi-chart-card">
+      <div class="label">Благосостояние</div>
+      <div class="kpi-chart-area">
+        <div class="sdu-chart-wrap"><canvas id="sdu-chart"></canvas></div>
+      </div>
+      <div class="sdu-legend" id="sdu-legend"></div>
+    </div>
+
+    <div class="kpi-card kpi-chart-card">
+      <div class="label">Возраст</div>
+      <div class="kpi-chart-area">
+        <div class="sdu-chart-wrap"><canvas id="age-chart"></canvas></div>
+      </div>
+      <div class="sdu-legend" id="age-legend"></div>
+    </div>
+  </div>
+
+  <!-- Map Panel -->
+  <div class="map-panel">
+    <div id="map"></div>
+  </div>
+
+</div>
+
+<!-- Ranking table -->
+<div class="table-section ranking-section">
+  <div class="table-header">
+    <h2 id="ranking-title">Рейтинг </h2>
+    <button type="button" id="ranking-btn-back" style="display:none" onclick="goBackFromRanking()">← Все регионы</button>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th id="ranking-col-name">Регион</th>
+          <th class="sortable" data-col="recipients">Услугополучателей <span class="sort-icon"></span></th>
+          <th class="sortable" data-col="total_dec">Сумма <span class="sort-icon"></span></th>
+        </tr>
+      </thead>
+      <tbody id="ranking-body">
+        <tr><td colspan="5" class="loading">Загрузка...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Tabs section -->
+<div class="table-section tabs-section">
+  <div class="tabs-bar">
+    <button class="tab-btn active" data-tab="coverage">Охват по мерам помощи</button>
+    <button class="tab-btn" data-tab="groups">Категории по группам</button>
+    <button class="tab-btn" data-tab="breakdown">Детализация</button>
+    <button class="tab-btn" data-tab="cat-regions">Охват по категориям</button>
+    <button type="button" id="coverage-btn-back" style="display:none" onclick="goBackFromRanking()">← Все регионы</button>
+  </div>
+
+  <!-- Tab: Coverage -->
+  <div class="tab-pane active" id="tab-coverage">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th id="coverage-col-name">Регион</th>
+            <th class="col-center sortable" data-sort-col="help_types">Всего мер помощи <span class="sort-icon"></span></th>
+            <th class="col-center sortable" data-sort-col="cat_count">Охвачено категорий <span class="sort-icon"></span></th>
+            <th class="col-right sortable" data-sort-col="total_sum">Сумма <span class="sort-icon"> ▼</span></th>
+          </tr>
+        </thead>
+        <tbody id="coverage-body">
+          <tr><td colspan="4" class="loading">Загрузка...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab: Breakdown -->
+  <div class="tab-pane" id="tab-breakdown">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th id="breakdown-col-name">Район</th>
+            <th>Вид помощи</th>
+            <th>Категория</th>
+            <th class="col-right sortable" id="breakdown-sum-header">Сумма <span class="sort-icon" id="breakdown-sort-icon"> ▼</span></th>
+          </tr>
+        </thead>
+        <tbody id="breakdown-body">
+          <tr><td colspan="4" class="loading">Загрузка...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button id="bd-btn-prev" disabled>‹ Пред.</button>
+      <span class="page-info" id="bd-page-info">1 / 1</span>
+      <button id="bd-btn-next">След. ›</button>
+    </div>
+  </div>
+
+  <!-- Tab: Cat-regions -->
+  <div class="tab-pane" id="tab-cat-regions">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Категория</th>
+            <th class="col-right sortable" id="cat-regions-geo-header">
+              <span id="cat-regions-geo-label">Сколько регионов оказывают помощь</span>
+              <span class="sort-icon" id="cat-regions-sort-icon"> ▼</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody id="cat-regions-body">
+          <tr><td colspan="2" class="loading">Загрузка...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab: Groups -->
+  <div class="tab-pane" id="tab-groups">
+    <div class="table-wrap">
+      <table>
+        <thead id="groups-thead"></thead>
+        <tbody id="groups-body">
+          <tr><td colspan="4" class="loading">Загрузка...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="table-section">
+  <div class="table-header">
+    <h2>Данные</h2>
+    <span class="table-info" id="table-info"></span>
+  </div>
+  <div class="table-wrap data-table-wrap">
+    <table>
+      <thead id="table-head"></thead>
+      <tbody id="table-body">
+        <tr><td colspan="16" class="loading">Загрузка...</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="pagination">
+    <button id="btn-prev" disabled>‹ Пред.</button>
+    <span class="page-info" id="page-info">1 / 1</span>
+    <button id="btn-next">След. ›</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
