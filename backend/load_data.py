@@ -7,6 +7,30 @@ from database import engine, Base, Payment
 
 region_help_ids: dict[str, set] = {}   # {kato_reg_str: {pay_type_id, ...}} where flag='1'
 raion_help_ids:  dict[str, set] = {}   # {kato_dis_str: {pay_type_id, ...}} where flag='1'
+all_region_katos: list[str] = []       # all KATO_REG values from REGION.xlsx in order
+pay_type_names:  dict[int, str] = {}   # {pay_type_id: НАИМЕНОВАНИЕ ВЫПЛАТЫ} from REGION.xlsx
+
+# Fallback region names by KATO code — for regions absent from the payment data
+REGION_NAMES: dict[str, str] = {
+    '11': 'Акмолинская область',
+    '15': 'Актюбинская область',
+    '19': 'Алматинская область',
+    '23': 'Атырауская область',
+    '27': 'Западно-Казахстанская область',
+    '31': 'Жамбылская область',
+    '33': 'Область Жетісу',
+    '35': 'Карагандинская область',
+    '39': 'Костанайская область',
+    '43': 'Кызылординская область',
+    '47': 'Мангистауская область',
+    '55': 'Павлодарская область',
+    '59': 'Северо-Казахстанская область',
+    '61': 'Туркестанская область',
+    '63': 'Восточно-Казахстанская область',
+    '71': 'г.Астана',
+    '75': 'г.Алматы',
+    '79': 'г.Шымкент',
+}
 
 
 def _to_kato_str(val) -> str | None:
@@ -24,13 +48,22 @@ def load_reference_data():
     wb = load_workbook(os.path.join(base, "REGION.xlsx"), read_only=True, data_only=True)
     ws = wb.active
     region_help_ids.clear()
+    pay_type_names.clear()
+    all_region_katos.clear()
+    katos_seen: list[str] = []
     for row in ws.iter_rows(min_row=2, values_only=True):
-        # cols: 0=%key, 1=KATO_REG, 2=ID ВЫПЛАТЫ, 3=НАЗВАНИЕ, 4=ФЛАГ, 5=НАЛИЧИЕ
+        # cols: 0=%key, 1=KATO_REG, 2=ID ВЫПЛАТЫ, 3=НАИМЕНОВАНИЕ ВЫПЛАТЫ, 4=ФЛАГ, 5=НАЛИЧИЕ
         kato = _to_kato_str(row[1])
         pay_id = int(row[2]) if row[2] is not None else None
+        name = str(row[3]).strip() if row[3] is not None else None
         flag = str(row[4]).strip() if row[4] is not None else ''
-        if kato and pay_id and flag == '1':
+        if kato and kato not in katos_seen:
+            katos_seen.append(kato)
+        if pay_id and flag == '1' and kato:
             region_help_ids.setdefault(kato, set()).add(pay_id)
+        if pay_id and name and pay_id not in pay_type_names:
+            pay_type_names[pay_id] = name
+    all_region_katos.extend(katos_seen)
     wb.close()
 
     wb = load_workbook(os.path.join(base, "RAION.xlsx"), read_only=True, data_only=True)

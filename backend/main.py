@@ -5,15 +5,10 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func, distinct
 from sqlalchemy.orm import Session
 from database import engine, Payment
-from load_data import load_excel, load_reference_data, region_help_ids, raion_help_ids
+from load_data import (load_excel, load_reference_data,
+                       region_help_ids, raion_help_ids,
+                       all_region_katos, pay_type_names, REGION_NAMES)
 import os
-
-
-PAY_GROUPS = [
-    {'name': 'Медицинская', 'ids': [42, 43, 44, 45, 46, 47, 48, 49]},
-    {'name': 'ЖКХ и быт',  'ids': [50, 51, 52, 53, 54]},
-    {'name': 'Денежная',    'ids': [55]},
-]
 
 
 @asynccontextmanager
@@ -259,16 +254,29 @@ def summary(region_id: int = Query(None)):
                 func.sum(Payment.dec_pay_sum).label("total_sum"),
             ).group_by(Payment.kato_region, Payment.kato_regname).all()
 
-            result = [
-                {
-                    "id": r.kato_region,
-                    "name": r.kato_regname,
-                    "help_types": len(region_help_ids.get(str(r.kato_region), set())),
-                    "cat_count": r.cat_count,
-                    "total_sum": round(float(r.total_sum or 0), 2),
-                }
-                for r in rows
-            ]
+            db_dict = {str(r.kato_region): r for r in rows}
+            name_map = {str(r.kato_region): r.kato_regname
+                        for r in db.query(Payment.kato_region, Payment.kato_regname).distinct().all()}
+
+            result = []
+            for kato in all_region_katos:
+                r = db_dict.get(kato)
+                if r:
+                    result.append({
+                        "id": r.kato_region,
+                        "name": r.kato_regname,
+                        "help_types": len(region_help_ids.get(kato, set())),
+                        "cat_count": r.cat_count,
+                        "total_sum": round(float(r.total_sum or 0), 2),
+                    })
+                else:
+                    result.append({
+                        "id": int(kato) if kato.isdigit() else kato,
+                        "name": name_map.get(kato) or REGION_NAMES.get(kato, kato),
+                        "help_types": len(region_help_ids.get(kato, set())),
+                        "cat_count": 0,
+                        "total_sum": 0.0,
+                    })
         else:
             rows = db.query(
                 Payment.kato_raion,
@@ -294,49 +302,64 @@ def summary(region_id: int = Query(None)):
 @app.get("/api/coverage-groups")
 def coverage_groups(region_id: int = Query(None)):
     with Session(engine) as db:
-        # Global max categories per group across all data
-        group_max = {
-            g['name']: db.query(func.count(distinct(Payment.cat_type_id)))
-                         .filter(Payment.pay_type_id.in_(g['ids'])).scalar() or 0
-            for g in PAY_GROUPS
-        }
+        groups_def = sorted(pay_type_names.items())   # [(42, 'name'), ...]
+        columns = [{'id': pid, 'name': pname} for pid, pname in groups_def]
 
         if region_id is None:
-            geo_rows = db.query(Payment.kato_region, Payment.kato_regname).distinct().all()
+            name_map = {str(r.kato_region): r.kato_regname
+                        for r in db.query(Payment.kato_region, Payment.kato_regname).distinct().all()}
+
+            covered_rows = db.query(
+                Payment.kato_region,
+                Payment.pay_type_id,
+                func.count(distinct(Payment.cat_type_id)).label("covered"),
+            ).group_by(Payment.kato_region, Payment.pay_type_id).all()
+
+            covered_map: dict[str, dict[int, int]] = {}
+            for row in covered_rows:
+                covered_map.setdefault(str(row.kato_region), {})[row.pay_type_id] = row.covered
+
+            kato_list = all_region_katos
         else:
-            geo_rows = db.query(Payment.kato_raion, Payment.kato_rainame) \
-                         .filter(Payment.kato_region == region_id).distinct().all()
+            name_map = {str(r.kato_raion): r.kato_rainame
+                        for r in db.query(Payment.kato_raion, Payment.kato_rainame)
+                        .filter(Payment.kato_region == region_id).distinct().all()}
+
+            covered_rows = db.query(
+                Payment.kato_raion,
+                Payment.pay_type_id,
+                func.count(distinct(Payment.cat_type_id)).label("covered"),
+            ).filter(Payment.kato_region == region_id)\
+             .group_by(Payment.kato_raion, Payment.pay_type_id).all()
+
+            covered_map = {}
+            for row in covered_rows:
+                covered_map.setdefault(str(row.kato_raion), {})[row.pay_type_id] = row.covered
+
+            kato_list = sorted(name_map.keys(), key=lambda k: int(k) if k.isdigit() else k)
 
         result = []
-        for row in geo_rows:
+        for kato in kato_list:
+            geo_id = int(kato) if kato.isdigit() else kato
             if region_id is None:
-                geo_id, geo_name = row.kato_region, row.kato_regname
-                geo_filter = Payment.kato_region == geo_id
-                ref = region_help_ids.get(str(geo_id), set())
+                geo_name = name_map.get(kato) or REGION_NAMES.get(kato, kato)
             else:
-                geo_id, geo_name = row.kato_raion, row.kato_rainame
-                geo_filter = Payment.kato_raion == geo_id
-                ref = raion_help_ids.get(str(geo_id), set())
+                geo_name = name_map.get(kato, kato)
+            ref = region_help_ids.get(kato, set()) if region_id is None else raion_help_ids.get(kato, set())
+            geo_covered = covered_map.get(kato, {})
 
-            groups_data = []
-            for g in PAY_GROUPS:
-                available = bool(ref & set(g['ids']))
-                covered = db.query(func.count(distinct(Payment.cat_type_id))) \
-                            .filter(geo_filter) \
-                            .filter(Payment.pay_type_id.in_(g['ids'])).scalar() or 0
-                max_c = group_max[g['name']]
-                pct = round(covered / max_c * 100, 1) if max_c else 0
-                groups_data.append({
-                    'group': g['name'],
-                    'covered': covered,
-                    'max': max_c,
-                    'pct': pct,
-                    'available': available,
-                })
-
+            groups_data = [
+                {
+                    'group': pname,
+                    'covered': geo_covered.get(pid, 0),
+                    'available': pid in ref,
+                }
+                for pid, pname in groups_def
+            ]
             result.append({'id': geo_id, 'name': geo_name, 'groups': groups_data})
 
-        return sorted(result, key=lambda x: sum(g['covered'] for g in x['groups']), reverse=True)
+        rows = sorted(result, key=lambda x: sum(g['covered'] for g in x['groups']), reverse=True)
+        return {'columns': columns, 'rows': rows}
 
 
 @app.get("/api/cat-regions")
@@ -354,6 +377,56 @@ def cat_regions(region_id: int = Query(None)):
         return [{"cat_type": r.cat_type or '—', "geo_count": r.geo_count} for r in rows]
 
 
+@app.get("/api/uncovered-cats")
+def uncovered_cats(region_id: int = Query(None)):
+    """Rating of regions/raions by how many categories are NOT served.
+    Click count → list of uncovered category names."""
+    with Session(engine) as db:
+        all_cats = {c[0] for c in db.query(distinct(Payment.cat_type))
+                    .filter(Payment.cat_type.isnot(None)).all() if c[0]}
+
+        if region_id is None:
+            rows = db.query(Payment.kato_region, Payment.kato_regname, Payment.cat_type)\
+                     .filter(Payment.cat_type.isnot(None)).distinct().all()
+            covered_map: dict[str, dict] = {}
+            for kr, name, cat in rows:
+                g = covered_map.setdefault(str(kr), {"name": name, "cats": set()})
+                g["cats"].add(cat)
+
+            result = []
+            for kato in all_region_katos:
+                info = covered_map.get(kato)
+                name = info["name"] if info else REGION_NAMES.get(kato, kato)
+                covered = info["cats"] if info else set()
+                uncovered = sorted(all_cats - covered)
+                result.append({
+                    "id": int(kato) if kato.isdigit() else kato,
+                    "name": name,
+                    "uncovered_count": len(uncovered),
+                    "uncovered_cats": uncovered,
+                })
+        else:
+            rows = db.query(Payment.kato_raion, Payment.kato_rainame, Payment.cat_type)\
+                     .filter(Payment.kato_region == region_id)\
+                     .filter(Payment.cat_type.isnot(None)).distinct().all()
+            covered_map = {}
+            for kr, name, cat in rows:
+                g = covered_map.setdefault(kr, {"name": name, "cats": set()})
+                g["cats"].add(cat)
+
+            result = []
+            for kato, info in covered_map.items():
+                uncovered = sorted(all_cats - info["cats"])
+                result.append({
+                    "id": kato,
+                    "name": info["name"],
+                    "uncovered_count": len(uncovered),
+                    "uncovered_cats": uncovered,
+                })
+
+        return sorted(result, key=lambda x: x["uncovered_count"], reverse=True)
+
+
 @app.get("/api/breakdown")
 def breakdown(
     region_id: int = Query(None),
@@ -363,16 +436,36 @@ def breakdown(
     sort_dir: str = Query('desc'),
 ):
     with Session(engine) as db:
+        # Top level → group by region; inside region → group by raion
+        if region_id is not None:
+            geo_id_col   = Payment.kato_raion
+            geo_name_col = Payment.kato_rainame
+            level = 'raion'
+        else:
+            geo_id_col   = Payment.kato_region
+            geo_name_col = Payment.kato_regname
+            level = 'region'
+
         q = db.query(
-            Payment.kato_rainame,
+            geo_id_col.label("geo_id"),
+            geo_name_col.label("geo_name"),
             Payment.pay_type,
             Payment.cat_type,
             func.sum(Payment.dec_pay_sum).label("total_sum"),
         )
-        q = build_filter(q, region_id, raion_id)
-        q = q.group_by(Payment.kato_rainame, Payment.pay_type, Payment.cat_type)
+
+        if raion_id is not None:
+            q = q.filter(Payment.kato_raion == raion_id)
+        elif region_id is not None:
+            q = q.filter(Payment.kato_region == region_id)
+
+        q = q.group_by(geo_id_col, geo_name_col, Payment.pay_type, Payment.cat_type)
         sum_col = func.sum(Payment.dec_pay_sum)
-        q = q.order_by(sum_col.desc() if sort_dir == 'desc' else sum_col.asc())
+        # Primary: region/raion name alphabetically; secondary: sum (toggleable)
+        q = q.order_by(
+            geo_name_col.asc(),
+            sum_col.desc() if sort_dir == 'desc' else sum_col.asc(),
+        )
 
         total = q.count()
         rows = q.offset((page - 1) * limit).limit(limit).all()
@@ -381,11 +474,13 @@ def breakdown(
             "total": total,
             "page": page,
             "pages": (total + limit - 1) // limit,
+            "level": level,
             "data": [
                 {
-                    "raion": r.kato_rainame or '—',
-                    "pay_type": r.pay_type or '—',
-                    "cat_type": r.cat_type or '—',
+                    "geo_id":    r.geo_id,
+                    "geo_name":  r.geo_name or '—',
+                    "pay_type":  r.pay_type or '—',
+                    "cat_type":  r.cat_type or '—',
                     "total_sum": round(float(r.total_sum or 0), 2),
                 }
                 for r in rows

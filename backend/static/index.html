@@ -100,6 +100,7 @@
     <button class="tab-btn" data-tab="groups">Категории по группам</button>
     <button class="tab-btn" data-tab="breakdown">Детализация</button>
     <button class="tab-btn" data-tab="cat-regions">Охват по категориям</button>
+    <button class="tab-btn" data-tab="uncovered">Не оказываемые категории</button>
     <button type="button" id="coverage-btn-back" style="display:none" onclick="goBackFromRanking()">← Все регионы</button>
   </div>
 
@@ -173,6 +174,26 @@
         <thead id="groups-thead"></thead>
         <tbody id="groups-body">
           <tr><td colspan="4" class="loading">Загрузка...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab: Uncovered categories -->
+  <div class="tab-pane" id="tab-uncovered">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th id="uncovered-col-name">Регион</th>
+            <th class="col-center sortable" id="uncovered-count-header">
+              Не оказываемых категорий
+              <span class="sort-icon" id="uncovered-sort-icon"> ▼</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody id="uncovered-body">
+          <tr><td colspan="2" class="loading">Загрузка...</td></tr>
         </tbody>
       </table>
     </div>

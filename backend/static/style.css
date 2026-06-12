@@ -358,6 +358,7 @@ tbody tr:last-child td { border-bottom: none; }
 .pagination .page-info { font-size: 0.82rem; color: var(--tx-dim); }
 
 .loading { text-align: center; padding: 40px; color: var(--tx-muted); font-size: 0.9rem; }
+.no-data { text-align: center; padding: 40px; color: var(--tx-muted); font-size: 0.9rem; }
 
 /* Tabs */
 .tabs-section { margin-top: 8px; }
@@ -438,6 +439,19 @@ th.tbl-sortable:hover { color: var(--tx-sub); }
 tr.filter-row th {
   background: var(--bg-deeper);
   padding: 4px 6px;
+}
+
+/* Data table: two-row sticky header (labels + filters stacked) */
+.data-table-wrap thead tr:first-child th {
+  height: 38px;
+  box-sizing: border-box;
+  top: 0;
+  z-index: 2;
+}
+.data-table-wrap tr.filter-row th {
+  position: sticky;
+  top: 37px;       /* slight overlap with label row to hide the collapsed border gap */
+  z-index: 3;      /* filter row paints over the overlap */
 }
 
 .tbl-filter {
@@ -580,6 +594,65 @@ th.sort-active { color: var(--ac-blue); }
 #tab-cat-regions td:last-child {
   width: 320px;
   white-space: nowrap;
+}
+
+/* Uncovered-categories tab */
+.unc-count {
+  font-weight: 600;
+  color: #f39c12;
+  transition: color 0.15s;
+}
+.unc-count:hover { color: #ffb347; }
+.unc-caret { font-size: 0.65rem; opacity: 0.7; }
+.unc-detail-row > td { padding: 0 !important; background: rgba(243,156,18,0.05); }
+.unc-detail {
+  padding: 10px 18px 14px;
+  border-left: 3px solid rgba(243,156,18,0.5);
+}
+/* Fixed layout so long detail text never widens the table */
+#tab-uncovered table { table-layout: fixed; width: 100%; }
+#tab-uncovered thead th:last-child { width: 260px; }
+#tab-uncovered td { overflow-wrap: anywhere; }
+
+.unc-detail-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--tx-muted);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.unc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.unc-list li {
+  font-size: 0.82rem;
+  color: var(--tx-main);
+  padding-left: 14px;
+  position: relative;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.unc-list li::before {
+  content: '•';
+  position: absolute;
+  left: 2px;
+  color: rgba(243,156,18,0.7);
+}
+
+/* Group column headers */
+.grp-col-hdr {
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.72rem;
 }
 
 /* Coverage-groups colored cells */

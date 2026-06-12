@@ -62,7 +62,7 @@ async function init() {
 
   renderRegions();
   await refreshKPI();
-  await Promise.all([loadTable(1), loadRanking(), loadSummary(), loadCoverageGroups(), loadBreakdown(1), loadCatRegions()]);
+  await Promise.all([loadTable(1), loadRanking(), loadSummary(), loadCoverageGroups(), loadBreakdown(1), loadCatRegions(), loadUncovered()]);
 }
 
 function getColor(value, max) {
@@ -208,7 +208,7 @@ async function drillRegionFromRanking(regionId) {
   updateBreadcrumb(regionName, null);
   loadDistinct('kato_rainame');
   await refreshKPI();
-  await Promise.all([loadTable(1), loadRanking(), loadSummary(), loadCoverageGroups(), loadBreakdown(1), loadCatRegions()]);
+  await Promise.all([loadTable(1), loadRanking(), loadSummary(), loadCoverageGroups(), loadBreakdown(1), loadCatRegions(), loadUncovered()]);
 }
 
 async function drillRegion(regionId) {
@@ -252,7 +252,7 @@ async function drillRegion(regionId) {
   updateBreadcrumb(regionName, null);
   loadDistinct('kato_rainame');
   await refreshKPI();
-  await Promise.all([loadTable(1), loadRanking(), loadSummary(), loadCoverageGroups(), loadBreakdown(1), loadCatRegions()]);
+  await Promise.all([loadTable(1), loadRanking(), loadSummary(), loadCoverageGroups(), loadBreakdown(1), loadCatRegions(), loadUncovered()]);
 }
 
 async function selectRaion(raionId) {
@@ -293,6 +293,7 @@ function goBack() {
   loadCoverageGroups();
   loadBreakdown(1);
   loadCatRegions();
+  loadUncovered();
 }
 
 function goBackFromRanking() {
@@ -310,6 +311,7 @@ function goBackFromRanking() {
   loadCoverageGroups();
   loadBreakdown(1);
   loadCatRegions();
+  loadUncovered();
   requestAnimationFrame(() => window.scrollTo({ top: savedScroll, behavior: 'instant' }));
 }
 
@@ -440,7 +442,8 @@ let coverageData = [];
 let coverageSortCol = 'total_sum';
 let coverageSortDir = 'desc';
 
-let groupsData = [];
+let groupsColumns = [];
+let groupsRows = [];
 let groupsSortGroup = null;
 let groupsSortDir = 'desc';
 
@@ -458,7 +461,7 @@ async function loadBreakdown(page = 1) {
 
   const colName = currentRegion
     ? `Район (${regionStats[currentRegion]?.name || ''})`
-    : 'Район';
+    : 'Регион';
   setText('breakdown-col-name', colName);
 
   const icon = document.getElementById('breakdown-sort-icon');
@@ -468,15 +471,21 @@ async function loadBreakdown(page = 1) {
     '<tr><td colspan="4" class="loading">Загрузка...</td></tr>';
 
   const data = await fetch(`/api/breakdown?${params}`).then(r => r.json());
+  const isRegionLevel = data.level === 'region';
 
-  document.getElementById('breakdown-body').innerHTML = data.data.map(r =>
-    `<tr>
-      <td>${r.raion}</td>
+  document.getElementById('breakdown-body').innerHTML = (data.data || []).map(r => {
+    // Support both new geo_name and legacy raion field
+    const name = r.geo_name !== undefined ? r.geo_name : (r.raion || '—');
+    const geoCell = (isRegionLevel && r.geo_id)
+      ? `<td class="coverage-row" onclick="drillRegionFromRanking(${r.geo_id})" style="cursor:pointer">${name}</td>`
+      : `<td>${name}</td>`;
+    return `<tr>
+      ${geoCell}
       <td>${r.pay_type}</td>
       <td>${r.cat_type}</td>
       <td class="col-right">${formatNum(r.total_sum)} ₸</td>
-    </tr>`
-  ).join('') || '<tr><td colspan="4" class="loading">Нет данных</td></tr>';
+    </tr>`;
+  }).join('') || '<tr><td colspan="4" class="no-data">Нет информации</td></tr>';
 
   document.getElementById('bd-btn-prev').disabled = page <= 1;
   document.getElementById('bd-btn-next').disabled = page >= data.pages;
@@ -508,36 +517,92 @@ function renderCatRegions() {
 
   document.getElementById('cat-regions-body').innerHTML = sorted.map(r =>
     `<tr><td title="${r.cat_type}">${r.cat_type}</td><td class="col-right">${r.geo_count}</td></tr>`
-  ).join('') || '<tr><td colspan="2" class="loading">Нет данных</td></tr>';
+  ).join('') || '<tr><td colspan="2" class="no-data">Нет информации</td></tr>';
+}
+
+let uncoveredData = [];
+let uncoveredSortDir = 'desc';
+let uncoveredExpanded = new Set();
+
+async function loadUncovered() {
+  const params = new URLSearchParams();
+  if (currentRegion) params.set('region_id', currentRegion);
+
+  setText('uncovered-col-name', currentRegion
+    ? `Район (${regionStats[currentRegion]?.name || ''})` : 'Регион');
+
+  document.getElementById('uncovered-body').innerHTML =
+    '<tr><td colspan="2" class="loading">Загрузка...</td></tr>';
+
+  uncoveredExpanded.clear();
+  uncoveredData = await fetch(`/api/uncovered-cats?${params}`).then(r => r.json());
+  renderUncovered();
+}
+
+function renderUncovered() {
+  const sorted = [...uncoveredData].sort((a, b) =>
+    uncoveredSortDir === 'desc'
+      ? b.uncovered_count - a.uncovered_count
+      : a.uncovered_count - b.uncovered_count
+  );
+  const icon = document.getElementById('uncovered-sort-icon');
+  if (icon) icon.textContent = uncoveredSortDir === 'desc' ? ' ▼' : ' ▲';
+
+  document.getElementById('uncovered-body').innerHTML = sorted.map(r => {
+    const open = uncoveredExpanded.has(r.id);
+    const countCell = r.uncovered_count > 0
+      ? `<td class="col-center unc-count" onclick="toggleUncovered('${r.id}')" style="cursor:pointer">
+           ${r.uncovered_count} <span class="unc-caret">${open ? '▲' : '▼'}</span>
+         </td>`
+      : `<td class="col-center" style="color:var(--tx-muted)">0</td>`;
+    const nameCell = !currentRegion
+      ? `<td class="coverage-row" onclick="drillRegionFromRanking(${r.id})" style="cursor:pointer">${r.name || '—'}</td>`
+      : `<td>${r.name || '—'}</td>`;
+    let html = `<tr>${nameCell}${countCell}</tr>`;
+    if (open && r.uncovered_count > 0) {
+      const list = r.uncovered_cats.map(c => `<li>${c}</li>`).join('');
+      html += `<tr class="unc-detail-row"><td colspan="2">
+        <div class="unc-detail">
+          <div class="unc-detail-title">Не оказываемые категории (${r.uncovered_count}):</div>
+          <ul class="unc-list">${list}</ul>
+        </div></td></tr>`;
+    }
+    return html;
+  }).join('') || '<tr><td colspan="2" class="no-data">Нет информации</td></tr>';
+}
+
+function toggleUncovered(id) {
+  // id arrives as string from inline handler; data ids may be numeric
+  const match = uncoveredData.find(r => String(r.id) === String(id));
+  const key = match ? match.id : id;
+  if (uncoveredExpanded.has(key)) uncoveredExpanded.delete(key);
+  else uncoveredExpanded.add(key);
+  renderUncovered();
 }
 
 function renderGroupCell(g) {
-  if (!g.available) {
-    return `<td class="grp-cell grp-red">0</td>`;
-  }
-  if (g.covered === 0) {
-    return `<td class="grp-cell grp-red">0</td>`;
-  }
-  const cls = g.pct >= 70 ? 'grp-green' : g.pct >= 50 ? 'grp-orange' : 'grp-red';
+  if (!g.available) return `<td class="grp-cell grp-red">0</td>`;
+  if (g.covered === 0) return `<td class="grp-cell grp-red">0</td>`;
+  const cls = g.covered >= 7 ? 'grp-green' : 'grp-orange';
   return `<td class="grp-cell ${cls}">${g.covered} кат.</td>`;
 }
 
 function renderGroups() {
-  if (!groupsData.length) {
+  if (!groupsRows.length) {
     document.getElementById('groups-body').innerHTML =
-      '<tr><td colspan="4" class="loading">Нет данных</td></tr>';
+      '<tr><td colspan="4" class="no-data">Нет информации</td></tr>';
     return;
   }
-  const groups = groupsData[0].groups.map(g => g.group);
   const geoLabel = currentRegion
     ? `Район (${regionStats[currentRegion]?.name || ''})` : 'Регион';
 
   document.getElementById('groups-thead').innerHTML = `<tr>
     <th>${geoLabel}</th>
-    ${groups.map(g => {
-      const active = groupsSortGroup === g;
+    ${groupsColumns.map(col => {
+      const active = groupsSortGroup === col.name;
       const icon = active ? (groupsSortDir === 'desc' ? ' ▼' : ' ▲') : '';
-      return `<th class="col-center sortable${active ? ' sort-active' : ''}" data-grp="${g}">${g}<span class="sort-icon">${icon}</span></th>`;
+      const short = col.name.length > 28 ? col.name.slice(0, 27) + '…' : col.name;
+      return `<th class="col-center sortable grp-col-hdr${active ? ' sort-active' : ''}" data-grp="${col.name}" title="${col.name}">${short}<span class="sort-icon">${icon}</span></th>`;
     }).join('')}
   </tr>`;
 
@@ -552,13 +617,13 @@ function renderGroups() {
   });
 
   const sorted = groupsSortGroup
-    ? [...groupsData].sort((a, b) => {
+    ? [...groupsRows].sort((a, b) => {
         const ga = a.groups.find(g => g.group === groupsSortGroup);
         const gb = b.groups.find(g => g.group === groupsSortGroup);
-        const va = ga ? ga.pct : -1, vb = gb ? gb.pct : -1;
+        const va = ga ? ga.covered : -1, vb = gb ? gb.covered : -1;
         return groupsSortDir === 'desc' ? vb - va : va - vb;
       })
-    : groupsData;
+    : groupsRows;
 
   document.getElementById('groups-body').innerHTML = sorted.map(r => {
     const clickAttr = !currentRegion
@@ -577,7 +642,24 @@ async function loadCoverageGroups() {
   document.getElementById('groups-body').innerHTML =
     '<tr><td colspan="4" class="loading">Загрузка...</td></tr>';
 
-  groupsData = await fetch(`/api/coverage-groups?${params}`).then(r => r.json());
+  try {
+    const resp = await fetch(`/api/coverage-groups?${params}`).then(r => r.json());
+    // Support both new {columns, rows} format and legacy array format
+    if (resp && resp.columns) {
+      groupsColumns = resp.columns;
+      groupsRows    = resp.rows || [];
+    } else if (Array.isArray(resp)) {
+      // Legacy format — derive columns from first row's groups
+      groupsColumns = (resp[0]?.groups || []).map(g => ({ id: g.group, name: g.group }));
+      groupsRows    = resp;
+    } else {
+      groupsColumns = [];
+      groupsRows    = [];
+    }
+  } catch(e) {
+    groupsColumns = [];
+    groupsRows    = [];
+  }
   renderGroups();
 }
 
@@ -603,7 +685,7 @@ function renderCoverage() {
       <td class="col-center">${r.cat_count}</td>
       <td class="col-right">${formatNum(r.total_sum)} ₸</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="4" class="loading">Нет данных</td></tr>';
+  }).join('') || '<tr><td colspan="4" class="no-data">Нет информации</td></tr>';
 }
 
 async function loadSummary() {
@@ -667,7 +749,7 @@ function renderRanking() {
         </div>
       </td>
     </tr>`;
-  }).join('') || '<tr><td colspan="5" class="loading">Нет данных</td></tr>';
+  }).join('') || '<tr><td colspan="5" class="no-data">Нет информации</td></tr>';
 
   // Update sort icons
   document.querySelectorAll('#ranking-col-name ~ th.sortable').forEach(th => {
@@ -764,7 +846,7 @@ async function loadTable(page) {
 
   const html = data.data.map(row =>
     `<tr>${TABLE_COLS.map(c => `<td>${fmtCell(c.key, row[c.key])}</td>`).join('')}</tr>`
-  ).join('') || '<tr><td colspan="99" class="loading">Нет данных</td></tr>';
+  ).join('') || '<tr><td colspan="99" class="no-data">Нет информации</td></tr>';
   tbody.classList.remove('tbl-loaded');
   tbody.innerHTML = html;
   requestAnimationFrame(() => tbody.classList.add('tbl-loaded'));
@@ -847,6 +929,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('cat-regions-geo-header')?.addEventListener('click', () => {
     catRegionsSortDir = catRegionsSortDir === 'desc' ? 'asc' : 'desc';
     renderCatRegions();
+  });
+
+  document.getElementById('uncovered-count-header')?.addEventListener('click', () => {
+    uncoveredSortDir = uncoveredSortDir === 'desc' ? 'asc' : 'desc';
+    renderUncovered();
   });
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
