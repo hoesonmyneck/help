@@ -66,12 +66,21 @@ async function init() {
 }
 
 function getColor(value, max) {
-  if (!max || max === 0) return '#1e2d5e';
+  if (!max || max === 0) return 'rgba(15,22,58,0.85)';
   const t = Math.min(value / max, 1);
-  const r = Math.round(30 + t * 180);
-  const g = Math.round(45 + t * 60);
-  const b = Math.round(94 + t * 50);
-  return `rgb(${r},${g},${b})`;
+  // deep indigo → royal blue → vivid blue → cyan → teal-mint
+  const stops = [
+    [15, 22, 58],
+    [24, 60, 160],
+    [48, 120, 220],
+    [30, 190, 200],
+    [0,  220, 180],
+  ];
+  const seg = t * (stops.length - 1);
+  const lo = Math.floor(seg), hi = Math.min(lo + 1, stops.length - 1);
+  const f = seg - lo;
+  const [r, g, b] = stops[lo].map((v, i) => Math.round(v + (stops[hi][i] - v) * f));
+  return `rgba(${r},${g},${b},0.88)`;
 }
 
 function regionStyle(feature) {
@@ -320,11 +329,10 @@ async function refreshKPI() {
 
   const data = await fetch(`/api/kpi?${params}`).then(r => r.json());
 
-  setText('kpi-max', formatNum(data.total_max_pay_sum));
-  setText('kpi-dec', formatNum(data.total_dec_pay_sum));
-  setText('kpi-recipients', formatInt(data.unique_recipients));
-  setText('kpi-male', formatInt(data.male_count));
-  setText('kpi-female', formatInt(data.female_count));
+  animateCounter('kpi-dec',        data.total_dec_pay_sum,  v => formatNum(v));
+  animateCounter('kpi-recipients', data.unique_recipients,  v => formatInt(v));
+  animateCounter('kpi-male',       data.male_count,         v => formatInt(v));
+  animateCounter('kpi-female',     data.female_count,       v => formatInt(v));
   renderSduChart(data.sdu || {});
   renderAgeChart(data.age || {});
 }
@@ -754,9 +762,12 @@ async function loadTable(page) {
 
   setText('table-info', `Записей: ${data.total} | Страница ${data.page} из ${data.pages}`);
 
-  tbody.innerHTML = data.data.map(row =>
+  const html = data.data.map(row =>
     `<tr>${TABLE_COLS.map(c => `<td>${fmtCell(c.key, row[c.key])}</td>`).join('')}</tr>`
   ).join('') || '<tr><td colspan="99" class="loading">Нет данных</td></tr>';
+  tbody.classList.remove('tbl-loaded');
+  tbody.innerHTML = html;
+  requestAnimationFrame(() => tbody.classList.add('tbl-loaded'));
 
   document.getElementById('btn-prev').disabled = page <= 1;
   document.getElementById('btn-next').disabled = page >= data.pages;
@@ -768,6 +779,23 @@ function fmtCell(key, val) {
   if (key === 'gender_id') return val === '1' ? 'М' : val === '2' ? 'Ж' : val;
   if (key === 'max_pay_sum' || key === 'dec_pay_sum') return val ? formatNum(parseFloat(val)) : '—';
   return val;
+}
+
+function animateCounter(id, end, formatter) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const prev = parseFloat(el.dataset.raw ?? end);
+  el.dataset.raw = end;
+  if (Math.abs(prev - end) < 0.01) { el.textContent = formatter(end); return; }
+  const dur = 750;
+  const t0 = performance.now();
+  const tick = (now) => {
+    const p = Math.min((now - t0) / dur, 1);
+    const e = 1 - Math.pow(1 - p, 3);
+    el.textContent = formatter(prev + (end - prev) * e);
+    if (p < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 }
 
 function formatNum(n) {
