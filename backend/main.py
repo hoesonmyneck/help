@@ -362,6 +362,41 @@ def coverage_groups(region_id: int = Query(None)):
         return {'columns': columns, 'rows': rows}
 
 
+@app.get("/api/help-presence")
+def help_presence(region_id: int = Query(None)):
+    """For each region/raion and each pay type: is it present (flag=1) or absent,
+    purely from the Excel reference (НАЛИЧИЕ ВЫПЛАТЫ)."""
+    with Session(engine) as db:
+        groups_def = sorted(pay_type_names.items())   # [(42, 'name'), ...]
+        columns = [{'id': pid, 'name': pname} for pid, pname in groups_def]
+
+        if region_id is None:
+            name_map = {str(r.kato_region): r.kato_regname
+                        for r in db.query(Payment.kato_region, Payment.kato_regname).distinct().all()}
+            kato_list = all_region_katos
+        else:
+            name_map = {str(r.kato_raion): r.kato_rainame
+                        for r in db.query(Payment.kato_raion, Payment.kato_rainame)
+                        .filter(Payment.kato_region == region_id).distinct().all()}
+            kato_list = sorted(name_map.keys(), key=lambda k: int(k) if k.isdigit() else k)
+
+        rows = []
+        for kato in kato_list:
+            geo_id = int(kato) if kato.isdigit() else kato
+            if region_id is None:
+                geo_name = name_map.get(kato) or REGION_NAMES.get(kato, kato)
+                ref = region_help_ids.get(kato, set())
+            else:
+                geo_name = name_map.get(kato, kato)
+                ref = raion_help_ids.get(kato, set())
+
+            presence = [pid in ref for pid, _ in groups_def]
+            rows.append({'id': geo_id, 'name': geo_name, 'presence': presence})
+
+        rows = sorted(rows, key=lambda x: x['name'])
+        return {'columns': columns, 'rows': rows}
+
+
 @app.get("/api/cat-regions")
 def cat_regions(region_id: int = Query(None)):
     with Session(engine) as db:

@@ -646,6 +646,28 @@ th.sort-active { color: var(--ac-blue); }
   color: rgba(243,156,18,0.7);
 }
 
+/* Help-presence tab */
+#presence-table th, #presence-table td { text-align: center; }
+.prs-geo-hdr, .prs-geo-cell { text-align: left !important; white-space: nowrap; }
+.prs-grp-hdr {
+  border-left: 1px solid var(--bd-main);
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.72rem;
+}
+.prs-sub {
+  font-size: 0.66rem;
+  font-weight: 500;
+  color: var(--tx-muted);
+  padding: 4px 8px !important;
+}
+.prs-cell { font-weight: 700; font-size: 0.85rem; }
+.prs-yes   { background: rgba(46,204,113,0.18); color: #2ecc71; box-shadow: inset 0 0 0 1px rgba(46,204,113,0.22); }
+.prs-no    { background: rgba(231,76,60,0.18);  color: #e74c3c; box-shadow: inset 0 0 0 1px rgba(231,76,60,0.22); }
+.prs-empty { color: var(--tx-muted); opacity: 0.4; }
+
 /* Group column headers */
 .grp-col-hdr {
   max-width: 120px;

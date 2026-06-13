@@ -101,6 +101,7 @@
     <button class="tab-btn" data-tab="breakdown">Детализация</button>
     <button class="tab-btn" data-tab="cat-regions">Охват по категориям</button>
     <button class="tab-btn" data-tab="uncovered">Не оказываемые категории</button>
+    <button class="tab-btn" data-tab="presence">Наличие выплат</button>
     <button type="button" id="coverage-btn-back" style="display:none" onclick="goBackFromRanking()">← Все регионы</button>
   </div>
 
@@ -174,6 +175,18 @@
         <thead id="groups-thead"></thead>
         <tbody id="groups-body">
           <tr><td colspan="4" class="loading">Загрузка...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab: Help presence -->
+  <div class="tab-pane" id="tab-presence">
+    <div class="table-wrap">
+      <table id="presence-table">
+        <thead id="presence-thead"></thead>
+        <tbody id="presence-body">
+          <tr><td colspan="2" class="loading">Загрузка...</td></tr>
         </tbody>
       </table>
     </div>

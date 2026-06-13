@@ -62,7 +62,7 @@ async function init() {
 
   renderRegions();
   await refreshKPI();
-  await Promise.all([loadTable(1), loadRanking(), loadSummary(), loadCoverageGroups(), loadBreakdown(1), loadCatRegions(), loadUncovered()]);
+  await Promise.all([loadTable(1), loadRanking(), loadSummary(), loadCoverageGroups(), loadBreakdown(1), loadCatRegions(), loadUncovered(), loadHelpPresence()]);
 }
 
 function getColor(value, max) {
@@ -208,7 +208,7 @@ async function drillRegionFromRanking(regionId) {
   updateBreadcrumb(regionName, null);
   loadDistinct('kato_rainame');
   await refreshKPI();
-  await Promise.all([loadTable(1), loadRanking(), loadSummary(), loadCoverageGroups(), loadBreakdown(1), loadCatRegions(), loadUncovered()]);
+  await Promise.all([loadTable(1), loadRanking(), loadSummary(), loadCoverageGroups(), loadBreakdown(1), loadCatRegions(), loadUncovered(), loadHelpPresence()]);
 }
 
 async function drillRegion(regionId) {
@@ -252,7 +252,7 @@ async function drillRegion(regionId) {
   updateBreadcrumb(regionName, null);
   loadDistinct('kato_rainame');
   await refreshKPI();
-  await Promise.all([loadTable(1), loadRanking(), loadSummary(), loadCoverageGroups(), loadBreakdown(1), loadCatRegions(), loadUncovered()]);
+  await Promise.all([loadTable(1), loadRanking(), loadSummary(), loadCoverageGroups(), loadBreakdown(1), loadCatRegions(), loadUncovered(), loadHelpPresence()]);
 }
 
 async function selectRaion(raionId) {
@@ -294,6 +294,7 @@ function goBack() {
   loadBreakdown(1);
   loadCatRegions();
   loadUncovered();
+  loadHelpPresence();
 }
 
 function goBackFromRanking() {
@@ -312,6 +313,7 @@ function goBackFromRanking() {
   loadBreakdown(1);
   loadCatRegions();
   loadUncovered();
+  loadHelpPresence();
   requestAnimationFrame(() => window.scrollTo({ top: savedScroll, behavior: 'instant' }));
 }
 
@@ -523,6 +525,59 @@ function renderCatRegions() {
 let uncoveredData = [];
 let uncoveredSortDir = 'desc';
 let uncoveredExpanded = new Set();
+
+let presenceColumns = [];
+let presenceRows = [];
+
+async function loadHelpPresence() {
+  const params = new URLSearchParams();
+  if (currentRegion) params.set('region_id', currentRegion);
+
+  document.getElementById('presence-body').innerHTML =
+    '<tr><td colspan="2" class="loading">Загрузка...</td></tr>';
+
+  const resp = await fetch(`/api/help-presence?${params}`).then(r => r.json());
+  presenceColumns = resp.columns || [];
+  presenceRows    = resp.rows    || [];
+  renderHelpPresence();
+}
+
+function renderHelpPresence() {
+  const geoLabel = currentRegion
+    ? `Район (${regionStats[currentRegion]?.name || ''})` : 'Область';
+
+  if (!presenceRows.length) {
+    document.getElementById('presence-thead').innerHTML = '';
+    document.getElementById('presence-body').innerHTML =
+      '<tr><td colspan="2" class="no-data">Нет информации</td></tr>';
+    return;
+  }
+
+  // Two-row header: pay type spanning 2 cols, then Присутствует / Отсутствует
+  const topCols = presenceColumns.map(c => {
+    const short = c.name.length > 26 ? c.name.slice(0, 25) + '…' : c.name;
+    return `<th colspan="2" class="prs-grp-hdr" title="${c.name}">${short}</th>`;
+  }).join('');
+  const subCols = presenceColumns.map(() =>
+    `<th class="col-center prs-sub">Присутствует</th><th class="col-center prs-sub">Отсутствует</th>`
+  ).join('');
+
+  document.getElementById('presence-thead').innerHTML =
+    `<tr><th rowspan="2" class="prs-geo-hdr">${geoLabel}</th>${topCols}</tr>` +
+    `<tr>${subCols}</tr>`;
+
+  document.getElementById('presence-body').innerHTML = presenceRows.map(r => {
+    const clickAttr = !currentRegion
+      ? `onclick="drillRegionFromRanking(${r.id})" style="cursor:pointer"` : '';
+    const cells = r.presence.map(p => p
+      ? `<td class="prs-cell prs-yes">✓</td><td class="prs-cell prs-empty">–</td>`
+      : `<td class="prs-cell prs-empty">–</td><td class="prs-cell prs-no">✕</td>`
+    ).join('');
+    return `<tr ${clickAttr} class="${!currentRegion ? 'coverage-row' : ''}">
+      <td class="prs-geo-cell">${r.name || '—'}</td>${cells}
+    </tr>`;
+  }).join('');
+}
 
 async function loadUncovered() {
   const params = new URLSearchParams();
