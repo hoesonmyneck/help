@@ -627,6 +627,7 @@ let presenceSortDir = 'desc';
 
 let geoPanelTimer = null;
 let geoPanelRow = null;
+let geoPanelLastEv = null;
 
 function showGeoPanel(id, name, ev) {
   const row = presenceById[Math.round(id)];
@@ -662,13 +663,18 @@ function showGeoPanel(id, name, ev) {
 function positionGeoPanel(ev) {
   const panel = document.getElementById('geo-panel');
   if (!panel) return;
-  const x = ev?.clientX ?? 120, y = ev?.clientY ?? 120;
-  const pw = panel.offsetWidth || 340, ph = panel.offsetHeight || 240;
-  const gap = 3;   // hug the cursor so it's easy to move onto the panel
-  let left = x + gap, top = y + gap;
-  if (left + pw > window.innerWidth - 6) left = Math.max(6, x - pw - gap);
+  if (ev) geoPanelLastEv = { clientX: ev.clientX, clientY: ev.clientY };
+  const e = geoPanelLastEv || { clientX: 120, clientY: 120 };
+  const x = e.clientX, y = e.clientY;
+  const pw = panel.offsetWidth || 420, ph = panel.offsetHeight || 240;
+  const gap = 3;
+  // always to the LEFT of the cursor — right edge of the panel hugs the cursor
+  let left = x - gap - pw;
+  if (left < 6) left = 6;                 // keep it on screen
+  let top = y + gap;
   if (top + ph > window.innerHeight - 6) top = Math.max(6, window.innerHeight - ph - 6);
   panel.style.left = left + 'px';
+  panel.style.right = 'auto';
   panel.style.top = top + 'px';
 }
 
@@ -1190,6 +1196,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (side.dataset.open === String(i)) {
         side.classList.remove('visible'); side.dataset.open = '';
         gp.querySelectorAll('.gp-row').forEach(r => r.classList.remove('gp-active'));
+        positionGeoPanel();   // re-anchor after the side closes (width shrank)
         return;
       }
       side.dataset.open = String(i);
@@ -1200,6 +1207,7 @@ document.addEventListener('DOMContentLoaded', () => {
       side.classList.add('visible');
       gp.querySelectorAll('.gp-row').forEach(r => r.classList.remove('gp-active'));
       rowEl.classList.add('gp-active');
+      positionGeoPanel();     // re-anchor so the side panel grows to the LEFT
     });
   }
 

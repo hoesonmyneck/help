@@ -367,7 +367,7 @@ header h1 {
   font-size: 0.8rem;
   pointer-events: auto;
 }
-.geo-panel.visible { display: flex; }
+.geo-panel.visible { display: flex; flex-direction: row-reverse; }
 .gp-main {
   background: var(--bg-card);
   border: 1px solid var(--bd-hi);
@@ -400,13 +400,14 @@ header h1 {
   display: none;
   background: var(--bg-deep);
   border: 1px solid var(--bd-hi);
-  border-left: none;
-  border-radius: 0 8px 8px 0;
+  border-right: none;
+  border-radius: 8px 0 0 8px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.45);
   width: 340px;
   max-height: 72vh;
   overflow-y: auto;
   padding: 10px 12px;
+  margin-right: -1px;
 }
 .gp-side.visible { display: block; }
 .gp-side-title { font-weight: 700; color: var(--ac-teal); margin-bottom: 4px; }
