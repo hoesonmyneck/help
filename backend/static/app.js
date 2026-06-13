@@ -7,15 +7,78 @@ let regionCentroids = {}, raionCentroids = {};
 let regionStats = {}, raionStats = {};
 let currentRegion = null, currentRaion = null;
 let currentPage = 1;
-let rankingData = [];
-let rankSortCol = 'total_dec';
-let rankSortDir = 'desc';
 let ageChart = null;
+
+function stripHelpPrefix(name) {
+  if (!name) return name;
+  return name.replace(/^\s*СОЦИАЛЬНАЯ\s+ПОМОЩЬ\s+/i, '');
+}
+
+/* ── Pseudo-auth (client-side only) ── */
+const AUTH_USER = 'admin';
+const AUTH_PASS = 'crtr2026';
+function isAuthed() { return sessionStorage.getItem('mgp_auth') === 'ok'; }
+function logout() { sessionStorage.removeItem('mgp_auth'); location.reload(); }
+
+function showLogin() {
+  const ov = document.createElement('div');
+  ov.className = 'auth-overlay';
+  ov.innerHTML = `
+    <form class="auth-card" id="auth-form">
+      <div class="auth-title">МГП</div>
+      <div class="auth-sub">Вход в систему</div>
+      <input type="text" id="auth-login" placeholder="Логин" autocomplete="username" autofocus>
+      <input type="password" id="auth-pass" placeholder="Пароль" autocomplete="current-password">
+      <div class="auth-error" id="auth-error"></div>
+      <button type="submit">Войти</button>
+    </form>`;
+  document.body.appendChild(ov);
+  document.getElementById('auth-login').focus();
+  document.getElementById('auth-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const u = document.getElementById('auth-login').value.trim();
+    const p = document.getElementById('auth-pass').value;
+    if (u === AUTH_USER && p === AUTH_PASS) {
+      sessionStorage.setItem('mgp_auth', 'ok');
+      location.reload();
+    } else {
+      document.getElementById('auth-error').textContent = 'Неверный логин или пароль';
+      document.getElementById('auth-pass').value = '';
+    }
+  });
+}
+
+function toggleFullscreen(btn) {
+  const section = btn.closest('.table-section, .map-panel');
+  if (!section) return;
+  const fs = section.classList.toggle('is-fullscreen');
+  document.body.classList.toggle('fs-open', fs);
+  btn.textContent = fs ? '✕' : '⛶';
+  btn.title = fs ? 'Закрыть' : 'Во весь экран';
+  if (section.classList.contains('map-panel') && map) {
+    setTimeout(() => map.invalidateSize(), 60);
+    setTimeout(() => map.invalidateSize(), 360);
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    let hadMap = false;
+    document.querySelectorAll('.is-fullscreen').forEach(s => {
+      s.classList.remove('is-fullscreen');
+      if (s.classList.contains('map-panel')) hadMap = true;
+      const btn = s.querySelector('.expand-btn');
+      if (btn) { btn.textContent = '⛶'; btn.title = 'Во весь экран'; }
+    });
+    document.body.classList.remove('fs-open');
+    if (hadMap && map) setTimeout(() => map.invalidateSize(), 60);
+  }
+});
 
 const TABLE_COLS = [
   { key: 'app_date',     label: 'Дата заявки' },
   { key: 'app_status',   label: 'Статус',           filterable: true },
-  { key: 'iin',          label: 'ИИН' },
+  { key: 'sicid',        label: 'SICID' },
   { key: 'kato_regname', label: 'Регион',            filterable: true },
   { key: 'kato_rainame', label: 'Район',             filterable: true },
   { key: 'pay_type',     label: 'Тип выплаты',       filterable: true },
@@ -24,10 +87,9 @@ const TABLE_COLS = [
   { key: 'max_pay_sum',  label: 'MAX выплата',       sortable: true },
   { key: 'dec_pay_sum',  label: 'Выплачено',         sortable: true },
   { key: 'mrp',          label: 'МРП',               sortable: true },
-  { key: 'sicid',        label: 'SICID' },
   { key: 'gender_id',    label: 'Пол',              filterable: true },
   { key: 'vozrast',      label: 'Возраст',           sortable: true },
-  { key: 'sdu_tzhs',     label: 'СДУ/ТЖС',         filterable: true },
+  { key: 'sdu_tzhs',     label: 'Уровень благосостояния',         filterable: true },
   { key: 'sys_date',     label: 'Дата системы' },
 ];
 
@@ -36,7 +98,7 @@ let tableSortDir = 'desc';
 let tableFilters = {};
 
 async function init() {
-  map = L.map('map', { zoomControl: true, attributionControl: false }).setView([48, 68], 5);
+  map = L.map('map', { zoomControl: true, attributionControl: false }).setView([48, 68], 4);
   const isLight = document.documentElement.dataset.theme === 'light';
   tileLayer = L.tileLayer(
     isLight
@@ -62,7 +124,7 @@ async function init() {
 
   renderRegions();
   await refreshKPI();
-  await Promise.all([loadTable(1), loadRanking(), loadSummary(), loadCoverageGroups(), loadBreakdown(1), loadCatRegions(), loadUncovered(), loadHelpPresence()]);
+  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadCatRegions(), loadUncovered(), loadHelpPresence()]);
 }
 
 function getColor(value, max) {
@@ -121,13 +183,20 @@ function addLabel(latlng, text) {
   });
 }
 
+// Label shows entitled (положенные) counts: виды помощи / категории людей
+function entitledLabel(id) {
+  const row = presenceById[Math.round(id)];
+  if (!row || !row.mini) return null;
+  return `${row.mini.vidy}/${row.mini.kategorii}`;
+}
+
 function renderRegionLabels() {
   clearLabels();
   labelsLayer = L.layerGroup();
-  Object.entries(regionStats).forEach(([id, s]) => {
-    const c = regionCentroids[id];
+  Object.entries(regionCentroids).forEach(([id, c]) => {
     if (!c) return;
-    const label = `${s.pay_type_count ?? '?'}/${s.cat_type_count ?? '?'}`;
+    const label = entitledLabel(id);
+    if (label == null) return;
     labelsLayer.addLayer(addLabel([c[1], c[0]], label));
   });
   labelsLayer.addTo(map);
@@ -139,7 +208,7 @@ function renderRaionLabels() {
   Object.entries(raionStats).forEach(([id, s]) => {
     const c = raionCentroids[Math.round(id)];
     if (!c) return;
-    const label = `${s.pay_type_count ?? '?'}/${s.cat_type_count ?? '?'}`;
+    const label = entitledLabel(id) ?? `${s.pay_type_count ?? '?'}/${s.cat_type_count ?? '?'}`;
     labelsLayer.addLayer(addLabel([c[1], c[0]], label));
   });
   labelsLayer.addTo(map);
@@ -153,15 +222,14 @@ function renderRegions() {
     style: regionStyle,
     onEachFeature(feature, layer) {
       const s = regionStats[feature.properties.id_reg] || {};
-      const xy = `${s.pay_type_count ?? '?'}/${s.cat_type_count ?? '?'}`;
-      layer.bindTooltip(
-        `<b>${s.name || feature.properties.region}</b><br>Записей: ${s.count || 0}<br>Тип/Категория: ${xy}`,
-        { sticky: true }
-      );
       layer.on({
-        mouseover(e) { e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 }); },
-        mouseout(e) { regionsLayer.resetStyle(e.target); },
-        click() { drillRegion(feature.properties.id_reg); },
+        mouseover(e) {
+          e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 });
+          cancelHideGeoPanel();
+          showGeoPanel(feature.properties.id_reg, s.name || feature.properties.region, e.originalEvent);
+        },
+        mouseout(e) { regionsLayer.resetStyle(e.target); scheduleHideGeoPanel(); },
+        click() { hideGeoPanelNow(); drillRegion(feature.properties.id_reg); },
       });
     },
   }).addTo(map);
@@ -190,15 +258,14 @@ async function drillRegionFromRanking(regionId) {
     style: raionStyle,
     onEachFeature(feature, layer) {
       const s = raionStats[Math.round(feature.properties.id_rai)] || {};
-      const xy = `${s.pay_type_count ?? '?'}/${s.cat_type_count ?? '?'}`;
-      layer.bindTooltip(
-        `<b>${s.name || feature.properties.raion}</b><br>Записей: ${s.count || 0}<br>Тип/Категория: ${xy}`,
-        { sticky: true }
-      );
       layer.on({
-        mouseover(e) { e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 }); },
-        mouseout(e) { raionsLayer.resetStyle(e.target); },
-        click() { selectRaion(feature.properties.id_rai); },
+        mouseover(e) {
+          e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 });
+          cancelHideGeoPanel();
+          showGeoPanel(feature.properties.id_rai, s.name || feature.properties.raion, e.originalEvent);
+        },
+        mouseout(e) { raionsLayer.resetStyle(e.target); scheduleHideGeoPanel(); },
+        click() { hideGeoPanelNow(); selectRaion(feature.properties.id_rai); },
       });
     },
   }).addTo(map);
@@ -208,7 +275,7 @@ async function drillRegionFromRanking(regionId) {
   updateBreadcrumb(regionName, null);
   loadDistinct('kato_rainame');
   await refreshKPI();
-  await Promise.all([loadTable(1), loadRanking(), loadSummary(), loadCoverageGroups(), loadBreakdown(1), loadCatRegions(), loadUncovered(), loadHelpPresence()]);
+  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadCatRegions(), loadUncovered(), loadHelpPresence()]);
 }
 
 async function drillRegion(regionId) {
@@ -232,15 +299,14 @@ async function drillRegion(regionId) {
     style: raionStyle,
     onEachFeature(feature, layer) {
       const s = raionStats[Math.round(feature.properties.id_rai)] || {};
-      const xy = `${s.pay_type_count ?? '?'}/${s.cat_type_count ?? '?'}`;
-      layer.bindTooltip(
-        `<b>${s.name || feature.properties.raion}</b><br>Записей: ${s.count || 0}<br>Тип/Категория: ${xy}`,
-        { sticky: true }
-      );
       layer.on({
-        mouseover(e) { e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 }); },
-        mouseout(e) { raionsLayer.resetStyle(e.target); },
-        click() { selectRaion(feature.properties.id_rai); },
+        mouseover(e) {
+          e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 });
+          cancelHideGeoPanel();
+          showGeoPanel(feature.properties.id_rai, s.name || feature.properties.raion, e.originalEvent);
+        },
+        mouseout(e) { raionsLayer.resetStyle(e.target); scheduleHideGeoPanel(); },
+        click() { hideGeoPanelNow(); selectRaion(feature.properties.id_rai); },
       });
     },
   }).addTo(map);
@@ -252,7 +318,7 @@ async function drillRegion(regionId) {
   updateBreadcrumb(regionName, null);
   loadDistinct('kato_rainame');
   await refreshKPI();
-  await Promise.all([loadTable(1), loadRanking(), loadSummary(), loadCoverageGroups(), loadBreakdown(1), loadCatRegions(), loadUncovered(), loadHelpPresence()]);
+  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadCatRegions(), loadUncovered(), loadHelpPresence()]);
 }
 
 async function selectRaion(raionId) {
@@ -282,16 +348,15 @@ function goBack() {
   currentRegion = null;
   currentRaion = null;
   currentPage = 1;
+  hideGeoPanelNow();
   updateBreadcrumb(null, null);
   clearLabels();
   renderRegions();
-  map.setView([48, 68], 5);
+  map.setView([48, 68], 4);
   refreshKPI();
   loadTable(1);
-  loadRanking();
   loadSummary();
   loadCoverageGroups();
-  loadBreakdown(1);
   loadCatRegions();
   loadUncovered();
   loadHelpPresence();
@@ -302,15 +367,14 @@ function goBackFromRanking() {
   currentRegion = null;
   currentRaion = null;
   currentPage = 1;
+  hideGeoPanelNow();
   updateBreadcrumb(null, null);
   clearLabels();
   renderRegions();
   refreshKPI();
   loadTable(1);
-  loadRanking();
   loadSummary();
   loadCoverageGroups();
-  loadBreakdown(1);
   loadCatRegions();
   loadUncovered();
   loadHelpPresence();
@@ -333,10 +397,12 @@ async function refreshKPI() {
 
   const data = await fetch(`/api/kpi?${params}`).then(r => r.json());
 
-  animateCounter('kpi-dec',        data.total_dec_pay_sum,  v => formatNum(v));
-  animateCounter('kpi-recipients', data.unique_recipients,  v => formatInt(v));
-  animateCounter('kpi-male',       data.male_count,         v => formatInt(v));
-  animateCounter('kpi-female',     data.female_count,       v => formatInt(v));
+  animateCounter('kpi-dec',         data.total_dec_pay_sum,  v => formatNum(v));
+  animateCounter('kpi-recipients',  data.unique_recipients,  v => formatInt(v));
+  animateCounter('kpi-male',        data.male_count,         v => formatInt(v));
+  animateCounter('kpi-female',      data.female_count,       v => formatInt(v));
+  animateCounter('kpi-help-types',  data.help_type_count || 0,  v => formatInt(v));
+  animateCounter('kpi-people-cats', data.people_cat_count || 0, v => formatInt(v));
   renderSduChart(data.sdu || {});
   renderAgeChart(data.age || {});
 }
@@ -441,85 +507,112 @@ function renderAgeChart(age) {
 }
 
 let coverageData = [];
+let coverageTotal = null;
 let coverageSortCol = 'total_sum';
 let coverageSortDir = 'desc';
 
 let groupsColumns = [];
 let groupsRows = [];
+let groupsTotal = null;
 let groupsSortGroup = null;
 let groupsSortDir = 'desc';
 
-let breakdownPage = 1;
-let breakdownSortDir = 'desc';
-
 let catRegionsData = [];
-let catRegionsSortDir = 'desc';
-
-async function loadBreakdown(page = 1) {
-  breakdownPage = page;
-  const params = new URLSearchParams({ page, limit: 100, sort_dir: breakdownSortDir });
-  if (currentRaion) params.set('raion_id', currentRaion);
-  else if (currentRegion) params.set('region_id', currentRegion);
-
-  const colName = currentRegion
-    ? `Район (${regionStats[currentRegion]?.name || ''})`
-    : 'Регион';
-  setText('breakdown-col-name', colName);
-
-  const icon = document.getElementById('breakdown-sort-icon');
-  if (icon) icon.textContent = breakdownSortDir === 'desc' ? ' ▼' : ' ▲';
-
-  document.getElementById('breakdown-body').innerHTML =
-    '<tr><td colspan="4" class="loading">Загрузка...</td></tr>';
-
-  const data = await fetch(`/api/breakdown?${params}`).then(r => r.json());
-  const isRegionLevel = data.level === 'region';
-
-  document.getElementById('breakdown-body').innerHTML = (data.data || []).map(r => {
-    // Support both new geo_name and legacy raion field
-    const name = r.geo_name !== undefined ? r.geo_name : (r.raion || '—');
-    const geoCell = (isRegionLevel && r.geo_id)
-      ? `<td class="coverage-row" onclick="drillRegionFromRanking(${r.geo_id})" style="cursor:pointer">${name}</td>`
-      : `<td>${name}</td>`;
-    return `<tr>
-      ${geoCell}
-      <td>${r.pay_type}</td>
-      <td>${r.cat_type}</td>
-      <td class="col-right">${formatNum(r.total_sum)} ₸</td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="4" class="no-data">Нет информации</td></tr>';
-
-  document.getElementById('bd-btn-prev').disabled = page <= 1;
-  document.getElementById('bd-btn-next').disabled = page >= data.pages;
-  document.getElementById('bd-page-info').textContent = `${page} / ${data.pages}`;
-}
+let catRegionsSortBy = 'name';          // 'name' | 'count'
+let catRegionsSortDir = 'asc';          // direction for the active sort
+let catRegionsSearch = '';
+let catRegionsExpanded = new Set();     // category index expanded
+let catRegionsRegExpanded = new Set();  // `${catIdx}|${regionId}` expanded
 
 async function loadCatRegions() {
-  const params = new URLSearchParams();
-  if (currentRegion) params.set('region_id', currentRegion);
-
-  const geoLabel = currentRegion
-    ? 'Сколько районов оказывают помощь'
-    : 'Сколько регионов оказывают помощь';
-  setText('cat-regions-geo-label', geoLabel);
+  // Entitlement view (nation-wide), independent of the map drill
+  setText('cat-regions-geo-label', 'В скольких регионах положено');
 
   document.getElementById('cat-regions-body').innerHTML =
     '<tr><td colspan="2" class="loading">Загрузка...</td></tr>';
 
-  catRegionsData = await fetch(`/api/cat-regions?${params}`).then(r => r.json());
+  catRegionsExpanded.clear();
+  catRegionsRegExpanded.clear();
+  catRegionsData = await fetch(`/api/cat-regions`).then(r => r.json());
   renderCatRegions();
 }
 
-function renderCatRegions() {
-  const sorted = [...catRegionsData].sort((a, b) =>
-    catRegionsSortDir === 'desc' ? b.geo_count - a.geo_count : a.geo_count - b.geo_count
-  );
-  const icon = document.getElementById('cat-regions-sort-icon');
-  if (icon) icon.textContent = catRegionsSortDir === 'desc' ? ' ▼' : ' ▲';
+function payListHtml(title, pays) {
+  if (!pays || !pays.length) return '';
+  const items = pays.map(p => `<li>${stripHelpPrefix(p.name)} — ${p.max} ₸</li>`).join('');
+  const t = title ? `<div class="cr-pay-title">${title}</div>` : '';
+  return `${t}<ul class="cr-pay-list">${items}</ul>`;
+}
 
-  document.getElementById('cat-regions-body').innerHTML = sorted.map(r =>
-    `<tr><td title="${r.cat_type}">${r.cat_type}</td><td class="col-right">${r.geo_count}</td></tr>`
-  ).join('') || '<tr><td colspan="2" class="no-data">Нет информации</td></tr>';
+function renderCatRegions() {
+  let list = catRegionsData.map((r, i) => ({ ...r, _i: i }));
+
+  if (catRegionsSearch) {
+    const q = catRegionsSearch.toLowerCase();
+    list = list.filter(r => (r.cat_type || '').toLowerCase().includes(q));
+  }
+
+  list.sort((a, b) => {
+    const cmp = catRegionsSortBy === 'name'
+      ? (a.cat_type || '').localeCompare(b.cat_type || '', 'ru')
+      : a.geo_count - b.geo_count;
+    return catRegionsSortDir === 'asc' ? cmp : -cmp;
+  });
+  const sorted = list;
+
+  const dirArrow = catRegionsSortDir === 'asc' ? ' ▲' : ' ▼';
+  const nameIcon = document.getElementById('cat-regions-name-icon');
+  if (nameIcon) nameIcon.textContent = catRegionsSortBy === 'name' ? dirArrow : '';
+  const icon = document.getElementById('cat-regions-sort-icon');
+  if (icon) icon.textContent = catRegionsSortBy === 'count' ? dirArrow : '';
+
+  const html = sorted.map(r => {
+    const hasRegions = r.regions && r.regions.length;
+    const open = catRegionsExpanded.has(r._i);
+    const caret = hasRegions ? `<span class="unc-caret">${open ? '▲' : '▼'}</span> ` : '';
+    const catCell = hasRegions
+      ? `<td class="cr-cat" data-cat-toggle="${r._i}" style="cursor:pointer" title="${r.cat_type}">${caret}${r.cat_type}</td>`
+      : `<td title="${r.cat_type}">${r.cat_type}</td>`;
+    let row = `<tr>${catCell}<td class="col-right">${r.geo_count}</td></tr>`;
+
+    if (open && hasRegions) {
+      const regItems = r.regions.map(reg => {
+        const key = `${r._i}|${reg.id}`;
+        const regOpen = catRegionsRegExpanded.has(key);
+        const hasRaions = reg.raions && reg.raions.length;
+        let li = `<li>
+          <div class="cr-reg" data-reg-toggle="${key}">
+            <span class="unc-caret">${regOpen ? '▲' : '▼'}</span> ${reg.name}
+          </div>`;
+        if (regOpen) {
+          li += `<div class="cr-sub">`;
+          li += payListHtml('Виды помощи в регионе:', reg.pay_types);
+          if (hasRaions) {
+            li += `<div class="cr-raion-title">Районы:</div>`;
+            li += `<ul class="cr-raion-list-2">` + reg.raions.map(rai =>
+              `<li><div class="cr-raion-name">${rai.name}</div>${payListHtml(null, rai.pay_types)}</li>`
+            ).join('') + `</ul>`;
+          }
+          li += `</div>`;
+        }
+        return li + `</li>`;
+      }).join('');
+
+      row += `<tr class="cr-detail-row"><td colspan="2">
+        <div class="cr-detail">
+          <div class="cr-detail-title">Регионы, где положено (${r.regions.length}):</div>
+          <ul class="cr-reg-list">${regItems}</ul>
+        </div></td></tr>`;
+    }
+    return row;
+  }).join('');
+
+  document.getElementById('cat-regions-body').innerHTML =
+    html || '<tr><td colspan="2" class="no-data">Нет информации</td></tr>';
+}
+
+function toggleSet(set, key) {
+  if (set.has(key)) set.delete(key); else set.add(key);
 }
 
 let uncoveredData = [];
@@ -528,6 +621,67 @@ let uncoveredExpanded = new Set();
 
 let presenceColumns = [];
 let presenceRows = [];
+let presenceById = {};   // geo id -> presence row (for map tooltips)
+let presenceSortCol = null;   // 'vidy' | 'kategorii' | 'lyudei' | 'summa'
+let presenceSortDir = 'desc';
+
+let geoPanelTimer = null;
+let geoPanelRow = null;
+
+function showGeoPanel(id, name, ev) {
+  const row = presenceById[Math.round(id)];
+  geoPanelRow = row;
+  const panel = document.getElementById('geo-panel');
+  if (!panel) return;
+
+  let listHtml = '';
+  if (row && presenceColumns.length && row.pay_cat_lists) {
+    const entries = presenceColumns.map((c, i) => ({ c, i, cnt: (row.pay_cat_lists[i] || []).length }));
+    // green (provided) first, then red (not provided) — stable within each group
+    entries.sort((a, b) => (b.cnt > 0) - (a.cnt > 0));
+    listHtml = entries.map(({ c, i, cnt }) => {
+      const cls = cnt > 0 ? 'gp-yes' : 'gp-no';
+      const attr = cnt > 0 ? `data-pay="${i}"` : '';
+      return `<div class="gp-row ${cls}" ${attr}>
+        <span class="gp-pay">${stripHelpPrefix(c.name)}:</span><span class="gp-cnt">${cnt}</span>
+      </div>`;
+    }).join('');
+  }
+
+  panel.innerHTML =
+    `<div class="gp-main">
+       <div class="gp-title">${(row && row.name) || name || '—'}</div>
+       <div class="gp-list">${listHtml || '<div class="gp-empty">Нет данных</div>'}</div>
+     </div>
+     <div class="gp-side" id="gp-side"></div>`;
+
+  panel.classList.add('visible');
+  positionGeoPanel(ev);
+}
+
+function positionGeoPanel(ev) {
+  const panel = document.getElementById('geo-panel');
+  if (!panel) return;
+  const x = ev?.clientX ?? 120, y = ev?.clientY ?? 120;
+  const pw = panel.offsetWidth || 340, ph = panel.offsetHeight || 240;
+  const gap = 3;   // hug the cursor so it's easy to move onto the panel
+  let left = x + gap, top = y + gap;
+  if (left + pw > window.innerWidth - 6) left = Math.max(6, x - pw - gap);
+  if (top + ph > window.innerHeight - 6) top = Math.max(6, window.innerHeight - ph - 6);
+  panel.style.left = left + 'px';
+  panel.style.top = top + 'px';
+}
+
+function scheduleHideGeoPanel() {
+  clearTimeout(geoPanelTimer);
+  geoPanelTimer = setTimeout(hideGeoPanelNow, 280);
+}
+function cancelHideGeoPanel() { clearTimeout(geoPanelTimer); }
+function hideGeoPanelNow() {
+  clearTimeout(geoPanelTimer);
+  const panel = document.getElementById('geo-panel');
+  if (panel) panel.classList.remove('visible');
+}
 
 async function loadHelpPresence() {
   const params = new URLSearchParams();
@@ -539,7 +693,13 @@ async function loadHelpPresence() {
   const resp = await fetch(`/api/help-presence?${params}`).then(r => r.json());
   presenceColumns = resp.columns || [];
   presenceRows    = resp.rows    || [];
+  presenceById = {};
+  presenceRows.forEach(r => { if (r.id != null) presenceById[r.id] = r; });
   renderHelpPresence();
+  // refresh map labels now that entitlement data is available
+  if (map && labelsLayer) {
+    if (currentRegion) renderRaionLabels(); else renderRegionLabels();
+  }
 }
 
 function renderHelpPresence() {
@@ -553,28 +713,58 @@ function renderHelpPresence() {
     return;
   }
 
-  // Two-row header: pay type spanning 2 cols, then Присутствует / Отсутствует
-  const topCols = presenceColumns.map(c => {
-    const short = c.name.length > 26 ? c.name.slice(0, 25) + '…' : c.name;
-    return `<th colspan="2" class="prs-grp-hdr" title="${c.name}">${short}</th>`;
+  // Header: geo + mini-table (4 sortable cols) + one column per pay type
+  const cols = presenceColumns.map(c => {
+    const full = stripHelpPrefix(c.name);
+    return `<th class="col-center prs-grp-hdr" title="${full}"><span class="prs-hdr-txt">${full}</span></th>`;
   }).join('');
-  const subCols = presenceColumns.map(() =>
-    `<th class="col-center prs-sub">Присутствует</th><th class="col-center prs-sub">Отсутствует</th>`
-  ).join('');
+
+  const miniHdr = (key, label, extraCls, title) => {
+    const active = presenceSortCol === key;
+    const icon = active ? (presenceSortDir === 'desc' ? ' ▼' : ' ▲') : '';
+    return `<th class="col-center prs-mini-hdr sortable${active ? ' sort-active' : ''} ${extraCls || ''}" data-prs-sort="${key}" title="${title}">${label}<span class="sort-icon">${icon}</span></th>`;
+  };
 
   document.getElementById('presence-thead').innerHTML =
-    `<tr><th rowspan="2" class="prs-geo-hdr">${geoLabel}</th>${topCols}</tr>` +
-    `<tr>${subCols}</tr>`;
+    `<tr>
+       <th class="prs-geo-hdr">${geoLabel}</th>
+       ${miniHdr('vidy', 'Виды помощи', '', 'Виды помощи, которые должны оказываться')}
+       ${miniHdr('kategorii', 'Категории', '', 'Категории, которым должна оказываться помощь')}
+       ${miniHdr('lyudei', 'Людей', '', 'Количество людей, которым оказывается услуга')}
+       ${miniHdr('summa', 'Сумма', 'prs-mini-sum', 'Фактически выплачено')}
+       ${cols}
+     </tr>`;
 
-  document.getElementById('presence-body').innerHTML = presenceRows.map(r => {
-    const clickAttr = !currentRegion
+  // total row stays pinned on top; sort only the body rows
+  const total = presenceRows.find(r => r.is_total);
+  let body = presenceRows.filter(r => !r.is_total);
+  if (presenceSortCol) {
+    const key = presenceSortCol;
+    body = [...body].sort((a, b) => {
+      const av = key === 'summa' ? (a.mini?.summa_val ?? 0) : (a.mini?.[key] ?? 0);
+      const bv = key === 'summa' ? (b.mini?.summa_val ?? 0) : (b.mini?.[key] ?? 0);
+      return presenceSortDir === 'desc' ? bv - av : av - bv;
+    });
+  }
+  const ordered = total ? [total, ...body] : body;
+
+  document.getElementById('presence-body').innerHTML = ordered.map(r => {
+    const isTotal = !!r.is_total;
+    const clickAttr = (!currentRegion && !isTotal)
       ? `onclick="drillRegionFromRanking(${r.id})" style="cursor:pointer"` : '';
+    const cls = isTotal ? 'prs-total-row' : (!currentRegion ? 'coverage-row' : '');
+    const m = r.mini || {};
     const cells = r.presence.map(p => p
-      ? `<td class="prs-cell prs-yes">✓</td><td class="prs-cell prs-empty">–</td>`
-      : `<td class="prs-cell prs-empty">–</td><td class="prs-cell prs-no">✕</td>`
+      ? `<td class="prs-cell prs-yes">✓</td>`
+      : `<td class="prs-cell prs-no">✕</td>`
     ).join('');
-    return `<tr ${clickAttr} class="${!currentRegion ? 'coverage-row' : ''}">
-      <td class="prs-geo-cell">${r.name || '—'}</td>${cells}
+    return `<tr ${clickAttr} class="${cls}">
+      <td class="prs-geo-cell">${r.name || '—'}</td>
+      <td class="col-center prs-mini">${m.vidy ?? 0}</td>
+      <td class="col-center prs-mini">${m.kategorii ?? 0}</td>
+      <td class="col-center prs-mini">${formatInt(m.lyudei ?? 0)}</td>
+      <td class="col-right prs-mini prs-mini-sum">${m.summa ?? '0'} ₸</td>
+      ${cells}
     </tr>`;
   }).join('');
 }
@@ -656,8 +846,8 @@ function renderGroups() {
     ${groupsColumns.map(col => {
       const active = groupsSortGroup === col.name;
       const icon = active ? (groupsSortDir === 'desc' ? ' ▼' : ' ▲') : '';
-      const short = col.name.length > 28 ? col.name.slice(0, 27) + '…' : col.name;
-      return `<th class="col-center sortable grp-col-hdr${active ? ' sort-active' : ''}" data-grp="${col.name}" title="${col.name}">${short}<span class="sort-icon">${icon}</span></th>`;
+      const full = stripHelpPrefix(col.name);
+      return `<th class="col-center sortable grp-col-hdr${active ? ' sort-active' : ''}" data-grp="${col.name}" title="${full}"><span class="prs-hdr-txt">${full}</span><span class="sort-icon">${icon}</span></th>`;
     }).join('')}
   </tr>`;
 
@@ -680,7 +870,12 @@ function renderGroups() {
       })
     : groupsRows;
 
-  document.getElementById('groups-body').innerHTML = sorted.map(r => {
+  const totalHtml = groupsTotal ? `<tr class="grp-total-row">
+      <td>${groupsTotal.name}</td>
+      ${groupsTotal.groups.map(g => renderGroupCell(g)).join('')}
+    </tr>` : '';
+
+  document.getElementById('groups-body').innerHTML = totalHtml + sorted.map(r => {
     const clickAttr = !currentRegion
       ? `onclick="drillRegionFromRanking(${r.id})" style="cursor:pointer"` : '';
     return `<tr ${clickAttr} class="${!currentRegion ? 'coverage-row' : ''}">
@@ -703,19 +898,37 @@ async function loadCoverageGroups() {
     if (resp && resp.columns) {
       groupsColumns = resp.columns;
       groupsRows    = resp.rows || [];
+      groupsTotal   = resp.total || null;
     } else if (Array.isArray(resp)) {
       // Legacy format — derive columns from first row's groups
       groupsColumns = (resp[0]?.groups || []).map(g => ({ id: g.group, name: g.group }));
       groupsRows    = resp;
+      groupsTotal   = null;
     } else {
       groupsColumns = [];
       groupsRows    = [];
+      groupsTotal   = null;
     }
   } catch(e) {
     groupsColumns = [];
     groupsRows    = [];
+    groupsTotal   = null;
   }
   renderGroups();
+}
+
+function coverageRowHtml(r, clickable) {
+  const clickAttr = clickable
+    ? `onclick="drillRegionFromRanking(${r.id})" style="cursor:pointer"` : '';
+  const cls = r.is_total ? 'prs-total-row' : (clickable ? 'coverage-row' : '');
+  return `<tr ${clickAttr} class="${cls}">
+    <td>${r.name || '—'}</td>
+    <td class="col-center">${r.help_types}</td>
+    <td class="col-center">${r.cat_count}</td>
+    <td class="col-right">${formatNum(r.max_sum)} ₸</td>
+    <td class="col-right">${formatNum(r.total_sum)} ₸</td>
+    <td class="col-right">${(r.pct ?? 0)}%</td>
+  </tr>`;
 }
 
 function renderCoverage() {
@@ -731,16 +944,10 @@ function renderCoverage() {
     icon.textContent = active ? (coverageSortDir === 'desc' ? ' ▼' : ' ▲') : '';
     th.classList.toggle('sort-active', active);
   });
-  document.getElementById('coverage-body').innerHTML = sorted.map(r => {
-    const clickAttr = !isRegionView
-      ? `onclick="drillRegionFromRanking(${r.id})" style="cursor:pointer"` : '';
-    return `<tr ${clickAttr} class="${!isRegionView ? 'coverage-row' : ''}">
-      <td>${r.name || '—'}</td>
-      <td class="col-center">${r.help_types}</td>
-      <td class="col-center">${r.cat_count}</td>
-      <td class="col-right">${formatNum(r.total_sum)} ₸</td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="4" class="no-data">Нет информации</td></tr>';
+  const totalHtml = coverageTotal ? coverageRowHtml(coverageTotal, false) : '';
+  document.getElementById('coverage-body').innerHTML =
+    totalHtml + (sorted.map(r => coverageRowHtml(r, !isRegionView)).join('')
+      || '<tr><td colspan="6" class="no-data">Нет информации</td></tr>');
 }
 
 async function loadSummary() {
@@ -749,75 +956,17 @@ async function loadSummary() {
   if (isRegionView) params.set('region_id', currentRegion);
 
   document.getElementById('coverage-body').innerHTML =
-    '<tr><td colspan="4" class="loading">Загрузка...</td></tr>';
+    '<tr><td colspan="6" class="loading">Загрузка...</td></tr>';
   const regionName = isRegionView ? (regionStats[currentRegion]?.name || '') : '';
   setText('coverage-col-name', isRegionView ? `Район (${regionName})` : 'Регион');
   document.getElementById('coverage-btn-back').style.display = isRegionView ? 'inline-block' : 'none';
 
-  coverageData = await fetch(`/api/summary?${params}`).then(r => r.json());
+  const resp = await fetch(`/api/summary?${params}`).then(r => r.json());
+  coverageData  = resp.rows  || [];
+  coverageTotal = resp.total || null;
   renderCoverage();
 }
 
-async function loadRanking() {
-  const params = new URLSearchParams();
-  const isRegionView = !!currentRegion;
-  if (isRegionView) params.set('region_id', currentRegion);
-
-  document.getElementById('ranking-body').innerHTML =
-    '<tr><td colspan="5" class="loading">Загрузка...</td></tr>';
-
-  setText('ranking-title', isRegionView
-    ? `Рейтинг районов — ${regionStats[currentRegion]?.name || ''}`
-    : 'Рейтинг регионов');
-  setText('ranking-col-name', isRegionView ? 'Район' : 'Регион');
-  document.getElementById('ranking-btn-back').style.display = isRegionView ? 'inline-block' : 'none';
-
-  rankingData = await fetch(`/api/ranking?${params}`).then(r => r.json());
-  renderRanking();
-}
-
-function renderRanking() {
-  const isRegionView = !!currentRegion;
-  const sorted = [...rankingData].sort((a, b) => {
-    const va = a[rankSortCol] ?? -Infinity;
-    const vb = b[rankSortCol] ?? -Infinity;
-    return rankSortDir === 'desc' ? vb - va : va - vb;
-  });
-
-  const maxDec = Math.max(...sorted.map(r => r.total_dec || 0), 1);
-
-  document.getElementById('ranking-body').innerHTML = sorted.map((r, i) => {
-    const barPct = Math.round((r.total_dec || 0) / maxDec * 100);
-    const clickAttr = !isRegionView
-      ? `onclick="drillRegionFromRanking(${r.id})" style="cursor:pointer"`
-      : '';
-    return `<tr ${clickAttr} class="${!isRegionView ? 'ranking-row' : ''}">
-      <td style="color:#5b6a88">${i + 1}</td>
-      <td>${r.name || '—'}</td>
-      <td>${formatInt(r.recipients)}</td>
-      <td>
-        <div class="rank-bar-wrap">
-          <div class="rank-bar-track">
-            <div class="rank-bar" style="width:${barPct}%;background:#5b8af8"></div>
-          </div>
-          <span class="rank-bar-val">${r.total_dec !== null ? formatNum(r.total_dec) + ' ₸' : '—'}</span>
-        </div>
-      </td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="5" class="no-data">Нет информации</td></tr>';
-
-  // Update sort icons
-  document.querySelectorAll('#ranking-col-name ~ th.sortable').forEach(th => {
-    const icon = th.querySelector('.sort-icon');
-    if (th.dataset.col === rankSortCol) {
-      icon.textContent = rankSortDir === 'desc' ? ' ▼' : ' ▲';
-      th.classList.add('sort-active');
-    } else {
-      icon.textContent = '';
-      th.classList.remove('sort-active');
-    }
-  });
-}
 
 function initTableHead() {
   const thead = document.getElementById('table-head');
@@ -959,12 +1108,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sw) sw.checked = true;
   }
 
+  // Pseudo-auth gate — show login until correct credentials are entered
+  if (!isAuthed()) { showLogin(); return; }
+
   initTableHead();
   init();
   document.getElementById('btn-prev').addEventListener('click', () => loadTable(currentPage - 1));
   document.getElementById('btn-next').addEventListener('click', () => loadTable(currentPage + 1));
-  document.getElementById('bd-btn-prev').addEventListener('click', () => loadBreakdown(breakdownPage - 1));
-  document.getElementById('bd-btn-next').addEventListener('click', () => loadBreakdown(breakdownPage + 1));
 
   document.querySelectorAll('#tab-coverage th[data-sort-col]').forEach(th => {
     th.style.cursor = 'pointer';
@@ -976,14 +1126,37 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  document.getElementById('breakdown-sum-header')?.addEventListener('click', () => {
-    breakdownSortDir = breakdownSortDir === 'desc' ? 'asc' : 'desc';
-    loadBreakdown(1);
+  document.getElementById('presence-thead')?.addEventListener('click', e => {
+    const th = e.target.closest('[data-prs-sort]');
+    if (!th) return;
+    const col = th.dataset.prsSort;
+    if (presenceSortCol === col) presenceSortDir = presenceSortDir === 'desc' ? 'asc' : 'desc';
+    else { presenceSortCol = col; presenceSortDir = 'desc'; }
+    renderHelpPresence();
+  });
+
+  document.querySelector('#cat-regions-name-header .cr-name-sort')?.addEventListener('click', () => {
+    if (catRegionsSortBy === 'name') catRegionsSortDir = catRegionsSortDir === 'asc' ? 'desc' : 'asc';
+    else { catRegionsSortBy = 'name'; catRegionsSortDir = 'asc'; }
+    renderCatRegions();
   });
 
   document.getElementById('cat-regions-geo-header')?.addEventListener('click', () => {
-    catRegionsSortDir = catRegionsSortDir === 'desc' ? 'asc' : 'desc';
+    if (catRegionsSortBy === 'count') catRegionsSortDir = catRegionsSortDir === 'asc' ? 'desc' : 'asc';
+    else { catRegionsSortBy = 'count'; catRegionsSortDir = 'desc'; }
     renderCatRegions();
+  });
+
+  document.getElementById('cat-regions-search')?.addEventListener('input', e => {
+    catRegionsSearch = e.target.value.trim();
+    renderCatRegions();
+  });
+
+  document.getElementById('cat-regions-body')?.addEventListener('click', e => {
+    const catEl = e.target.closest('[data-cat-toggle]');
+    if (catEl) { toggleSet(catRegionsExpanded, +catEl.dataset.catToggle); renderCatRegions(); return; }
+    const regEl = e.target.closest('[data-reg-toggle]');
+    if (regEl) { toggleSet(catRegionsRegExpanded, regEl.dataset.regToggle); renderCatRegions(); }
   });
 
   document.getElementById('uncovered-count-header')?.addEventListener('click', () => {
@@ -1001,16 +1174,33 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  document.querySelectorAll('th.sortable').forEach(th => {
-    th.addEventListener('click', () => {
-      const col = th.dataset.col;
-      if (rankSortCol === col) {
-        rankSortDir = rankSortDir === 'desc' ? 'asc' : 'desc';
-      } else {
-        rankSortCol = col;
-        rankSortDir = 'desc';
+  // Interactive map hover panel — stay open while hovered, click a pay type for categories
+  const gp = document.getElementById('geo-panel');
+  if (gp) {
+    gp.addEventListener('mouseenter', cancelHideGeoPanel);
+    gp.addEventListener('mouseleave', scheduleHideGeoPanel);
+    gp.addEventListener('click', e => {
+      const rowEl = e.target.closest('[data-pay]');
+      if (!rowEl) return;
+      const i = +rowEl.dataset.pay;
+      const cats = (geoPanelRow?.pay_cat_lists?.[i]) || [];
+      const name = stripHelpPrefix(presenceColumns[i]?.name || '');
+      const side = document.getElementById('gp-side');
+      if (!side) return;
+      if (side.dataset.open === String(i)) {
+        side.classList.remove('visible'); side.dataset.open = '';
+        gp.querySelectorAll('.gp-row').forEach(r => r.classList.remove('gp-active'));
+        return;
       }
-      renderRanking();
+      side.dataset.open = String(i);
+      side.innerHTML =
+        `<div class="gp-side-title">${name}</div>
+         <div class="gp-side-sub">Категории людей (${cats.length}):</div>
+         <ul class="gp-cat-list">${cats.map(x => `<li>${x}</li>`).join('')}</ul>`;
+      side.classList.add('visible');
+      gp.querySelectorAll('.gp-row').forEach(r => r.classList.remove('gp-active'));
+      rowEl.classList.add('gp-active');
     });
-  });
+  }
+
 });

@@ -14,6 +14,14 @@ pay_type_names:  dict[int, str] = {}   # {pay_type_id: НАИМЕНОВАНИЕ 
 REGION_NAMES:    dict[str, str] = {}   # {kato_reg: REG name} from REGION.xlsx
 raion_names_ref: dict[str, str] = {}   # {kato_dis: DIS name} from RAION.xlsx
 
+# Payment settings rows from PAYMENT_SETTING_FOR_QLIK.xlsx
+# each item: (kato_reg_str, kato_dis_str, pay_type_id, pay_name, cat_type, max_val|None)
+settings_rows: list = []
+settings_pay_names: dict[int, str] = {}  # {pay_type_id: НАИМЕНОВАНИЕ ВЫПЛАТЫ} from settings file
+
+# Regions that exist on the map / administratively but provide nothing (not in REGION.xlsx)
+EXTRA_REGIONS = [('10', 'АБАЙСКАЯ ОБЛАСТЬ'), ('62', 'УЛЫТАУСКАЯ ОБЛАСТЬ')]
+
 
 def _to_kato_str(val) -> str | None:
     if val is None:
@@ -50,6 +58,11 @@ def load_reference_data():
         if pay_id and name and pay_id not in pay_type_names:
             pay_type_names[pay_id] = name
     all_region_katos.extend(katos_seen)
+    # Add administrative regions absent from REGION.xlsx (Abai, Ulytau) — they provide nothing
+    for extra_kato, extra_name in EXTRA_REGIONS:
+        if extra_kato not in all_region_katos:
+            all_region_katos.append(extra_kato)
+        REGION_NAMES.setdefault(extra_kato, extra_name)
     wb.close()
 
     wb = load_workbook(os.path.join(base, "RAION.xlsx"), read_only=True, data_only=True)
@@ -68,7 +81,38 @@ def load_reference_data():
             raion_help_ids.setdefault(kato, set()).add(pay_id)
     wb.close()
 
-    print(f"Reference loaded: {len(region_help_ids)} regions, {len(raion_help_ids)} raions")
+    # Payment settings (виды помощи / категории людей with configured max sum)
+    settings_rows.clear()
+    settings_pay_names.clear()
+    settings_path = os.path.join(base, "PAYMENT_SETTING_FOR_QLIK.xlsx")
+    if os.path.exists(settings_path):
+        wb = load_workbook(settings_path, read_only=True, data_only=True)
+        ws = wb.active
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            # cols: 0=KATO_REG, 1=KATO_DIS, 2=ID ВЫПЛАТЫ, 3=НАИМЕНОВАНИЕ,
+            # 4=ID КАТЕГОРИЙ, 5=КАТЕГОРИИ ПОЛУЧАТЕЛЕЙ, 6=ПЕРИОДИЧНОСТЬ,
+            # 7=МАКСИМАЛЬНАЯ СУММА ВЫПЛАТЫ, 8=UNIT_ID
+            kato_reg = _to_kato_str(row[0])
+            kato_dis = _to_kato_str(row[1])
+            pay_id = int(row[2]) if row[2] is not None else None
+            pay_name = str(row[3]).strip() if row[3] is not None else None
+            cat = str(row[5]).strip() if row[5] is not None else None
+            max_sum = row[7]
+            max_val = None
+            try:
+                if max_sum is not None and str(max_sum).strip() not in ('', '-'):
+                    max_val = float(max_sum)
+            except (ValueError, TypeError):
+                max_val = None
+            if pay_id and pay_name and pay_id not in settings_pay_names:
+                settings_pay_names[pay_id] = pay_name
+            if pay_id and cat:
+                # (kato_reg, kato_dis, pay_id, pay_name, cat, max_val|None)
+                settings_rows.append((kato_reg, kato_dis, pay_id, pay_name, cat, max_val))
+        wb.close()
+
+    print(f"Reference loaded: {len(region_help_ids)} regions, "
+          f"{len(raion_help_ids)} raions, {len(settings_rows)} settings rows")
 
 
 def parse_date(val):

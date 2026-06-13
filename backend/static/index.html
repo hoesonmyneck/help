@@ -18,6 +18,7 @@
     <input type="checkbox" id="theme-switch" onchange="toggleTheme(this.checked)">
     <span class="toggle-slider"></span>
   </label>
+  <button type="button" class="logout-btn" onclick="logout()" title="Выйти">Выйти</button>
 </header>
 
 <div class="main-layout">
@@ -25,126 +26,90 @@
   <!-- KPI Panel -->
   <div class="kpi-panel">
 
-    <div class="kpi-card">
-      <div class="label">Сумма</div>
-      <div class="value accent" id="kpi-dec">—</div>
-    </div>
-
-    <div class="kpi-card">
-      <div class="label">Услугополучатели</div>
-      <div class="value" id="kpi-recipients">—</div>
-    </div>
-
-    <div class="gender-row">
-      <div class="gender-item male">
+    <div class="kpi-numbers-row">
+      <div class="kpi-card">
+        <div class="label">Сумма</div>
+        <div class="value accent" id="kpi-dec">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">Услугополучатели</div>
+        <div class="value" id="kpi-recipients">—</div>
+      </div>
+      <div class="kpi-card">
         <div class="label">Мужчины</div>
-        <div class="value" id="kpi-male">—</div>
+        <div class="value val-male" id="kpi-male">—</div>
       </div>
-      <div class="gender-item female">
+      <div class="kpi-card">
         <div class="label">Женщины</div>
-        <div class="value" id="kpi-female">—</div>
+        <div class="value val-female" id="kpi-female">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">Видов помощи</div>
+        <div class="value accent" id="kpi-help-types">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">Категорий людей</div>
+        <div class="value accent" id="kpi-people-cats">—</div>
       </div>
     </div>
 
-    <div class="kpi-card kpi-chart-card">
-      <div class="label">Благосостояние</div>
-      <div class="kpi-chart-area">
-        <div class="sdu-chart-wrap"><canvas id="sdu-chart"></canvas></div>
+    <div class="kpi-charts-row">
+      <div class="kpi-card kpi-chart-card">
+        <div class="label">Благосостояние</div>
+        <div class="kpi-chart-area">
+          <div class="sdu-chart-wrap"><canvas id="sdu-chart"></canvas></div>
+        </div>
+        <div class="sdu-legend" id="sdu-legend"></div>
       </div>
-      <div class="sdu-legend" id="sdu-legend"></div>
-    </div>
 
-    <div class="kpi-card kpi-chart-card">
-      <div class="label">Возраст</div>
-      <div class="kpi-chart-area">
-        <div class="sdu-chart-wrap"><canvas id="age-chart"></canvas></div>
+      <div class="kpi-card kpi-chart-card">
+        <div class="label">Возраст</div>
+        <div class="kpi-chart-area">
+          <div class="sdu-chart-wrap"><canvas id="age-chart"></canvas></div>
+        </div>
+        <div class="sdu-legend" id="age-legend"></div>
       </div>
-      <div class="sdu-legend" id="age-legend"></div>
     </div>
   </div>
 
   <!-- Map Panel -->
   <div class="map-panel">
+    <button type="button" class="expand-btn map-expand" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
     <div id="map"></div>
   </div>
 
 </div>
 
-<!-- Ranking table -->
-<div class="table-section ranking-section">
-  <div class="table-header">
-    <h2 id="ranking-title">Рейтинг </h2>
-    <button type="button" id="ranking-btn-back" style="display:none" onclick="goBackFromRanking()">← Все регионы</button>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th id="ranking-col-name">Регион</th>
-          <th class="sortable" data-col="recipients">Услугополучателей <span class="sort-icon"></span></th>
-          <th class="sortable" data-col="total_dec">Сумма <span class="sort-icon"></span></th>
-        </tr>
-      </thead>
-      <tbody id="ranking-body">
-        <tr><td colspan="5" class="loading">Загрузка...</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
 <!-- Tabs section -->
 <div class="table-section tabs-section">
   <div class="tabs-bar">
-    <button class="tab-btn active" data-tab="coverage">Охват по мерам помощи</button>
+    <button class="tab-btn active" data-tab="presence">Матрица видов помощи</button>
+    <button class="tab-btn" data-tab="coverage">Охват по видам помощи</button>
     <button class="tab-btn" data-tab="groups">Категории по группам</button>
-    <button class="tab-btn" data-tab="breakdown">Детализация</button>
     <button class="tab-btn" data-tab="cat-regions">Охват по категориям</button>
     <button class="tab-btn" data-tab="uncovered">Не оказываемые категории</button>
-    <button class="tab-btn" data-tab="presence">Наличие выплат</button>
     <button type="button" id="coverage-btn-back" style="display:none" onclick="goBackFromRanking()">← Все регионы</button>
+    <button type="button" class="expand-btn" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
   </div>
 
   <!-- Tab: Coverage -->
-  <div class="tab-pane active" id="tab-coverage">
+  <div class="tab-pane" id="tab-coverage">
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
             <th id="coverage-col-name">Регион</th>
-            <th class="col-center sortable" data-sort-col="help_types">Всего мер помощи <span class="sort-icon"></span></th>
+            <th class="col-center sortable" data-sort-col="help_types">Всего видов помощи <span class="sort-icon"></span></th>
             <th class="col-center sortable" data-sort-col="cat_count">Охвачено категорий <span class="sort-icon"></span></th>
+            <th class="col-right sortable" data-sort-col="max_sum">Макс сумма <span class="sort-icon"></span></th>
             <th class="col-right sortable" data-sort-col="total_sum">Сумма <span class="sort-icon"> ▼</span></th>
+            <th class="col-right sortable" data-sort-col="pct">% освоения <span class="sort-icon"></span></th>
           </tr>
         </thead>
         <tbody id="coverage-body">
-          <tr><td colspan="4" class="loading">Загрузка...</td></tr>
+          <tr><td colspan="6" class="loading">Загрузка...</td></tr>
         </tbody>
       </table>
-    </div>
-  </div>
-
-  <!-- Tab: Breakdown -->
-  <div class="tab-pane" id="tab-breakdown">
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th id="breakdown-col-name">Район</th>
-            <th>Вид помощи</th>
-            <th>Категория</th>
-            <th class="col-right sortable" id="breakdown-sum-header">Сумма <span class="sort-icon" id="breakdown-sort-icon"> ▼</span></th>
-          </tr>
-        </thead>
-        <tbody id="breakdown-body">
-          <tr><td colspan="4" class="loading">Загрузка...</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="pagination">
-      <button id="bd-btn-prev" disabled>‹ Пред.</button>
-      <span class="page-info" id="bd-page-info">1 / 1</span>
-      <button id="bd-btn-next">След. ›</button>
     </div>
   </div>
 
@@ -154,10 +119,15 @@
       <table>
         <thead>
           <tr>
-            <th>Категория</th>
+            <th id="cat-regions-name-header">
+              <div class="cr-name-head">
+                <span class="cr-name-sort sortable">Категория <span class="sort-icon" id="cat-regions-name-icon"> ▲</span></span>
+                <input type="text" id="cat-regions-search" class="cr-search" placeholder="Поиск категории...">
+              </div>
+            </th>
             <th class="col-right sortable" id="cat-regions-geo-header">
-              <span id="cat-regions-geo-label">Сколько регионов оказывают помощь</span>
-              <span class="sort-icon" id="cat-regions-sort-icon"> ▼</span>
+              <span id="cat-regions-geo-label">В скольких регионах положено</span>
+              <span class="sort-icon" id="cat-regions-sort-icon"></span>
             </th>
           </tr>
         </thead>
@@ -181,7 +151,7 @@
   </div>
 
   <!-- Tab: Help presence -->
-  <div class="tab-pane" id="tab-presence">
+  <div class="tab-pane active" id="tab-presence">
     <div class="table-wrap">
       <table id="presence-table">
         <thead id="presence-thead"></thead>
@@ -218,6 +188,7 @@
   <div class="table-header">
     <h2>Данные</h2>
     <span class="table-info" id="table-info"></span>
+    <button type="button" class="expand-btn" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
   </div>
   <div class="table-wrap data-table-wrap">
     <table>
@@ -236,6 +207,9 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<!-- Interactive map hover panel -->
+<div id="geo-panel" class="geo-panel"></div>
+
 <script src="/app.js"></script>
 </body>
 </html>

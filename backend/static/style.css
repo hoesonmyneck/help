@@ -49,6 +49,73 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── Pseudo-auth login overlay ── */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(-45deg, #07091a, #0a0d20, #060818, #08101e);
+  background-size: 400% 400%;
+  animation: bg-drift 24s ease infinite;
+}
+.auth-card {
+  background: #1a1f2e;
+  border: 1px solid #2a3050;
+  border-radius: 14px;
+  padding: 32px 30px;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+}
+.auth-title { font-size: 1.7rem; font-weight: 700; color: #c8d8ff; text-align: center; letter-spacing: 1px; }
+.auth-sub { font-size: 0.85rem; color: #7a8aaa; text-align: center; margin-bottom: 6px; }
+.auth-card input {
+  background: #1e2740;
+  border: 1px solid #2a3050;
+  border-radius: 8px;
+  padding: 11px 13px;
+  font-size: 0.92rem;
+  color: #e0e6f0;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.auth-card input:focus { border-color: #5b8af8; }
+.auth-card button {
+  background: #5b8af8;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 4px;
+  font-family: inherit;
+  transition: filter 0.15s;
+}
+.auth-card button:hover { filter: brightness(1.12); }
+.auth-error { color: #e74c3c; font-size: 0.8rem; min-height: 1em; text-align: center; }
+
+.logout-btn {
+  background: var(--bg-deep);
+  border: 1px solid var(--bd-hi);
+  color: var(--tx-sub);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  font-family: inherit;
+  margin-left: 4px;
+  transition: background 0.15s;
+}
+.logout-btn:hover { background: var(--bd-hi); }
+
 @keyframes bg-drift {
   0%   { background-position: 0% 50%;   }
   50%  { background-position: 100% 50%; }
@@ -141,20 +208,40 @@ header h1 {
 
 .main-layout {
   display: flex;
-  flex: 1;
+  flex: 0 0 auto;
   gap: 16px;
   padding: 20px;
+  align-items: stretch;
+  height: clamp(480px, 56vh, 620px);
   min-height: 0;
 }
 
-/* KPI panel */
+/* KPI panel — fills left area up to the map */
 .kpi-panel {
-  width: 280px;
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  overflow: hidden;
 }
+
+.kpi-numbers-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kpi-charts-row {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.val-male   { color: var(--ac-male); }
+.val-female { color: var(--ac-female); }
 
 .kpi-title {
   font-size: 0.75rem;
@@ -218,12 +305,32 @@ header h1 {
 
 /* Map panel */
 .map-panel {
-  flex: 1;
+  flex: 0 1 auto;
+  width: clamp(560px, 52vw, 920px);
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+  position: relative;
 }
+
+.map-expand {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1000;
+  margin: 0;
+}
+
+.map-panel.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  width: auto;
+  padding: 12px;
+  background: var(--bg-body);
+}
+.map-panel.is-fullscreen #map { height: 100%; }
 
 .map-controls {
   display: flex;
@@ -248,8 +355,71 @@ header h1 {
 #map {
   border-radius: 10px;
   border: 1px solid var(--bd-main);
-  height: calc(100vh - 100px);
+  height: 100%;
 }
+
+/* Interactive map hover panel */
+.geo-panel {
+  position: fixed;
+  z-index: 4000;
+  display: none;
+  align-items: stretch;
+  font-size: 0.8rem;
+  pointer-events: auto;
+}
+.geo-panel.visible { display: flex; }
+.gp-main {
+  background: var(--bg-card);
+  border: 1px solid var(--bd-hi);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+  width: 420px;
+  max-height: 72vh;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+.gp-title { font-weight: 700; color: var(--tx-head); margin-bottom: 6px; font-size: 0.9rem; }
+.gp-list { display: flex; flex-direction: column; }
+.gp-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--bd-main);
+}
+.gp-row:last-child { border-bottom: none; }
+.gp-yes .gp-pay, .gp-yes .gp-cnt { color: #2ecc71; }
+.gp-no  .gp-pay, .gp-no  .gp-cnt { color: #e74c3c; }
+.gp-yes { cursor: pointer; }
+.gp-yes:hover { background: rgba(78,205,196,0.10); }
+.gp-row.gp-active { background: rgba(78,205,196,0.18); }
+.gp-cnt { font-weight: 700; flex-shrink: 0; }
+.gp-empty { color: var(--tx-muted); }
+
+.gp-side {
+  display: none;
+  background: var(--bg-deep);
+  border: 1px solid var(--bd-hi);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+  width: 340px;
+  max-height: 72vh;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+.gp-side.visible { display: block; }
+.gp-side-title { font-weight: 700; color: var(--ac-teal); margin-bottom: 4px; }
+.gp-side-sub {
+  font-size: 0.72rem; color: var(--tx-muted);
+  margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.4px;
+}
+.gp-cat-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.gp-cat-list li { font-size: 0.8rem; color: var(--tx-main); padding-left: 12px; position: relative; }
+.gp-cat-list li::before { content: '•'; position: absolute; left: 2px; color: rgba(78,205,196,0.8); }
+
+.gender-item.kpi-mini .value { color: var(--ac-teal); font-size: 1.05rem; }
+.gender-item.kpi-mini .label { font-size: 0.68rem; }
 
 .leaflet-interactive:focus { outline: none; }
 
@@ -282,6 +452,59 @@ header h1 {
 .table-header h2 { font-size: 0.9rem; color: var(--tx-sub); }
 
 .table-info { font-size: 0.78rem; color: var(--tx-dim); margin-left: auto; }
+
+/* Fullscreen expand button + modal */
+.expand-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  align-self: center;
+  background: var(--bg-deep);
+  border: 1px solid var(--bd-hi);
+  color: var(--tx-sub);
+  border-radius: 6px;
+  padding: 4px 11px;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.expand-btn:hover { background: var(--bd-hi); }
+.table-header .expand-btn { margin-left: 8px; }
+
+body.fs-open { overflow: hidden; }
+/* A fixed .map-panel is trapped in .main-layout's stacking context, so the table
+   sections (later siblings) would paint over it — hide them while fullscreen. */
+body.fs-open .table-section:not(.is-fullscreen) { display: none; }
+
+.table-section.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  margin: 0;
+  padding: 14px 22px 20px;
+  background: var(--bg-body);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.table-section.is-fullscreen > .table-wrap {
+  flex: 1;
+  min-height: 0;
+  height: auto !important;
+  max-height: none;
+}
+.table-section.is-fullscreen .tab-pane.active {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.table-section.is-fullscreen .tab-pane.active .table-wrap {
+  flex: 1;
+  min-height: 0;
+  height: auto !important;
+  max-height: none;
+}
 
 .table-wrap {
   overflow-x: auto;
@@ -423,7 +646,7 @@ tbody tr:last-child td { border-bottom: none; }
   padding: 5px 12px;
   font-size: 0.8rem;
   cursor: pointer;
-  margin-left: 8px;
+  margin-left: auto;
   font-family: inherit;
   align-self: center;
   position: relative;
@@ -522,29 +745,42 @@ th.sort-active { color: var(--ac-blue); }
   transform: translate(-50%, -50%);
 }
 
-/* Expandable chart cards */
+/* Chart cards — chart + legend side by side (compact height) */
 .kpi-chart-card {
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: auto minmax(0, 340px);
+  grid-template-rows: auto 1fr;
+  column-gap: 24px;
+  align-items: center;
+  justify-content: start;
 }
+.kpi-chart-card .label { grid-column: 1 / -1; }
 
 .kpi-chart-area {
-  flex: 1;
+  grid-column: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 0;
 }
 
+.kpi-chart-card .sdu-legend {
+  grid-column: 2;
+  min-width: 0;
+  gap: 2px;
+}
+.kpi-chart-card .sdu-legend-item { font-size: 0.6rem; padding: 0 3px; }
+.kpi-chart-card .sdu-leg-val { font-size: 0.6rem; }
+
 .kpi-chart-card .sdu-chart-wrap {
+  height: 100%;
+  max-height: 90px;
   aspect-ratio: 1;
-  width: 100%;
-  max-width: 160px;
-  max-height: 100%;
-  margin: 0 auto;
+  width: auto;
+  margin: 0;
 }
 
 /* SDU / Age pie charts (default small size outside chart cards) */
@@ -580,8 +816,36 @@ th.sort-active { color: var(--ac-blue); }
 }
 .sdu-leg-val { color: var(--tx-cell); white-space: nowrap; font-size: 0.65rem; }
 
+/* Cat-regions search box (inside the header) */
+.cr-name-head { display: flex; align-items: center; gap: 14px; }
+.cr-name-sort { cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+.cr-name-sort:hover { color: var(--tx-sub); }
+.cr-search {
+  flex: 1;
+  min-width: 0;
+  max-width: 340px;
+  background: var(--bg-deep);
+  border: 1px solid var(--bd-main);
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--tx-main);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.cr-search:focus { border-color: var(--ac-blue); }
+.cr-search::placeholder { color: var(--tx-muted); }
+
 /* Cat-regions tab: no horizontal scroll, truncate long names */
 #tab-cat-regions table { white-space: normal; table-layout: fixed; width: 100%; }
+/* Header first cell must not truncate (holds the search box) */
+#tab-cat-regions thead th:first-child {
+  max-width: none;
+  overflow: visible;
+  white-space: normal;
+}
 #tab-cat-regions td:first-child,
 #tab-cat-regions th:first-child {
   width: 100%;
@@ -595,6 +859,68 @@ th.sort-active { color: var(--ac-blue); }
   width: 320px;
   white-space: nowrap;
 }
+/* Detail rows must not inherit the first-column truncation */
+#tab-cat-regions .cr-detail-row td {
+  width: auto;
+  max-width: none;
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+}
+.cr-cat:hover { color: var(--ac-blue); }
+.cr-detail-row > td { padding: 0 !important; background: rgba(91,138,248,0.05); }
+.cr-detail {
+  padding: 10px 18px 14px;
+  border-left: 3px solid rgba(91,138,248,0.5);
+}
+.cr-detail-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--tx-muted);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.cr-reg-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.cr-reg {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--tx-cell);
+  padding: 2px 0;
+}
+.cr-reg:hover { color: var(--ac-blue); }
+/* Nested entitlement detail (region pay types + raions) */
+.cr-sub {
+  margin: 4px 0 8px 20px;
+  padding-left: 12px;
+  border-left: 2px solid rgba(78,205,196,0.4);
+}
+.cr-pay-title, .cr-raion-title {
+  font-size: 0.7rem;
+  color: var(--tx-muted);
+  margin: 6px 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.cr-pay-list { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.cr-pay-list li {
+  font-size: 0.8rem;
+  color: var(--tx-main);
+  padding-left: 14px;
+  position: relative;
+}
+.cr-pay-list li::before {
+  content: '•';
+  position: absolute;
+  left: 2px;
+  color: rgba(78,205,196,0.8);
+}
+.cr-raion-list-2 { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cr-raion-list-2 > li {
+  padding-left: 10px;
+  border-left: 2px solid rgba(243,156,18,0.35);
+}
+.cr-raion-name { font-size: 0.82rem; font-weight: 600; color: var(--tx-cell); margin-bottom: 2px; }
 
 /* Uncovered-categories tab */
 .unc-count {
@@ -647,15 +973,43 @@ th.sort-active { color: var(--ac-blue); }
 }
 
 /* Help-presence tab */
+#presence-table { table-layout: fixed; }
 #presence-table th, #presence-table td { text-align: center; }
-.prs-geo-hdr, .prs-geo-cell { text-align: left !important; white-space: nowrap; }
-.prs-grp-hdr {
-  border-left: 1px solid var(--bd-main);
-  max-width: 180px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.prs-geo-hdr, .prs-geo-cell { text-align: left !important; white-space: nowrap; width: 220px; }
+.prs-mini-hdr, .prs-mini {
+  width: 92px;
   font-size: 0.72rem;
+}
+.prs-mini { color: var(--tx-cell); font-weight: 600; }
+.prs-mini-sum, th.prs-mini-sum { width: 130px; white-space: nowrap; }
+.prs-mini-sum { color: var(--ac-teal); }
+/* Border to separate the mini-table block from the pay-type columns */
+.prs-mini-sum { border-right: 2px solid var(--bd-mid); }
+.prs-total-row { background: rgba(78,205,196,0.10); font-weight: 700; }
+.prs-total-row .prs-geo-cell { color: var(--ac-teal); }
+.prs-total-row:hover { background: rgba(78,205,196,0.14); }
+
+/* Total row (Республика Казахстан) in coverage-groups */
+.grp-total-row { background: rgba(78,205,196,0.10); font-weight: 700; }
+.grp-total-row > td:first-child { color: var(--ac-teal); }
+
+.prs-grp-hdr {
+  width: 200px;
+  border-left: 1px solid var(--bd-main);
+  font-size: 0.72rem;
+  vertical-align: top;
+}
+.prs-hdr-txt {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 100%;
+  margin: 0 auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
 }
 .prs-sub {
   font-size: 0.66rem;
@@ -668,13 +1022,13 @@ th.sort-active { color: var(--ac-blue); }
 .prs-no    { background: rgba(231,76,60,0.18);  color: #e74c3c; box-shadow: inset 0 0 0 1px rgba(231,76,60,0.22); }
 .prs-empty { color: var(--tx-muted); opacity: 0.4; }
 
-/* Group column headers */
+/* Group column headers — 3-line wrapped, like the presence matrix */
+#tab-groups table { table-layout: fixed; }
+#tab-groups th:first-child, #tab-groups td:first-child { width: 245px; }
 .grp-col-hdr {
-  max-width: 120px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  width: 150px;
   font-size: 0.72rem;
+  vertical-align: top;
 }
 
 /* Coverage-groups colored cells */
@@ -1006,6 +1360,7 @@ th.sort-active { color: #8ab4ff !important; }
 .kpi-panel > *:nth-child(3) { animation: card-rise 0.5s ease 0.19s both; }
 .kpi-panel > *:nth-child(4) { animation: card-rise 0.5s ease 0.26s both; }
 .kpi-panel > *:nth-child(5) { animation: card-rise 0.5s ease 0.33s both; }
+.kpi-panel > *:nth-child(6) { animation: card-rise 0.5s ease 0.40s both; }
 
 /* ── Section h2 gradient ── */
 .table-header h2, .ranking-section .table-header h2 {
