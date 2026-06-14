@@ -228,17 +228,54 @@ header h1 {
 
 .kpi-numbers-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
-.kpi-charts-row {
+/* Tabbed charts container (Пол / Благосостояние / Возраст) */
+.kpi-charts-tabs {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  padding: 8px 12px 10px;
 }
+.kpi-tabs-bar {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--bd-main);
+  margin-bottom: 8px;
+}
+.kpi-tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--tx-dim);
+  font-family: inherit;
+  font-size: 0.78rem;
+  padding: 5px 8px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.kpi-tab-btn:hover { color: var(--tx-sub); }
+.kpi-tab-btn.active { color: var(--ac-teal); border-bottom-color: var(--ac-teal); font-weight: 600; }
+
+.kpi-tab-pane { display: none; flex: 1; min-height: 0; }
+.kpi-tab-pane.active {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+.kpi-tab-pane .kpi-chart-area { flex-shrink: 0; }
+.kpi-tab-pane .sdu-chart-wrap {
+  width: 150px;
+  height: 150px;
+  margin: 0;
+}
+.kpi-tab-pane .sdu-legend { flex: 1; min-width: 0; }
+
+.data-tab-info { margin-bottom: 8px; font-size: 0.78rem; color: var(--tx-dim); }
 
 .val-male   { color: var(--ac-male); }
 .val-female { color: var(--ac-female); }
@@ -306,7 +343,7 @@ header h1 {
 /* Map panel */
 .map-panel {
   flex: 0 1 auto;
-  width: clamp(560px, 52vw, 920px);
+  width: 70vw;
   display: flex;
   flex-direction: column;
   gap: 8px;

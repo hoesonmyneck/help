@@ -36,14 +36,6 @@
         <div class="value" id="kpi-recipients">—</div>
       </div>
       <div class="kpi-card">
-        <div class="label">Мужчины</div>
-        <div class="value val-male" id="kpi-male">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="label">Женщины</div>
-        <div class="value val-female" id="kpi-female">—</div>
-      </div>
-      <div class="kpi-card">
         <div class="label">Видов помощи</div>
         <div class="value accent" id="kpi-help-types">—</div>
       </div>
@@ -53,20 +45,22 @@
       </div>
     </div>
 
-    <div class="kpi-charts-row">
-      <div class="kpi-card kpi-chart-card">
-        <div class="label">Благосостояние</div>
-        <div class="kpi-chart-area">
-          <div class="sdu-chart-wrap"><canvas id="sdu-chart"></canvas></div>
-        </div>
+    <div class="kpi-card kpi-charts-tabs">
+      <div class="kpi-tabs-bar">
+        <button type="button" class="kpi-tab-btn active" data-ktab="gender">Пол</button>
+        <button type="button" class="kpi-tab-btn" data-ktab="sdu">Благосостояние</button>
+        <button type="button" class="kpi-tab-btn" data-ktab="age">Возраст</button>
+      </div>
+      <div class="kpi-tab-pane active" id="ktab-gender">
+        <div class="kpi-chart-area"><div class="sdu-chart-wrap"><canvas id="gender-chart"></canvas></div></div>
+        <div class="sdu-legend" id="gender-legend"></div>
+      </div>
+      <div class="kpi-tab-pane" id="ktab-sdu">
+        <div class="kpi-chart-area"><div class="sdu-chart-wrap"><canvas id="sdu-chart"></canvas></div></div>
         <div class="sdu-legend" id="sdu-legend"></div>
       </div>
-
-      <div class="kpi-card kpi-chart-card">
-        <div class="label">Возраст</div>
-        <div class="kpi-chart-area">
-          <div class="sdu-chart-wrap"><canvas id="age-chart"></canvas></div>
-        </div>
+      <div class="kpi-tab-pane" id="ktab-age">
+        <div class="kpi-chart-area"><div class="sdu-chart-wrap"><canvas id="age-chart"></canvas></div></div>
         <div class="sdu-legend" id="age-legend"></div>
       </div>
     </div>
@@ -88,6 +82,7 @@
     <button class="tab-btn" data-tab="groups">Категории по группам</button>
     <button class="tab-btn" data-tab="cat-regions">Охват по категориям</button>
     <button class="tab-btn" data-tab="uncovered">Не оказываемые категории</button>
+    <button class="tab-btn" data-tab="data">Данные</button>
     <button type="button" id="coverage-btn-back" style="display:none" onclick="goBackFromRanking()">← Все регионы</button>
     <button type="button" class="expand-btn" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
   </div>
@@ -181,27 +176,23 @@
       </table>
     </div>
   </div>
-</div>
 
-<!-- Table -->
-<div class="table-section">
-  <div class="table-header">
-    <h2>Данные</h2>
-    <span class="table-info" id="table-info"></span>
-    <button type="button" class="expand-btn" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
-  </div>
-  <div class="table-wrap data-table-wrap">
-    <table>
-      <thead id="table-head"></thead>
-      <tbody id="table-body">
-        <tr><td colspan="16" class="loading">Загрузка...</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <div class="pagination">
-    <button id="btn-prev" disabled>‹ Пред.</button>
-    <span class="page-info" id="page-info">1 / 1</span>
-    <button id="btn-next">След. ›</button>
+  <!-- Tab: Data table -->
+  <div class="tab-pane" id="tab-data">
+    <div class="data-tab-info"><span class="table-info" id="table-info"></span></div>
+    <div class="table-wrap data-table-wrap">
+      <table>
+        <thead id="table-head"></thead>
+        <tbody id="table-body">
+          <tr><td colspan="16" class="loading">Загрузка...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button id="btn-prev" disabled>‹ Пред.</button>
+      <span class="page-info" id="page-info">1 / 1</span>
+      <button id="btn-next">След. ›</button>
+    </div>
   </div>
 </div>
 

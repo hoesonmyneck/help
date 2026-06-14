@@ -145,11 +145,17 @@ function getColor(value, max) {
   return `rgba(${r},${g},${b},0.88)`;
 }
 
+// Map fill is driven by the number of entitled help types (x in "x/y"):
+// 0 → standard blue, higher → toward the teal/green high end.
+let maxEntitledVidy = 1;
+
+function geoVidy(id) {
+  return presenceById[Math.round(id)]?.mini?.vidy || 0;
+}
+
 function regionStyle(feature) {
-  const s = regionStats[feature.properties.id_reg] || {};
-  const maxVal = Math.max(...Object.values(regionStats).map(r => r.total_max || 0), 1);
   return {
-    fillColor: getColor(s.total_max || 0, maxVal),
+    fillColor: getColor(geoVidy(feature.properties.id_reg), maxEntitledVidy),
     weight: 1,
     color: '#3a5090',
     fillOpacity: 0.75,
@@ -157,10 +163,8 @@ function regionStyle(feature) {
 }
 
 function raionStyle(feature) {
-  const stats = raionStats[feature.properties.id_rai] || {};
-  const maxVal = Math.max(...Object.values(raionStats).map(r => r.total_max || 0), 1);
   return {
-    fillColor: getColor(stats.total_max || 0, maxVal),
+    fillColor: getColor(geoVidy(feature.properties.id_rai), maxEntitledVidy),
     weight: 1,
     color: '#3a5090',
     fillOpacity: 0.75,
@@ -183,11 +187,12 @@ function addLabel(latlng, text) {
   });
 }
 
-// Label shows entitled (положенные) counts: виды помощи / категории людей
+// Label: виды помощи в регионе / общее число видов помощи (14)
 function entitledLabel(id) {
   const row = presenceById[Math.round(id)];
   if (!row || !row.mini) return null;
-  return `${row.mini.vidy}/${row.mini.kategorii}`;
+  const totalTypes = presenceColumns.length || 14;
+  return `${row.mini.vidy}/${totalTypes}`;
 }
 
 function renderRegionLabels() {
@@ -399,12 +404,49 @@ async function refreshKPI() {
 
   animateCounter('kpi-dec',         data.total_dec_pay_sum,  v => formatNum(v));
   animateCounter('kpi-recipients',  data.unique_recipients,  v => formatInt(v));
-  animateCounter('kpi-male',        data.male_count,         v => formatInt(v));
-  animateCounter('kpi-female',      data.female_count,       v => formatInt(v));
   animateCounter('kpi-help-types',  data.help_type_count || 0,  v => formatInt(v));
   animateCounter('kpi-people-cats', data.people_cat_count || 0, v => formatInt(v));
+  renderGenderChart(data.male_count || 0, data.female_count || 0);
   renderSduChart(data.sdu || {});
   renderAgeChart(data.age || {});
+}
+
+let genderChart = null;
+function renderGenderChart(male, female) {
+  const items = [
+    { label: 'Мужчины', val: male,   color: '#5b8af8' },
+    { label: 'Женщины', val: female, color: '#f875c3' },
+  ];
+  const total = male + female;
+  const legend = document.getElementById('gender-legend');
+  if (legend) {
+    legend.innerHTML = items.map(it => {
+      const pct = total ? Math.round(it.val / total * 100) : 0;
+      return `<div class="sdu-legend-item" title="${it.label}: ${formatInt(it.val)} (${pct}%)">
+        <span class="sdu-dot" style="background:${it.color}"></span>
+        <span class="sdu-leg-label">${it.label}</span>
+        <span class="sdu-leg-val">${formatInt(it.val)} (${pct}%)</span>
+      </div>`;
+    }).join('');
+  }
+  const ctx = document.getElementById('gender-chart').getContext('2d');
+  if (genderChart) genderChart.destroy();
+  genderChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: items.map(i => i.label),
+      datasets: [{ data: items.map(i => i.val), backgroundColor: items.map(i => i.color), borderWidth: 0, hoverOffset: 6 }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '62%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${formatInt(ctx.raw)}` } },
+      },
+    },
+  });
 }
 
 const SDU_META = {
@@ -701,10 +743,12 @@ async function loadHelpPresence() {
   presenceRows    = resp.rows    || [];
   presenceById = {};
   presenceRows.forEach(r => { if (r.id != null) presenceById[r.id] = r; });
+  maxEntitledVidy = Math.max(1, ...presenceRows.filter(r => !r.is_total).map(r => r.mini?.vidy || 0));
   renderHelpPresence();
-  // refresh map labels now that entitlement data is available
+  // refresh map labels + fill colours now that entitlement data is available
   if (map && labelsLayer) {
-    if (currentRegion) renderRaionLabels(); else renderRegionLabels();
+    if (currentRegion) { renderRaionLabels(); raionsLayer?.setStyle(raionStyle); }
+    else { renderRegionLabels(); regionsLayer?.setStyle(regionStyle); }
   }
 }
 
@@ -1177,6 +1221,19 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.classList.add('active');
       const pane = document.getElementById(`tab-${btn.dataset.tab}`);
       if (pane) pane.classList.add('active');
+    });
+  });
+
+  // KPI chart tabs (Пол / Благосостояние / Возраст)
+  document.querySelectorAll('.kpi-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.kpi-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.kpi-tab-pane').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      const pane = document.getElementById(`ktab-${btn.dataset.ktab}`);
+      if (pane) pane.classList.add('active');
+      const chart = { gender: genderChart, sdu: sduChart, age: ageChart }[btn.dataset.ktab];
+      if (chart) requestAnimationFrame(() => chart.resize());
     });
   });
 
