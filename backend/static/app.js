@@ -75,7 +75,7 @@ function showLogin() {
   ov.className = 'auth-overlay';
   ov.innerHTML = `
     <form class="auth-card" id="auth-form">
-      <div class="auth-title">ЕЦП "Анализ по мерам государственной поддержке МИО"</div>
+      <div class="auth-title">Анализ по мерам государственной поддержке МИО</div>
       <div class="auth-sub">Вход в систему</div>
       <input type="text" id="auth-login" placeholder="Логин" autocomplete="username" autofocus>
       <input type="password" id="auth-pass" placeholder="Пароль" autocomplete="current-password">
@@ -819,7 +819,7 @@ function renderHelpPresence() {
        <th class="prs-geo-hdr">${geoLabel}</th>
        ${miniHdr('vidy', 'Виды помощи', '', 'Виды помощи, которые должны оказываться')}
        ${miniHdr('lyudei', 'Людей', '', 'Количество людей, которым оказывается услуга')}
-       ${miniHdr('summa', 'Сумма', 'prs-mini-sum', 'Фактически выплачено')}
+       ${miniHdr('summa', 'Сумма', 'prs-mini-sum', 'Макс. выплата')}
        ${cols}
      </tr>`;
 
@@ -954,8 +954,16 @@ async function loadCoverageGroups() {
 }
 
 function coverageRowHtml(r, clickable) {
-  const clickAttr = clickable
-    ? `onclick="drillRegionFromRanking(${r.id})" style="cursor:pointer"` : '';
+  const isRegionView = !!currentRegion;
+  let clickAttr = '';
+  if (clickable) {
+    if (isRegionView) {
+      const safeName = (r.name || '').replace(/'/g, "\\'");
+      clickAttr = `onclick="openRaionDetail(${r.id}, '${safeName}')" style="cursor:pointer"`;
+    } else {
+      clickAttr = `onclick="drillRegionFromRanking(${r.id})" style="cursor:pointer"`;
+    }
+  }
   const cls = r.is_total ? 'prs-total-row' : (clickable ? 'coverage-row' : '');
   return `<tr ${clickAttr} class="${cls}">
     <td>${r.name || '—'}</td>
@@ -967,7 +975,6 @@ function coverageRowHtml(r, clickable) {
 }
 
 function renderCoverage() {
-  const isRegionView = !!currentRegion;
   const sorted = [...coverageData].sort((a, b) => {
     const va = a[coverageSortCol] ?? 0;
     const vb = b[coverageSortCol] ?? 0;
@@ -981,8 +988,38 @@ function renderCoverage() {
   });
   const totalHtml = coverageTotal ? coverageRowHtml(coverageTotal, false) : '';
   document.getElementById('coverage-body').innerHTML =
-    totalHtml + (sorted.map(r => coverageRowHtml(r, !isRegionView)).join('')
+    totalHtml + (sorted.map(r => coverageRowHtml(r, true)).join('')
       || '<tr><td colspan="6" class="no-data">Нет информации</td></tr>');
+}
+
+async function openRaionDetail(raionId, raionName) {
+  const modal = document.getElementById('raion-detail-modal');
+  const title = document.getElementById('raion-detail-title');
+  const tbody = document.getElementById('raion-detail-body');
+  title.textContent = raionName;
+  tbody.innerHTML = '<tr><td colspan="6" class="loading">Загрузка...</td></tr>';
+  modal.style.display = 'flex';
+
+  const p = buildFilterParams('none');
+  p.set('raion_id', raionId);
+  const rows = await fetch(`/api/raion-payments?${p}`).then(r => r.json());
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="no-data">Нет данных</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `<tr>
+    <td>${r.sicid ?? '—'}</td>
+    <td>${r.pay_type}</td>
+    <td class="col-center">${r.vozrast ?? '—'}</td>
+    <td class="col-center">${r.gender}</td>
+    <td class="col-center">${r.sdu}</td>
+    <td class="col-right">${formatNum(r.dec_sum)} ₸</td>
+  </tr>`).join('');
+}
+
+function closeRaionDetail() {
+  document.getElementById('raion-detail-modal').style.display = 'none';
 }
 
 async function loadSummary(sduSeq) {

@@ -95,8 +95,8 @@
   <div class="tabs-bar">
     <button class="tab-btn active" data-tab="presence">Матрица видов помощи</button>
     <button class="tab-btn" data-tab="coverage">Охват по видам помощи</button>
-    <button type="button" id="coverage-btn-back" style="display:none" onclick="goBackFromRanking()">← Все регионы</button>
     <button class="tab-btn" data-tab="gap">Разрывы по выплатам</button>
+    <button type="button" id="coverage-btn-back" style="display:none" onclick="goBackFromRanking()">← Все регионы</button>
     <button type="button" class="expand-btn" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
   </div>
 
@@ -151,6 +151,7 @@
       <button class="tab-btn antab-btn" data-antab="utilraion">% Выплаты по районам</button>
       <button class="tab-btn antab-btn" data-antab="unique">Уникальные виды</button>
       <button class="tab-btn antab-btn" data-antab="demo">Демография</button>
+      <button type="button" class="expand-btn" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
     </div>
 
     <div class="tab-pane antab-pane active" id="antab-cks">
@@ -235,6 +236,29 @@
           <tbody id="antab-demo-body"><tr><td colspan="6" class="loading">Загрузка...</td></tr></tbody>
         </table>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Raion detail modal -->
+<div id="raion-detail-modal" style="display:none" class="rdm-overlay" onclick="if(event.target===this)closeRaionDetail()">
+  <div class="rdm-box">
+    <div class="rdm-header">
+      <span id="raion-detail-title"></span>
+      <button type="button" class="rdm-close" onclick="closeRaionDetail()">✕</button>
+    </div>
+    <div class="rdm-body">
+      <table class="rdm-table">
+        <thead><tr>
+          <th>ID</th>
+          <th>Вид помощи</th>
+          <th class="col-center">Возраст</th>
+          <th class="col-center">Пол</th>
+          <th class="col-center">ЦКС</th>
+          <th class="col-right">Факт сумма</th>
+        </tr></thead>
+        <tbody id="raion-detail-body"></tbody>
+      </table>
     </div>
   </div>
 </div>

@@ -381,7 +381,8 @@ header h1 {
 
 /* Gap side panel */
 .gap-side-panel {
-  flex: 0 0 240px;
+  flex: 1 1 0;
+  min-width: 180px;
   align-self: stretch;
   display: flex;
   flex-direction: column;
@@ -454,7 +455,7 @@ header h1 {
 
 /* Map panel */
 .map-panel {
-  flex: 0 1 auto;
+  flex: 0 0 50vw;
   width: 50vw;
   display: flex;
   flex-direction: column;
@@ -834,12 +835,12 @@ tbody tr:last-child td { border-bottom: none; }
   padding: 5px 12px;
   font-size: 0.8rem;
   cursor: pointer;
-  margin-left: auto;
   font-family: inherit;
   align-self: center;
   position: relative;
   bottom: 0;
 }
+#ranking-btn-back { margin-left: auto; }
 #ranking-btn-back:hover,
 #coverage-btn-back:hover { background: var(--bd-hi); }
 
@@ -1176,6 +1177,7 @@ th.sort-active { color: var(--ac-blue); }
 .prs-total-row { background: rgba(78,205,196,0.10); font-weight: 700; }
 .prs-total-row .prs-geo-cell { color: var(--ac-teal); }
 .prs-total-row:hover { background: rgba(78,205,196,0.14); }
+#coverage-body td:first-child { text-transform: uppercase; }
 
 /* Total row (Республика Казахстан) in coverage-groups */
 .grp-total-row { background: rgba(78,205,196,0.10); font-weight: 700; }
@@ -2171,3 +2173,53 @@ th.sort-active          { color: #fff !important; }
 }
 .pay-tooltip .pt-desc { color: var(--tx-main); }
 .has-pay-tip { cursor: help; }
+
+/* ── Raion detail modal ── */
+.rdm-overlay {
+  position: fixed; inset: 0; z-index: 4000;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+}
+.rdm-box {
+  background: var(--bg-card);
+  border: 1px solid var(--bd);
+  border-radius: 12px;
+  width: 90vw; max-width: 1000px;
+  max-height: 85vh;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.rdm-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--bd);
+  font-weight: 600; font-size: 1rem;
+  color: var(--tx-main);
+}
+.rdm-close {
+  background: none; border: none; cursor: pointer;
+  color: var(--tx-dim); font-size: 1.1rem; padding: 2px 6px;
+  border-radius: 4px;
+}
+.rdm-close:hover { background: var(--bd-hi); color: var(--tx-main); }
+.rdm-body {
+  overflow-y: auto; flex: 1;
+}
+.rdm-table {
+  width: 100%; border-collapse: collapse; font-size: 0.85rem;
+}
+.rdm-table th {
+  position: sticky; top: 0;
+  background: var(--bg-card);
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 0.75rem; text-transform: uppercase;
+  color: var(--tx-dim); border-bottom: 1px solid var(--bd);
+  white-space: nowrap;
+}
+.rdm-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--tx-main);
+}
+.rdm-table tr:hover td { background: rgba(91,138,248,0.06); }

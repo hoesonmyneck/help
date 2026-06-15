@@ -491,13 +491,13 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
 
             pay_rows = af(db.query(Payment.kato_region,
                                 func.count(distinct(Payment.sicid)),
-                                func.sum(Payment.dec_pay_sum))).group_by(Payment.kato_region).all()
+                                func.sum(Payment.max_pay_sum))).group_by(Payment.kato_region).all()
             geo_people = {str(r[0]): r[1] for r in pay_rows}
             geo_sum = {str(r[0]): float(r[2] or 0) for r in pay_rows}
             name_map = {str(r.kato_region): r.kato_regname
                         for r in db.query(Payment.kato_region, Payment.kato_regname).distinct().all()}
             nat_people = af(db.query(func.count(distinct(Payment.sicid)))).scalar() or 0
-            nat_sum = float(af(db.query(func.sum(Payment.dec_pay_sum))).scalar() or 0)
+            nat_sum = float(af(db.query(func.sum(Payment.max_pay_sum))).scalar() or 0)
 
             # Max entitled sum per (region, pay_type_id) from actual payments
             mx_rows = af(db.query(Payment.kato_region, Payment.pay_type_id,
@@ -555,7 +555,7 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
 
         pay_rows = af(db.query(Payment.kato_raion, Payment.kato_rainame,
                             func.count(distinct(Payment.sicid)),
-                            func.sum(Payment.dec_pay_sum)) \
+                            func.sum(Payment.max_pay_sum)) \
                      .filter(Payment.kato_region == region_id)) \
                      .group_by(Payment.kato_raion, Payment.kato_rainame).all()
         dis_names, dis_people, dis_sum = {}, {}, {}
@@ -567,7 +567,7 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
 
         reg_people = af(db.query(func.count(distinct(Payment.sicid))) \
                        .filter(Payment.kato_region == region_id)).scalar() or 0
-        reg_sum = float(af(db.query(func.sum(Payment.dec_pay_sum))
+        reg_sum = float(af(db.query(func.sum(Payment.max_pay_sum))
                         .filter(Payment.kato_region == region_id)).scalar() or 0)
         reg_pay_all, reg_cat_all = set(), set()
         for s in dis_pay.values(): reg_pay_all |= s
@@ -624,6 +624,29 @@ def _fmt_money(v):
         return "—"
     s = f"{int(v):,}" if float(v).is_integer() else f"{v:,.2f}".rstrip("0").rstrip(".")
     return s.replace(",", " ")
+
+
+@app.get("/api/raion-payments")
+def raion_payments(raion_id: int = Query(...), sdu_filter: str = Query(None),
+                   gender_filter: str = Query(None), age_group: str = Query(None)):
+    with Session(engine) as db:
+        q = db.query(
+            Payment.sicid, Payment.pay_type, Payment.vozrast,
+            Payment.gender_id, Payment.sdu_tzhs, Payment.dec_pay_sum
+        ).filter(Payment.kato_raion == raion_id)
+        q = apply_extra_filters(q, sdu_filter, gender_filter, age_group)
+        rows = q.order_by(Payment.sicid).limit(2000).all()
+        return [
+            {
+                'sicid': r.sicid,
+                'pay_type': r.pay_type or '—',
+                'vozrast': r.vozrast,
+                'gender': 'М' if r.gender_id == 1 else ('Ж' if r.gender_id == 2 else '—'),
+                'sdu': r.sdu_tzhs or '—',
+                'dec_sum': float(r.dec_pay_sum or 0),
+            }
+            for r in rows
+        ]
 
 
 @app.get("/api/cat-regions")
