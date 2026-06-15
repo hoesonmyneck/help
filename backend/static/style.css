@@ -1465,3 +1465,44 @@ th.sort-active { color: #8ab4ff !important; }
 :root[data-theme="light"] #map {
   box-shadow: 0 0 0 1px rgba(90,100,120,0.12), 0 8px 32px rgba(0,0,0,0.09);
 }
+
+/* ── Sticky left columns: Матрица видов помощи ── */
+/* Col widths: geo=220, vidy=92, kategorii=92, lyudei=92, summa=130 */
+#presence-table th:nth-child(1), #presence-table td:nth-child(1) { position: sticky; left: 0;     z-index: 2; }
+#presence-table th:nth-child(2), #presence-table td:nth-child(2) { position: sticky; left: 220px; z-index: 2; }
+#presence-table th:nth-child(3), #presence-table td:nth-child(3) { position: sticky; left: 312px; z-index: 2; }
+#presence-table th:nth-child(4), #presence-table td:nth-child(4) { position: sticky; left: 404px; z-index: 2; }
+#presence-table th:nth-child(5), #presence-table td:nth-child(5) { position: sticky; left: 496px; z-index: 2; }
+/* Header corner cells: stick top+left simultaneously → highest z-index */
+#presence-table thead th:nth-child(-n+5) { z-index: 4; }
+/* Body sticky cells need explicit bg so scrolled content is hidden */
+#presence-table tbody td:nth-child(-n+5) { background: var(--bg-card); }
+#presence-table tbody tr:hover td:nth-child(-n+5) { background: rgba(91,138,248,0.06) !important; }
+#presence-table tbody tr.prs-total-row td:nth-child(-n+5) {
+  background-color: var(--bg-card);
+  background-image: linear-gradient(rgba(78,205,196,0.10), rgba(78,205,196,0.10));
+}
+#presence-table tbody tr.prs-total-row:hover td:nth-child(-n+5) {
+  background-color: var(--bg-card) !important;
+  background-image: linear-gradient(rgba(78,205,196,0.14), rgba(78,205,196,0.14)) !important;
+}
+
+/* ── Sticky left column: Категории по группам ── */
+#tab-groups table th:nth-child(1), #tab-groups table td:nth-child(1) { position: sticky; left: 0; z-index: 2; }
+#tab-groups table thead th:nth-child(1) { z-index: 4; }
+#tab-groups table tbody td:nth-child(1) { background: var(--bg-card); }
+#tab-groups table tbody tr:hover td:nth-child(1) { background: rgba(91,138,248,0.06) !important; }
+#tab-groups table tbody tr.grp-total-row td:nth-child(1) {
+  background-color: var(--bg-card);
+  background-image: linear-gradient(rgba(78,205,196,0.10), rgba(78,205,196,0.10));
+}
+#tab-groups table tbody tr.grp-total-row:hover td:nth-child(1) {
+  background-color: var(--bg-card) !important;
+  background-image: linear-gradient(rgba(78,205,196,0.14), rgba(78,205,196,0.14)) !important;
+}
+
+/* Light theme body bg for sticky cells */
+:root[data-theme="light"] #presence-table tbody tr:hover td:nth-child(-n+5),
+:root[data-theme="light"] #tab-groups table tbody tr:hover td:nth-child(1) {
+  background: rgba(80,90,110,0.06) !important;
+}
