@@ -6,6 +6,8 @@ let regionGeoJSON = null, raionGeoJSON = null;
 let regionCentroids = {}, raionCentroids = {};
 let regionStats = {}, raionStats = {};
 let currentRegion = null, currentRaion = null;
+let currentSdu = null;
+let _sduSeq = 0;
 let currentPage = 1;
 let ageChart = null;
 
@@ -25,7 +27,7 @@ function showLogin() {
   ov.className = 'auth-overlay';
   ov.innerHTML = `
     <form class="auth-card" id="auth-form">
-      <div class="auth-title">ЕЦП «Меры государственной поддержки»</div>
+      <div class="auth-title">Единая цифровая платформа "Анализ по мерам государственной поддержке МИО"</div>
       <div class="auth-sub">Вход в систему</div>
       <input type="text" id="auth-login" placeholder="Логин" autocomplete="username" autofocus>
       <input type="password" id="auth-pass" placeholder="Пароль" autocomplete="current-password">
@@ -122,9 +124,18 @@ async function init() {
   regC.forEach(c => { regionCentroids[c.id_reg] = c.centroid; });
   raiC.forEach(c => { raionCentroids[Math.round(c.id_rai)] = c.centroid; });
 
+  // Set today's date in header
+  (() => {
+    const d = new Date();
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const el = document.getElementById('header-date');
+    if (el) el.textContent = `данные актуализированы ${dd}.${mm}.${d.getFullYear()}`;
+  })();
+
   renderRegions();
   await refreshKPI();
-  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadCatRegions(), loadUncovered(), loadHelpPresence(), loadPayTypesTop()]);
+  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadHelpPresence()]);
 }
 
 function getColor(value, max) {
@@ -280,7 +291,7 @@ async function drillRegionFromRanking(regionId) {
   updateBreadcrumb(regionName, null);
   loadDistinct('kato_rainame');
   await refreshKPI();
-  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadCatRegions(), loadUncovered(), loadHelpPresence(), loadPayTypesTop()]);
+  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadHelpPresence()]);
 }
 
 async function drillRegion(regionId) {
@@ -323,7 +334,7 @@ async function drillRegion(regionId) {
   updateBreadcrumb(regionName, null);
   loadDistinct('kato_rainame');
   await refreshKPI();
-  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadCatRegions(), loadUncovered(), loadHelpPresence(), loadPayTypesTop()]);
+  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadHelpPresence()]);
 }
 
 async function selectRaion(raionId) {
@@ -334,7 +345,6 @@ async function selectRaion(raionId) {
   updateBreadcrumb(regionName, raionName);
   await refreshKPI();
   await loadTable(1);
-  loadPayTypesTop();
   // ranking stays on raion list when a raion is selected
 }
 
@@ -363,10 +373,7 @@ function goBack() {
   loadTable(1);
   loadSummary();
   loadCoverageGroups();
-  loadCatRegions();
-  loadUncovered();
   loadHelpPresence();
-  loadPayTypesTop();
 }
 
 function goBackFromRanking() {
@@ -382,10 +389,7 @@ function goBackFromRanking() {
   loadTable(1);
   loadSummary();
   loadCoverageGroups();
-  loadCatRegions();
-  loadUncovered();
   loadHelpPresence();
-  loadPayTypesTop();
   requestAnimationFrame(() => window.scrollTo({ top: savedScroll, behavior: 'instant' }));
 }
 
@@ -398,17 +402,18 @@ function updateBreadcrumb(region, raion) {
 }
 
 
-async function refreshKPI() {
+async function refreshKPI(sduSeq) {
   const params = new URLSearchParams();
   if (currentRaion) params.set('raion_id', currentRaion);
   else if (currentRegion) params.set('region_id', currentRegion);
+  if (currentSdu) params.set('sdu_filter', currentSdu);
 
   const data = await fetch(`/api/kpi?${params}`).then(r => r.json());
+  if (sduSeq < _sduSeq) return; // stale — a newer sdu change superseded this call
 
   animateCounter('kpi-dec',         data.total_dec_pay_sum,  v => formatNum(v));
   animateCounter('kpi-recipients',  data.unique_recipients,  v => formatInt(v));
   animateCounter('kpi-help-types',  data.help_type_count || 0,  v => formatInt(v));
-  animateCounter('kpi-people-cats', data.people_cat_count || 0, v => formatInt(v));
   renderGenderAgeBar(data.male_count || 0, data.female_count || 0, data.age || {});
   renderSduChart(data.sdu || {});
 }
@@ -452,11 +457,11 @@ function renderGenderChart(male, female) {
 }
 
 const SDU_META = {
-  A: { label: 'A — Отличный',    color: '#2ecc71' },
-  B: { label: 'B — Хороший',     color: '#4ecdc4' },
-  C: { label: 'C — Средний',     color: '#f7dc6f' },
-  D: { label: 'D — Критический', color: '#e67e22' },
-  E: { label: 'E — Экстренный',  color: '#e74c3c' },
+  A: { label: 'A — Высокий',                      color: '#2ecc71' },
+  B: { label: 'B — Состоятельный',                color: '#4ecdc4' },
+  C: { label: 'C — Стабильный',                   color: '#f7dc6f' },
+  D: { label: 'D — Испытывающий нужду',           color: '#e67e22' },
+  E: { label: 'E — Крайняя нуждаемость',          color: '#e74c3c' },
 };
 
 function renderSduChart(sdu) {
@@ -465,17 +470,24 @@ function renderSduChart(sdu) {
   const colors = keys.map(k => SDU_META[k].color);
   const total = values.reduce((a, b) => a + b, 0);
 
-  // Legend
+  // Legend — clickable for filtering
   const legend = document.getElementById('sdu-legend');
   legend.innerHTML = keys.map(k => {
     const count = sdu[k] || 0;
     const pct = total ? Math.round(count / total * 100) : 0;
-    return `<div class="sdu-legend-item" title="${SDU_META[k].label}: ${formatInt(count)} (${pct}%)">
+    const isActive = currentSdu === k;
+    return `<div class="sdu-legend-item${isActive ? ' sdu-active' : ''}"
+      onclick="setSduFilter('${k}')"
+      title="${SDU_META[k].label}: ${formatInt(count)} (${pct}%)">
       <span class="sdu-dot" style="background:${SDU_META[k].color}"></span>
       <span class="sdu-leg-label">${SDU_META[k].label}</span>
       <span class="sdu-leg-val">${pct}%</span>
     </div>`;
   }).join('');
+
+  // Show/hide clear button
+  const clearBtn = document.getElementById('sdu-clear-btn');
+  if (clearBtn) clearBtn.style.display = currentSdu ? 'inline-flex' : 'none';
 
   const ctx = document.getElementById('sdu-chart').getContext('2d');
   if (sduChart) sduChart.destroy();
@@ -499,6 +511,24 @@ function renderSduChart(sdu) {
       },
     },
   });
+}
+
+function setSduFilter(k) {
+  if (currentSdu === k) return; // already active — use X button to clear
+  currentSdu = k;
+  _refreshAfterSduChange();
+}
+
+function clearSduFilter() {
+  currentSdu = null;
+  _refreshAfterSduChange();
+}
+
+function _refreshAfterSduChange() {
+  const seq = ++_sduSeq;
+  refreshKPI(seq);
+  loadSummary(seq);
+  loadTable(currentPage);
 }
 
 const AGE_META = [
@@ -550,15 +580,6 @@ function renderAgeChart(age) {
   });
 }
 
-/* ── Mid-panel charts ── */
-function fmtMln(v) {
-  if (!v) return '0';
-  if (v >= 1e9) return `${(v/1e9).toFixed(1).replace('.', ',')} млрд`;
-  if (v >= 1e6) return `${(v/1e6).toFixed(1).replace('.', ',')} млн`;
-  if (v >= 1e3) return `${Math.round(v/1e3)} тыс`;
-  return `${Math.round(v)}`;
-}
-
 const GA_AGE_META = [
   { key: 'до 18', label: 'до 18 лет', color: '#a29bfe' },
   { key: '18-39', label: '18–39 лет',  color: '#74b9ff' },
@@ -598,50 +619,6 @@ function renderGenderAgeBar(male, female, age) {
     }).join('')}`;
 }
 
-function renderRegionActivity() {
-  const el = document.getElementById('region-activity-chart');
-  if (!el) return;
-  const totalTypes = presenceColumns.length || 14;
-  const rows = presenceRows
-    .filter(r => !r.is_total)
-    .sort((a, b) => (b.mini?.vidy || 0) - (a.mini?.vidy || 0));
-  const top = rows.slice(0, 6);
-  const rest = rows.slice(6);
-  const items = [...top];
-  if (rest.length > 0) items.push({ name: `${rest.length} регионов`, mini: { vidy: 0 }, _dim: true });
-  el.innerHTML = items.map(r => {
-    const vidy = r.mini?.vidy || 0;
-    const pct = totalTypes > 0 ? (vidy / totalTypes * 100) : 0;
-    return `<div class="ra-row">
-      <span class="ra-name" title="${r.name || ''}">${r.name || '—'}</span>
-      <div class="ra-bar-wrap"><div class="ra-bar" style="width:${pct}%;opacity:${r._dim ? 0.28 : 1}"></div></div>
-      <span class="ra-val">${vidy}/${totalTypes}</span>
-    </div>`;
-  }).join('');
-}
-
-function renderPayTypesTop(rows) {
-  const el = document.getElementById('paytypes-top-chart');
-  if (!el) return;
-  if (!rows || !rows.length) { el.innerHTML = '<div class="pt-empty">Нет данных</div>'; return; }
-  el.innerHTML = `<div class="pt-header"><span>Вид помощи</span><span>Сумма</span></div>` +
-    rows.map(r => {
-      const name = stripHelpPrefix(r.name);
-      return `<div class="pt-row">
-        <span class="pt-name" title="${r.name}">${name}</span>
-        <span class="pt-sum">${fmtMln(r.total)}</span>
-      </div>`;
-    }).join('');
-}
-
-async function loadPayTypesTop() {
-  const params = new URLSearchParams();
-  if (currentRaion) params.set('raion_id', currentRaion);
-  else if (currentRegion) params.set('region_id', currentRegion);
-  const rows = await fetch(`/api/paytypes-top?${params}`).then(r => r.json());
-  renderPayTypesTop(rows);
-}
-
 let coverageData = [];
 let coverageTotal = null;
 let coverageSortCol = 'total_sum';
@@ -653,144 +630,35 @@ let groupsTotal = null;
 let groupsSortGroup = null;
 let groupsSortDir = 'desc';
 
-let catRegionsData = [];
-let catRegionsSortBy = 'name';          // 'name' | 'count'
-let catRegionsSortDir = 'asc';          // direction for the active sort
-let catRegionsSearch = '';
-let catRegionsExpanded = new Set();     // category index expanded
-let catRegionsRegExpanded = new Set();  // `${catIdx}|${regionId}` expanded
-
-async function loadCatRegions() {
-  // Entitlement view (nation-wide), independent of the map drill
-  setText('cat-regions-geo-label', 'В скольких регионах положено');
-
-  document.getElementById('cat-regions-body').innerHTML =
-    '<tr><td colspan="2" class="loading">Загрузка...</td></tr>';
-
-  catRegionsExpanded.clear();
-  catRegionsRegExpanded.clear();
-  catRegionsData = await fetch(`/api/cat-regions`).then(r => r.json());
-  renderCatRegions();
-}
-
-function payListHtml(title, pays) {
-  if (!pays || !pays.length) return '';
-  const items = pays.map(p => `<li>${stripHelpPrefix(p.name)} — ${p.max} ₸</li>`).join('');
-  const t = title ? `<div class="cr-pay-title">${title}</div>` : '';
-  return `${t}<ul class="cr-pay-list">${items}</ul>`;
-}
-
-function renderCatRegions() {
-  let list = catRegionsData.map((r, i) => ({ ...r, _i: i }));
-
-  if (catRegionsSearch) {
-    const q = catRegionsSearch.toLowerCase();
-    list = list.filter(r => (r.cat_type || '').toLowerCase().includes(q));
-  }
-
-  list.sort((a, b) => {
-    const cmp = catRegionsSortBy === 'name'
-      ? (a.cat_type || '').localeCompare(b.cat_type || '', 'ru')
-      : a.geo_count - b.geo_count;
-    return catRegionsSortDir === 'asc' ? cmp : -cmp;
-  });
-  const sorted = list;
-
-  const dirArrow = catRegionsSortDir === 'asc' ? ' ▲' : ' ▼';
-  const nameIcon = document.getElementById('cat-regions-name-icon');
-  if (nameIcon) nameIcon.textContent = catRegionsSortBy === 'name' ? dirArrow : '';
-  const icon = document.getElementById('cat-regions-sort-icon');
-  if (icon) icon.textContent = catRegionsSortBy === 'count' ? dirArrow : '';
-
-  const html = sorted.map(r => {
-    const hasRegions = r.regions && r.regions.length;
-    const open = catRegionsExpanded.has(r._i);
-    const caret = hasRegions ? `<span class="unc-caret">${open ? '▲' : '▼'}</span> ` : '';
-    const catCell = hasRegions
-      ? `<td class="cr-cat" data-cat-toggle="${r._i}" style="cursor:pointer" title="${r.cat_type}">${caret}${r.cat_type}</td>`
-      : `<td title="${r.cat_type}">${r.cat_type}</td>`;
-    let row = `<tr>${catCell}<td class="col-right">${r.geo_count}</td></tr>`;
-
-    if (open && hasRegions) {
-      const regItems = r.regions.map(reg => {
-        const key = `${r._i}|${reg.id}`;
-        const regOpen = catRegionsRegExpanded.has(key);
-        const hasRaions = reg.raions && reg.raions.length;
-        let li = `<li>
-          <div class="cr-reg" data-reg-toggle="${key}">
-            <span class="unc-caret">${regOpen ? '▲' : '▼'}</span> ${reg.name}
-          </div>`;
-        if (regOpen) {
-          li += `<div class="cr-sub">`;
-          li += payListHtml('Виды помощи в регионе:', reg.pay_types);
-          if (hasRaions) {
-            li += `<div class="cr-raion-title">Районы:</div>`;
-            li += `<ul class="cr-raion-list-2">` + reg.raions.map(rai =>
-              `<li><div class="cr-raion-name">${rai.name}</div>${payListHtml(null, rai.pay_types)}</li>`
-            ).join('') + `</ul>`;
-          }
-          li += `</div>`;
-        }
-        return li + `</li>`;
-      }).join('');
-
-      row += `<tr class="cr-detail-row"><td colspan="2">
-        <div class="cr-detail">
-          <div class="cr-detail-title">Регионы, где положено (${r.regions.length}):</div>
-          <ul class="cr-reg-list">${regItems}</ul>
-        </div></td></tr>`;
-    }
-    return row;
-  }).join('');
-
-  document.getElementById('cat-regions-body').innerHTML =
-    html || '<tr><td colspan="2" class="no-data">Нет информации</td></tr>';
-}
-
-function toggleSet(set, key) {
-  if (set.has(key)) set.delete(key); else set.add(key);
-}
-
-let uncoveredData = [];
-let uncoveredSortDir = 'desc';
-let uncoveredExpanded = new Set();
-
 let presenceColumns = [];
 let presenceRows = [];
 let presenceById = {};   // geo id -> presence row (for map tooltips)
-let presenceSortCol = null;   // 'vidy' | 'kategorii' | 'lyudei' | 'summa'
+let presenceSortCol = null;   // 'vidy' | 'lyudei' | 'summa'
 let presenceSortDir = 'desc';
 
 let geoPanelTimer = null;
-let geoPanelRow = null;
 let geoPanelLastEv = null;
 
 function showGeoPanel(id, name, ev) {
   const row = presenceById[Math.round(id)];
-  geoPanelRow = row;
   const panel = document.getElementById('geo-panel');
   if (!panel) return;
 
   let listHtml = '';
   if (row && presenceColumns.length && row.pay_cat_lists) {
-    const entries = presenceColumns.map((c, i) => ({ c, i, cnt: (row.pay_cat_lists[i] || []).length }));
-    // green (provided) first, then red (not provided) — stable within each group
-    entries.sort((a, b) => (b.cnt > 0) - (a.cnt > 0));
-    listHtml = entries.map(({ c, i, cnt }) => {
-      const cls = cnt > 0 ? 'gp-yes' : 'gp-no';
-      const attr = cnt > 0 ? `data-pay="${i}"` : '';
-      return `<div class="gp-row ${cls}" ${attr}>
-        <span class="gp-pay">${stripHelpPrefix(c.name)}:</span><span class="gp-cnt">${cnt}</span>
-      </div>`;
-    }).join('');
+    const provided = presenceColumns
+      .map((c, i) => ({ c, cnt: (row.pay_cat_lists[i] || []).length }))
+      .filter(e => e.cnt > 0);
+    listHtml = provided.map(({ c }) =>
+      `<div class="gp-row gp-yes"><span class="gp-pay">${stripHelpPrefix(c.name)}</span></div>`
+    ).join('');
   }
 
   panel.innerHTML =
     `<div class="gp-main">
        <div class="gp-title">${(row && row.name) || name || '—'}</div>
        <div class="gp-list">${listHtml || '<div class="gp-empty">Нет данных</div>'}</div>
-     </div>
-     <div class="gp-side" id="gp-side"></div>`;
+     </div>`;
 
   panel.classList.add('visible');
   positionGeoPanel(ev);
@@ -839,7 +707,6 @@ async function loadHelpPresence() {
   presenceRows.forEach(r => { if (r.id != null) presenceById[r.id] = r; });
   maxEntitledVidy = Math.max(1, ...presenceRows.filter(r => !r.is_total).map(r => r.mini?.vidy || 0));
   renderHelpPresence();
-  renderRegionActivity();
   // refresh map labels + fill colours now that entitlement data is available
   if (map && labelsLayer) {
     if (currentRegion) { renderRaionLabels(); raionsLayer?.setStyle(raionStyle); }
@@ -874,7 +741,6 @@ function renderHelpPresence() {
     `<tr>
        <th class="prs-geo-hdr">${geoLabel}</th>
        ${miniHdr('vidy', 'Виды помощи', '', 'Виды помощи, которые должны оказываться')}
-       ${miniHdr('kategorii', 'Категории', '', 'Категории, которым должна оказываться помощь')}
        ${miniHdr('lyudei', 'Людей', '', 'Количество людей, которым оказывается услуга')}
        ${miniHdr('summa', 'Сумма', 'prs-mini-sum', 'Фактически выплачено')}
        ${cols}
@@ -906,68 +772,11 @@ function renderHelpPresence() {
     return `<tr ${clickAttr} class="${cls}">
       <td class="prs-geo-cell">${r.name || '—'}</td>
       <td class="col-center prs-mini">${m.vidy ?? 0}</td>
-      <td class="col-center prs-mini">${m.kategorii ?? 0}</td>
       <td class="col-center prs-mini">${formatInt(m.lyudei ?? 0)}</td>
       <td class="col-right prs-mini prs-mini-sum">${m.summa ?? '0'} ₸</td>
       ${cells}
     </tr>`;
   }).join('');
-}
-
-async function loadUncovered() {
-  const params = new URLSearchParams();
-  if (currentRegion) params.set('region_id', currentRegion);
-
-  setText('uncovered-col-name', currentRegion
-    ? `Район (${regionStats[currentRegion]?.name || ''})` : 'Регион');
-
-  document.getElementById('uncovered-body').innerHTML =
-    '<tr><td colspan="2" class="loading">Загрузка...</td></tr>';
-
-  uncoveredExpanded.clear();
-  uncoveredData = await fetch(`/api/uncovered-cats?${params}`).then(r => r.json());
-  renderUncovered();
-}
-
-function renderUncovered() {
-  const sorted = [...uncoveredData].sort((a, b) =>
-    uncoveredSortDir === 'desc'
-      ? b.uncovered_count - a.uncovered_count
-      : a.uncovered_count - b.uncovered_count
-  );
-  const icon = document.getElementById('uncovered-sort-icon');
-  if (icon) icon.textContent = uncoveredSortDir === 'desc' ? ' ▼' : ' ▲';
-
-  document.getElementById('uncovered-body').innerHTML = sorted.map(r => {
-    const open = uncoveredExpanded.has(r.id);
-    const countCell = r.uncovered_count > 0
-      ? `<td class="col-center unc-count" onclick="toggleUncovered('${r.id}')" style="cursor:pointer">
-           ${r.uncovered_count} <span class="unc-caret">${open ? '▲' : '▼'}</span>
-         </td>`
-      : `<td class="col-center" style="color:var(--tx-muted)">0</td>`;
-    const nameCell = !currentRegion
-      ? `<td class="coverage-row" onclick="drillRegionFromRanking(${r.id})" style="cursor:pointer">${r.name || '—'}</td>`
-      : `<td>${r.name || '—'}</td>`;
-    let html = `<tr>${nameCell}${countCell}</tr>`;
-    if (open && r.uncovered_count > 0) {
-      const list = r.uncovered_cats.map(c => `<li>${c}</li>`).join('');
-      html += `<tr class="unc-detail-row"><td colspan="2">
-        <div class="unc-detail">
-          <div class="unc-detail-title">Не оказываемые категории (${r.uncovered_count}):</div>
-          <ul class="unc-list">${list}</ul>
-        </div></td></tr>`;
-    }
-    return html;
-  }).join('') || '<tr><td colspan="2" class="no-data">Нет информации</td></tr>';
-}
-
-function toggleUncovered(id) {
-  // id arrives as string from inline handler; data ids may be numeric
-  const match = uncoveredData.find(r => String(r.id) === String(id));
-  const key = match ? match.id : id;
-  if (uncoveredExpanded.has(key)) uncoveredExpanded.delete(key);
-  else uncoveredExpanded.add(key);
-  renderUncovered();
 }
 
 function renderGroupCell(g) {
@@ -1069,7 +878,6 @@ function coverageRowHtml(r, clickable) {
   return `<tr ${clickAttr} class="${cls}">
     <td>${r.name || '—'}</td>
     <td class="col-center">${r.help_types}</td>
-    <td class="col-center">${r.cat_count}</td>
     <td class="col-right">${formatNum(r.max_sum)} ₸</td>
     <td class="col-right">${formatNum(r.total_sum)} ₸</td>
     <td class="col-right">${(r.pct ?? 0)}%</td>
@@ -1095,10 +903,11 @@ function renderCoverage() {
       || '<tr><td colspan="6" class="no-data">Нет информации</td></tr>');
 }
 
-async function loadSummary() {
+async function loadSummary(sduSeq) {
   const params = new URLSearchParams();
   const isRegionView = !!currentRegion;
   if (isRegionView) params.set('region_id', currentRegion);
+  if (currentSdu) params.set('sdu_filter', currentSdu);
 
   document.getElementById('coverage-body').innerHTML =
     '<tr><td colspan="6" class="loading">Загрузка...</td></tr>';
@@ -1107,6 +916,7 @@ async function loadSummary() {
   document.getElementById('coverage-btn-back').style.display = isRegionView ? 'inline-block' : 'none';
 
   const resp = await fetch(`/api/summary?${params}`).then(r => r.json());
+  if (sduSeq < _sduSeq) return;
   coverageData  = resp.rows  || [];
   coverageTotal = resp.total || null;
   renderCoverage();
@@ -1184,6 +994,7 @@ async function loadTable(page) {
   if (currentRaion) params.set('raion_id', currentRaion);
   else if (currentRegion) params.set('region_id', currentRegion);
   if (tableSortCol) { params.set('sort_col', tableSortCol); params.set('sort_dir', tableSortDir); }
+  if (currentSdu) params.set('f_sdu_tzhs', currentSdu);
   Object.entries(tableFilters).forEach(([k, v]) => params.set(`f_${k}`, v));
 
   const tbody = document.getElementById('table-body');
@@ -1243,6 +1054,263 @@ function setText(id, val) {
   if (el) el.textContent = val;
 }
 
+// ── Anomaly section ──────────────────────────────────────────────
+
+const _anTabCache = {};
+let _anUtilRegionId = null;
+let _anUtilRegionName = '';
+const _anUtilCache = {};
+let _anRaionDrillId = null;
+let _anRaionDrillName = '';
+const _anRaionCache = {};
+const _anSort = {};
+
+function anToggleSort(th) {
+  const tab = th.dataset.antab, col = th.dataset.ancol;
+  let sortKey = tab;
+  if (tab === 'utilization') sortKey = _anUtilRegionId != null ? 'utilization-drill' : 'utilization';
+  if (tab === 'utilraion')   sortKey = _anRaionDrillId != null ? 'utilraion-drill'   : 'utilraion';
+  const s = _anSort[sortKey] || { col: null, dir: 'asc' };
+  _anSort[sortKey] = { col, dir: s.col === col && s.dir === 'asc' ? 'desc' : 'asc' };
+  document.querySelectorAll(`[data-antab="${tab}"][data-ancol]`).forEach(t => {
+    const icon = t.querySelector('.an-sort-icon');
+    if (icon) icon.textContent = t.dataset.ancol === col ? (_anSort[sortKey].dir === 'asc' ? ' ▲' : ' ▼') : '';
+  });
+  if (tab === 'utilization') {
+    const ck = _anUtilRegionId != null ? String(_anUtilRegionId) : 'all';
+    if (_anUtilCache[ck]) renderAnUtil(_anUtilCache[ck]); return;
+  }
+  if (tab === 'utilraion') {
+    const ck = _anRaionDrillId != null ? `r${_anRaionDrillId}` : 'all';
+    if (_anRaionCache[ck]) renderAnUtilRaion(_anRaionCache[ck]); return;
+  }
+  const data = _anTabCache[tab];
+  if (data) renderAnomalyTab(tab, data);
+}
+
+function anSorted(data, sortKey) {
+  const s = _anSort[sortKey];
+  if (!s || !s.col) return data;
+  return [...data].sort((a, b) => {
+    let va = a[s.col] ?? -Infinity, vb = b[s.col] ?? -Infinity;
+    return s.dir === 'asc' ? (va > vb ? 1 : va < vb ? -1 : 0) : (va < vb ? 1 : va > vb ? -1 : 0);
+  });
+}
+
+async function loadAnomalyKpi() {
+  try {
+    const d = await fetch('/api/anomalies/kpi').then(r => r.json());
+    document.getElementById('an-kpi-pending').textContent = formatInt(d.pending);
+    document.getElementById('an-kpi-cks').textContent     = formatInt(d.cks_ab);
+    document.getElementById('an-kpi-empty').textContent   = formatInt(d.empty_declared);
+    document.getElementById('an-kpi-unique').textContent  = formatInt(d.geo_unique);
+  } catch(e) { console.error('anomalies/kpi', e); }
+}
+
+async function loadAnUtil() {
+  const cacheKey = _anUtilRegionId != null ? String(_anUtilRegionId) : 'all';
+  if (_anUtilCache[cacheKey]) { renderAnUtil(_anUtilCache[cacheKey]); return; }
+  const url = _anUtilRegionId != null
+    ? `/api/anomalies/utilization?region_id=${_anUtilRegionId}`
+    : '/api/anomalies/utilization';
+  try {
+    const data = await fetch(url).then(r => r.json());
+    _anUtilCache[cacheKey] = data;
+    renderAnUtil(data);
+  } catch(e) { console.error('anomalies/utilization', e); }
+}
+
+function anUtilGoBack() {
+  _anUtilRegionId = null;
+  _anUtilRegionName = '';
+  loadAnUtil();
+}
+
+function anUtilDrill(regionId, regionName) {
+  _anUtilRegionId = regionId;
+  _anUtilRegionName = regionName;
+  loadAnUtil();
+}
+
+async function loadAnUtilRaion() {
+  const cacheKey = _anRaionDrillId != null ? `r${_anRaionDrillId}` : 'all';
+  if (_anRaionCache[cacheKey]) { renderAnUtilRaion(_anRaionCache[cacheKey]); return; }
+  const url = _anRaionDrillId != null
+    ? `/api/anomalies/utilization-raion?raion_id=${_anRaionDrillId}`
+    : '/api/anomalies/utilization-raion';
+  try {
+    const data = await fetch(url).then(r => r.json());
+    _anRaionCache[cacheKey] = data;
+    renderAnUtilRaion(data);
+  } catch(e) { console.error('utilization-raion', e); }
+}
+
+function anUtilRaionGoBack() { _anRaionDrillId = null; _anRaionDrillName = ''; loadAnUtilRaion(); }
+function anUtilRaionDrill(raionId, raionName) { _anRaionDrillId = raionId; _anRaionDrillName = raionName; loadAnUtilRaion(); }
+
+async function loadAnomalyTab(tab) {
+  if (tab === 'utilization') { await loadAnUtil(); return; }
+  if (tab === 'utilraion')   { await loadAnUtilRaion(); return; }
+  if (_anTabCache[tab]) { renderAnomalyTab(tab, _anTabCache[tab]); return; }
+  const urlMap = {
+    cks:    '/api/anomalies/cks-ab',
+    unique: '/api/anomalies/unique-help',
+    demo:   '/api/anomalies/demographic',
+  };
+  if (!urlMap[tab]) return;
+  try {
+    const data = await fetch(urlMap[tab]).then(r => r.json());
+    _anTabCache[tab] = data;
+    renderAnomalyTab(tab, data);
+  } catch(e) { console.error(`anomalies/${tab}`, e); }
+}
+
+function renderAnomalyTab(tab, data) {
+  ({ cks: renderAnCks, unique: renderAnUnique, demo: renderAnDemo })[tab]?.(data);
+}
+
+function _anEmpty(tbody, cols) {
+  tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center;padding:32px;color:var(--tx-muted)">Нет данных</td></tr>`;
+}
+
+function _shortPayType(s) { return (s || '').replace(/^СОЦИАЛЬНАЯ ПОМОЩЬ\s+/i, ''); }
+
+function renderAnCks(rows) {
+  const tbody = document.getElementById('antab-cks-body');
+  const sorted = anSorted(rows, 'cks');
+  if (!sorted.length) { _anEmpty(tbody, 6); return; }
+  tbody.innerHTML = sorted.map(r => `<tr>
+    <td>${r.region}</td>
+    <td class="col-center"><span class="an-cks-badge">${r.cks}</span></td>
+    <td>${_shortPayType(r.pay_type)}</td>
+    <td class="col-center an-alarm-cell">${formatInt(r.count)}</td>
+    <td class="col-center">${formatInt(r.recipients)}</td>
+    <td class="col-right">${formatNum(r.total_dec)} ₸</td>
+  </tr>`).join('');
+}
+
+function renderAnUtil(rows) {
+  const tbody   = document.getElementById('antab-utilization-body');
+  const backBtn = document.getElementById('an-util-back');
+  const geoCol  = document.getElementById('an-util-geo-col');
+  const titleEl = document.getElementById('an-util-title');
+
+  if (_anUtilRegionId != null) {
+    if (backBtn)  backBtn.style.display = 'inline-block';
+    if (geoCol)   geoCol.textContent = 'Вид помощи';
+    if (titleEl)  titleEl.textContent = _anUtilRegionName;
+    const sorted = anSorted(rows, 'utilization-drill');
+    if (!sorted.length) { _anEmpty(tbody, 5); return; }
+    tbody.innerHTML = sorted.map(r => {
+      const cls = r.pct < 50 ? 'an-alarm-cell' : r.pct < 80 ? 'an-warn-cell' : '';
+      return `<tr>
+        <td>${r.pay_type}</td>
+        <td class="col-center">${formatInt(r.count)}</td>
+        <td class="col-right">${formatNum(r.total_max)} ₸</td>
+        <td class="col-right">${formatNum(r.total_dec)} ₸</td>
+        <td class="col-right ${cls}">${r.pct}%</td>
+      </tr>`;
+    }).join('');
+  } else {
+    if (backBtn)  backBtn.style.display = 'none';
+    if (geoCol)   geoCol.textContent = 'Регион';
+    if (titleEl)  titleEl.textContent = '';
+    const sorted = anSorted(rows, 'utilization');
+    if (!sorted.length) { _anEmpty(tbody, 5); return; }
+    tbody.innerHTML = sorted.map(r => {
+      const cls = r.pct < 50 ? 'an-alarm-cell' : r.pct < 80 ? 'an-warn-cell' : '';
+      const rowCls    = r.clickable ? 'coverage-row' : '';
+      const clickAttr = r.clickable
+        ? `onclick="anUtilDrill(${r.id}, '${(r.name || '').replace(/'/g, "\\'")}')" style="cursor:pointer"` : '';
+      return `<tr class="${rowCls}" ${clickAttr}>
+        <td>${r.name}</td>
+        <td class="col-center">${formatInt(r.count)}</td>
+        <td class="col-right">${formatNum(r.total_max)} ₸</td>
+        <td class="col-right">${formatNum(r.total_dec)} ₸</td>
+        <td class="col-right ${cls}">${r.pct}%</td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+function renderAnUtilRaion(rows) {
+  const tbody   = document.getElementById('antab-utilraion-body');
+  const backBtn = document.getElementById('an-utilraion-back');
+  const geoCol  = document.getElementById('an-utilraion-geo-col');
+  const regTh   = document.getElementById('an-utilraion-reg-th');
+  const titleEl = document.getElementById('an-utilraion-title');
+
+  if (_anRaionDrillId != null) {
+    if (backBtn)  backBtn.style.display = 'inline-block';
+    if (geoCol)   geoCol.textContent = 'Вид помощи';
+    if (regTh)    regTh.style.display = 'none';
+    if (titleEl)  titleEl.textContent = _anRaionDrillName;
+    const sorted = anSorted(rows, 'utilraion-drill');
+    if (!sorted.length) { _anEmpty(tbody, 5); return; }
+    tbody.innerHTML = sorted.map(r => {
+      const cls = r.pct < 50 ? 'an-alarm-cell' : r.pct < 80 ? 'an-warn-cell' : '';
+      return `<tr>
+        <td>${_shortPayType(r.pay_type)}</td>
+        <td style="display:none"></td>
+        <td class="col-center">${formatInt(r.count)}</td>
+        <td class="col-right">${formatNum(r.total_max)} ₸</td>
+        <td class="col-right">${formatNum(r.total_dec)} ₸</td>
+        <td class="col-right ${cls}">${r.pct}%</td>
+      </tr>`;
+    }).join('');
+  } else {
+    if (backBtn)  backBtn.style.display = 'none';
+    if (geoCol)   geoCol.textContent = 'Район';
+    if (regTh)    regTh.style.display = '';
+    if (titleEl)  titleEl.textContent = '';
+    const sorted = anSorted(rows, 'utilraion');
+    if (!sorted.length) { _anEmpty(tbody, 6); return; }
+    tbody.innerHTML = sorted.map(r => {
+      const cls = r.pct < 50 ? 'an-alarm-cell' : r.pct < 80 ? 'an-warn-cell' : '';
+      return `<tr class="coverage-row" style="cursor:pointer" onclick="anUtilRaionDrill(${r.raion_id}, '${(r.raion||'').replace(/'/g,"\\'")}')">
+        <td>${r.raion}</td>
+        <td>${r.region}</td>
+        <td class="col-center">${formatInt(r.count)}</td>
+        <td class="col-right">${formatNum(r.total_max)} ₸</td>
+        <td class="col-right">${formatNum(r.total_dec)} ₸</td>
+        <td class="col-right ${cls}">${r.pct}%</td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+function renderAnUnique(rows) {
+  const tbody = document.getElementById('antab-unique-body');
+  const sorted = anSorted(rows, 'unique');
+  if (!sorted.length) { _anEmpty(tbody, 3); return; }
+  tbody.innerHTML = sorted.map(r => `<tr>
+    <td>${r.pay_type}</td>
+    <td class="col-center an-warn-cell">${r.reg_count}</td>
+    <td>${(r.regions || []).join(', ')}</td>
+  </tr>`).join('');
+}
+
+function renderAnDemo(rows) {
+  const tbody = document.getElementById('antab-demo-body');
+  const sorted = anSorted(rows, 'demo');
+  if (!sorted.length) { _anEmpty(tbody, 6); return; }
+  tbody.innerHTML = sorted.map(r => {
+    const flagsHtml = r.flags.length
+      ? r.flags.map(f => `<span class="an-flag-badge">${f}</span>`).join(' ')
+      : r.low_data
+        ? '<span class="an-ok-badge">норма (мало данных)</span>'
+        : '<span class="an-ok-badge">норма</span>';
+    return `<tr class="${r.flags.length ? 'an-row-flag' : ''}">
+      <td>${_shortPayType(r.pay_type)}</td>
+      <td class="col-center">${formatInt(r.total)}</td>
+      <td class="col-center">${r.pct_male}%</td>
+      <td class="col-center">${r.pct_female}%</td>
+      <td class="col-right">${r.avg_age != null ? r.avg_age : '—'}</td>
+      <td>${flagsHtml}</td>
+    </tr>`;
+  }).join('');
+}
+
 window.addEventListener('load', () => { if (map) map.invalidateSize(); });
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1280,57 +1348,33 @@ document.addEventListener('DOMContentLoaded', () => {
     renderHelpPresence();
   });
 
-  document.querySelector('#cat-regions-name-header .cr-name-sort')?.addEventListener('click', () => {
-    if (catRegionsSortBy === 'name') catRegionsSortDir = catRegionsSortDir === 'asc' ? 'desc' : 'asc';
-    else { catRegionsSortBy = 'name'; catRegionsSortDir = 'asc'; }
-    renderCatRegions();
-  });
-
-  document.getElementById('cat-regions-geo-header')?.addEventListener('click', () => {
-    if (catRegionsSortBy === 'count') catRegionsSortDir = catRegionsSortDir === 'asc' ? 'desc' : 'asc';
-    else { catRegionsSortBy = 'count'; catRegionsSortDir = 'desc'; }
-    renderCatRegions();
-  });
-
-  document.getElementById('cat-regions-search')?.addEventListener('input', e => {
-    catRegionsSearch = e.target.value.trim();
-    renderCatRegions();
-  });
-
-  document.getElementById('cat-regions-body')?.addEventListener('click', e => {
-    const catEl = e.target.closest('[data-cat-toggle]');
-    if (catEl) { toggleSet(catRegionsExpanded, +catEl.dataset.catToggle); renderCatRegions(); return; }
-    const regEl = e.target.closest('[data-reg-toggle]');
-    if (regEl) { toggleSet(catRegionsRegExpanded, regEl.dataset.regToggle); renderCatRegions(); }
-  });
-
-  document.getElementById('uncovered-count-header')?.addEventListener('click', () => {
-    uncoveredSortDir = uncoveredSortDir === 'desc' ? 'asc' : 'desc';
-    renderUncovered();
-  });
-
-  document.querySelectorAll('.tab-btn').forEach(btn => {
+  document.querySelectorAll('.tab-btn:not(.antab-btn)').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn:not(.antab-btn)').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-pane:not(.antab-pane)').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
       const pane = document.getElementById(`tab-${btn.dataset.tab}`);
       if (pane) pane.classList.add('active');
     });
   });
 
-  // Mid-panel tabs (Активность регионов / Топ видов помощи)
-  document.querySelectorAll('.mid-tab-btn').forEach(btn => {
+  // Anomaly tabs
+  document.querySelectorAll('.antab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.mid-tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.mid-tab-pane').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.antab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.antab-pane').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
-      const pane = document.getElementById(`mtab-${btn.dataset.mtab}`);
+      const pane = document.getElementById('antab-' + btn.dataset.antab);
       if (pane) pane.classList.add('active');
+      if (btn.dataset.antab === 'utilization') { _anUtilRegionId = null; _anUtilRegionName = ''; }
+      if (btn.dataset.antab === 'utilraion')   { _anRaionDrillId = null; _anRaionDrillName = ''; }
+      loadAnomalyTab(btn.dataset.antab);
     });
   });
+  loadAnomalyKpi();
+  loadAnomalyTab('cks');
 
-  // KPI chart tabs (Благосостояние)
+  // KPI chart tabs (Благосостояние / Пол-Возраст)
   document.querySelectorAll('.kpi-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.kpi-tab-btn').forEach(b => b.classList.remove('active'));
@@ -1343,35 +1387,5 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Interactive map hover panel — stay open while hovered, click a pay type for categories
-  const gp = document.getElementById('geo-panel');
-  if (gp) {
-    gp.addEventListener('mouseenter', cancelHideGeoPanel);
-    gp.addEventListener('mouseleave', scheduleHideGeoPanel);
-    gp.addEventListener('click', e => {
-      const rowEl = e.target.closest('[data-pay]');
-      if (!rowEl) return;
-      const i = +rowEl.dataset.pay;
-      const cats = (geoPanelRow?.pay_cat_lists?.[i]) || [];
-      const name = stripHelpPrefix(presenceColumns[i]?.name || '');
-      const side = document.getElementById('gp-side');
-      if (!side) return;
-      if (side.dataset.open === String(i)) {
-        side.classList.remove('visible'); side.dataset.open = '';
-        gp.querySelectorAll('.gp-row').forEach(r => r.classList.remove('gp-active'));
-        positionGeoPanel();   // re-anchor after the side closes (width shrank)
-        return;
-      }
-      side.dataset.open = String(i);
-      side.innerHTML =
-        `<div class="gp-side-title">${name}</div>
-         <div class="gp-side-sub">Категории людей (${cats.length}):</div>
-         <ul class="gp-cat-list">${cats.map(x => `<li>${x}</li>`).join('')}</ul>`;
-      side.classList.add('visible');
-      gp.querySelectorAll('.gp-row').forEach(r => r.classList.remove('gp-active'));
-      rowEl.classList.add('gp-active');
-      positionGeoPanel();     // re-anchor so the side panel grows to the LEFT
-    });
-  }
 
 });

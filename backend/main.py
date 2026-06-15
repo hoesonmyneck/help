@@ -34,19 +34,21 @@ def _all_raions_for_region(region_id, db_katos: set[str]) -> list[str]:
     return sorted(combined, key=lambda k: (int(k) if k.isdigit() else 0, k))
 
 
-def build_filter(q, region_id, raion_id):
+def build_filter(q, region_id, raion_id, sdu_filter=None):
     if raion_id is not None:
         q = q.filter(Payment.kato_raion == raion_id)
     elif region_id is not None:
         q = q.filter(Payment.kato_region == region_id)
+    if sdu_filter:
+        q = q.filter(func.upper(Payment.sdu_tzhs) == sdu_filter.upper())
     return q
 
 
 @app.get("/api/kpi")
-def kpi(region_id: int = Query(None), raion_id: int = Query(None)):
+def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: str = Query(None)):
     with Session(engine) as db:
         base = db.query(Payment)
-        base = build_filter(base, region_id, raion_id)
+        base = build_filter(base, region_id, raion_id, sdu_filter)
 
         total_max = base.with_entities(func.sum(Payment.max_pay_sum)).scalar() or 0
         total_dec = base.with_entities(func.sum(Payment.dec_pay_sum)).scalar() or 0
@@ -263,7 +265,7 @@ def table(
 
 
 @app.get("/api/summary")
-def summary(region_id: int = Query(None)):
+def summary(region_id: int = Query(None), sdu_filter: str = Query(None)):
     from sqlalchemy import case as sa_case
     # Макс сумма = сумма max_pay_sum только по записям с фактической выплатой
     paid_max = func.sum(sa_case((Payment.dec_pay_sum.isnot(None), Payment.max_pay_sum), else_=0))
@@ -271,15 +273,20 @@ def summary(region_id: int = Query(None)):
     def pct(ts, ms):
         return round(ts / ms * 100, 1) if ms else 0.0
 
+    def sdu_q(q):
+        if sdu_filter:
+            q = q.filter(func.upper(Payment.sdu_tzhs) == sdu_filter.upper())
+        return q
+
     with Session(engine) as db:
         if region_id is None:
-            rows = db.query(
+            rows = sdu_q(db.query(
                 Payment.kato_region,
                 Payment.kato_regname,
                 func.count(distinct(Payment.cat_type_id)).label("cat_count"),
                 func.sum(Payment.dec_pay_sum).label("total_sum"),
                 paid_max.label("max_sum"),
-            ).group_by(Payment.kato_region, Payment.kato_regname).all()
+            )).group_by(Payment.kato_region, Payment.kato_regname).all()
 
             db_dict = {str(r.kato_region): r for r in rows}
             name_map = {str(r.kato_region): r.kato_regname
@@ -300,9 +307,9 @@ def summary(region_id: int = Query(None)):
                     "pct": pct(ts, ms),
                 })
 
-            nat_cat = db.query(func.count(distinct(Payment.cat_type_id))).scalar() or 0
-            nat_total = float(db.query(func.sum(Payment.dec_pay_sum)).scalar() or 0)
-            nat_max = float(db.query(paid_max).scalar() or 0)
+            nat_cat = sdu_q(db.query(func.count(distinct(Payment.cat_type_id)))).scalar() or 0
+            nat_total = float(sdu_q(db.query(func.sum(Payment.dec_pay_sum))).scalar() or 0)
+            nat_max = float(sdu_q(db.query(paid_max)).scalar() or 0)
             nat_help = len(set().union(*region_help_ids.values())) if region_help_ids else 0
             total = {
                 "id": None, "name": "Республика Казахстан", "is_total": True,
@@ -311,13 +318,13 @@ def summary(region_id: int = Query(None)):
                 "pct": pct(nat_total, nat_max),
             }
         else:
-            rows = db.query(
+            rows = sdu_q(db.query(
                 Payment.kato_raion,
                 Payment.kato_rainame,
                 func.count(distinct(Payment.cat_type_id)).label("cat_count"),
                 func.sum(Payment.dec_pay_sum).label("total_sum"),
                 paid_max.label("max_sum"),
-            ).filter(Payment.kato_region == region_id).group_by(Payment.kato_raion, Payment.kato_rainame).all()
+            ).filter(Payment.kato_region == region_id)).group_by(Payment.kato_raion, Payment.kato_rainame).all()
 
             db_dict = {str(r.kato_raion): r for r in rows}
             all_dis = _all_raions_for_region(region_id, set(db_dict.keys()))
@@ -334,9 +341,9 @@ def summary(region_id: int = Query(None)):
                     "max_sum": round(ms, 2), "pct": pct(ts, ms),
                 })
 
-            rt = float(db.query(func.sum(Payment.dec_pay_sum)).filter(Payment.kato_region == region_id).scalar() or 0)
-            rm = float(db.query(paid_max).filter(Payment.kato_region == region_id).scalar() or 0)
-            rc = db.query(func.count(distinct(Payment.cat_type_id))).filter(Payment.kato_region == region_id).scalar() or 0
+            rt = float(sdu_q(db.query(func.sum(Payment.dec_pay_sum)).filter(Payment.kato_region == region_id)).scalar() or 0)
+            rm = float(sdu_q(db.query(paid_max).filter(Payment.kato_region == region_id)).scalar() or 0)
+            rc = sdu_q(db.query(func.count(distinct(Payment.cat_type_id))).filter(Payment.kato_region == region_id)).scalar() or 0
             total = {
                 "id": None, "name": REGION_NAMES.get(str(region_id)) or f"Регион {region_id}", "is_total": True,
                 "help_types": len(region_help_ids.get(str(region_id), set())),
@@ -740,13 +747,13 @@ def breakdown(
 
 
 @app.get("/api/paytypes-top")
-def paytypes_top(region_id: int = Query(None), raion_id: int = Query(None)):
+def paytypes_top(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: str = Query(None)):
     with Session(engine) as db:
         q = db.query(
             Payment.pay_type,
             func.sum(Payment.dec_pay_sum).label("total_sum"),
         )
-        q = build_filter(q, region_id, raion_id)
+        q = build_filter(q, region_id, raion_id, sdu_filter)
         q = q.filter(Payment.pay_type.isnot(None), Payment.dec_pay_sum.isnot(None))
         q = q.group_by(Payment.pay_type)
         q = q.order_by(func.sum(Payment.dec_pay_sum).desc())
@@ -758,6 +765,315 @@ def paytypes_top(region_id: int = Query(None), raion_id: int = Query(None)):
             rest_sum = sum(float(r.total_sum or 0) for r in rest)
             result.append({"name": f"Прочие ({len(rest)} видов)", "total": round(rest_sum, 2)})
         return result
+
+
+@app.get("/api/anomalies/kpi")
+def anomalies_kpi():
+    with Session(engine) as db:
+        pending = db.query(func.count(Payment.id)).filter(
+            Payment.app_status == 'НОВОЕ'
+        ).scalar() or 0
+
+        cks_ab = db.query(func.count(Payment.id)).filter(
+            func.upper(Payment.sdu_tzhs).in_(['A', 'B'])
+        ).scalar() or 0
+
+        type_region_counts = db.query(
+            Payment.pay_type,
+            func.count(distinct(Payment.kato_region)).label("reg_count"),
+        ).filter(Payment.pay_type.isnot(None)).group_by(Payment.pay_type).all()
+        geo_unique = sum(1 for _, cnt in type_region_counts if cnt <= 2)
+
+        paid_pairs = {
+            (str(r.kato_region), r.pay_type_id)
+            for r in db.query(Payment.kato_region, Payment.pay_type_id)
+            .filter(Payment.dec_pay_sum > 0).distinct().all()
+        }
+        declared_pairs = {
+            (str(kreg), pid)
+            for kreg, kdis, pid, pname, cat, mx in settings_rows if mx is not None
+        }
+        empty_count = len(declared_pairs - paid_pairs)
+
+        return {
+            "pending": int(pending),
+            "cks_ab": int(cks_ab),
+            "geo_unique": int(geo_unique),
+            "empty_declared": int(empty_count),
+        }
+
+
+@app.get("/api/anomalies/pending")
+def anomalies_pending():
+    with Session(engine) as db:
+        rows = db.query(
+            Payment.kato_regname,
+            Payment.kato_rainame,
+            Payment.pay_type,
+            func.count(Payment.id).label("cnt"),
+            func.sum(Payment.max_pay_sum).label("total_max"),
+            func.min(Payment.app_date).label("earliest"),
+        ).filter(Payment.app_status == 'НОВОЕ').group_by(
+            Payment.kato_regname, Payment.kato_rainame, Payment.pay_type
+        ).order_by(Payment.kato_regname, func.count(Payment.id).desc()).all()
+
+        return [
+            {
+                "region": r.kato_regname or '—',
+                "raion": r.kato_rainame or '—',
+                "pay_type": r.pay_type or '—',
+                "count": r.cnt,
+                "total_max": round(float(r.total_max or 0), 2),
+                "earliest": str(r.earliest) if r.earliest else '—',
+            }
+            for r in rows
+        ]
+
+
+@app.get("/api/anomalies/cks-ab")
+def anomalies_cks_ab():
+    with Session(engine) as db:
+        rows = db.query(
+            Payment.kato_regname,
+            func.upper(Payment.sdu_tzhs).label("cks"),
+            Payment.pay_type,
+            func.count(Payment.id).label("cnt"),
+            func.count(distinct(Payment.sicid)).label("recipients"),
+            func.sum(Payment.dec_pay_sum).label("total_dec"),
+        ).filter(
+            func.upper(Payment.sdu_tzhs).in_(['A', 'B']),
+            Payment.dec_pay_sum > 0,
+        ).group_by(
+            Payment.kato_regname, func.upper(Payment.sdu_tzhs), Payment.pay_type
+        ).order_by(Payment.kato_regname, func.count(Payment.id).desc()).all()
+
+        return [
+            {
+                "region": r.kato_regname or '—',
+                "cks": r.cks or '—',
+                "pay_type": r.pay_type or '—',
+                "count": r.cnt,
+                "recipients": r.recipients,
+                "total_dec": round(float(r.total_dec or 0), 2),
+            }
+            for r in rows
+        ]
+
+
+@app.get("/api/anomalies/utilization")
+def anomalies_utilization(region_id: int = Query(None)):
+    with Session(engine) as db:
+        if region_id is None:
+            rows = db.query(
+                Payment.kato_region,
+                Payment.kato_regname,
+                func.count(Payment.id).label("cnt"),
+                func.sum(Payment.max_pay_sum).label("total_max"),
+                func.sum(Payment.dec_pay_sum).label("total_dec"),
+            ).filter(Payment.max_pay_sum > 0).group_by(
+                Payment.kato_region, Payment.kato_regname
+            ).all()
+
+            result = []
+            seen_names: set[str] = set()
+            for r in rows:
+                mx = float(r.total_max or 0)
+                dc = float(r.total_dec or 0)
+                pct = round(dc / mx * 100, 1) if mx > 0 else 0.0
+                name = r.kato_regname or '—'
+                seen_names.add(name.strip().lower())
+                result.append({
+                    "id": r.kato_region,
+                    "name": name,
+                    "count": r.cnt,
+                    "total_max": round(mx, 2),
+                    "total_dec": round(dc, 2),
+                    "pct": pct,
+                    "clickable": True,
+                })
+
+            for absent in ["АБАЙСКАЯ ОБЛАСТЬ", "УЛЫТАУСКАЯ ОБЛАСТЬ"]:
+                if absent.lower() not in seen_names:
+                    result.append({
+                        "id": None, "name": absent, "count": 0,
+                        "total_max": 0.0, "total_dec": 0.0, "pct": 0.0,
+                        "clickable": False,
+                    })
+
+            result.sort(key=lambda x: x["name"])
+            return result
+        else:
+            rows = db.query(
+                Payment.pay_type,
+                func.count(Payment.id).label("cnt"),
+                func.sum(Payment.max_pay_sum).label("total_max"),
+                func.sum(Payment.dec_pay_sum).label("total_dec"),
+            ).filter(
+                Payment.kato_region == region_id,
+                Payment.max_pay_sum > 0
+            ).group_by(Payment.pay_type).all()
+
+            result = []
+            for r in rows:
+                mx = float(r.total_max or 0)
+                dc = float(r.total_dec or 0)
+                pct = round(dc / mx * 100, 1) if mx > 0 else 0.0
+                result.append({
+                    "pay_type": r.pay_type or '—',
+                    "count": r.cnt,
+                    "total_max": round(mx, 2),
+                    "total_dec": round(dc, 2),
+                    "pct": pct,
+                })
+            result.sort(key=lambda x: x["pct"])
+            return result
+
+
+@app.get("/api/anomalies/unique-help")
+def anomalies_unique_help():
+    from collections import defaultdict
+    pay_type_regions: dict = defaultdict(set)
+    for kreg, kdis, pid, pname, cat, mx in settings_rows:
+        if pname:
+            pay_type_regions[pname].add(kreg)
+
+    result = [
+        {
+            "pay_type": pname,
+            "reg_count": len(regions),
+            "regions": [REGION_NAMES.get(r, r) for r in sorted(regions)],
+        }
+        for pname, regions in pay_type_regions.items()
+        if len(regions) <= 2
+    ]
+    result.sort(key=lambda x: x["reg_count"])
+    return result
+
+
+@app.get("/api/anomalies/empty-help")
+def anomalies_empty_help():
+    with Session(engine) as db:
+        paid_pairs = {
+            (str(r.kato_region), r.pay_type_id)
+            for r in db.query(Payment.kato_region, Payment.pay_type_id)
+            .filter(Payment.dec_pay_sum > 0).distinct().all()
+        }
+
+        declared: dict = {}
+        for kreg, kdis, pid, pname, cat, mx in settings_rows:
+            if mx is None:
+                continue
+            key = (str(kreg), pid)
+            if key not in declared:
+                declared[key] = (REGION_NAMES.get(str(kreg), str(kreg)), pname or f'Вид {pid}')
+
+        result = [
+            {"region": reg_name, "pay_type": pay_name}
+            for (kreg, pid), (reg_name, pay_name) in declared.items()
+            if (kreg, pid) not in paid_pairs
+        ]
+        result.sort(key=lambda x: (x["region"], x["pay_type"]))
+        return result
+
+
+@app.get("/api/anomalies/demographic")
+def anomalies_demographic():
+    from sqlalchemy import case as sa_case
+    with Session(engine) as db:
+        rows = db.query(
+            Payment.pay_type,
+            func.count(Payment.id).label("total"),
+            func.sum(sa_case((Payment.gender_id == 1, 1), else_=0)).label("male_cnt"),
+            func.sum(sa_case((Payment.gender_id == 2, 1), else_=0)).label("female_cnt"),
+            func.avg(Payment.vozrast).label("avg_age"),
+        ).filter(Payment.pay_type.isnot(None)).group_by(Payment.pay_type).all()
+
+        result = []
+        for r in rows:
+            total = r.total or 0
+            male = int(r.male_cnt or 0)
+            female = int(r.female_cnt or 0)
+            pct_m = round(male / total * 100, 1) if total > 0 else 0.0
+            pct_f = round(female / total * 100, 1) if total > 0 else 0.0
+            avg_age = round(float(r.avg_age), 1) if r.avg_age else None
+
+            flags = []
+            if pct_m > 60:
+                flags.append(f"Муж {pct_m}%")
+            if pct_f > 60:
+                flags.append(f"Жен {pct_f}%")
+            if avg_age is not None and avg_age > 60:
+                flags.append(f"Возраст {avg_age}")
+
+            result.append({
+                "pay_type": r.pay_type,
+                "total": total,
+                "pct_male": pct_m,
+                "pct_female": pct_f,
+                "avg_age": avg_age,
+                "flags": flags,
+                "low_data": total < 10,
+            })
+        result.sort(key=lambda x: (x["low_data"], -len(x["flags"]), -max(x["pct_male"], x["pct_female"])))
+        return result
+
+
+@app.get("/api/anomalies/utilization-raion")
+def anomalies_utilization_raion(raion_id: int = Query(None)):
+    with Session(engine) as db:
+        if raion_id is None:
+            rows = db.query(
+                Payment.kato_raion,
+                Payment.kato_rainame,
+                Payment.kato_regname,
+                func.count(Payment.id).label("cnt"),
+                func.sum(Payment.max_pay_sum).label("total_max"),
+                func.sum(Payment.dec_pay_sum).label("total_dec"),
+            ).filter(Payment.kato_raion.isnot(None)).group_by(
+                Payment.kato_raion, Payment.kato_rainame, Payment.kato_regname
+            ).all()
+
+            result = []
+            for r in rows:
+                total_max = float(r.total_max or 0)
+                total_dec = float(r.total_dec or 0)
+                pct = round(total_dec / total_max * 100, 1) if total_max > 0 else 0.0
+                result.append({
+                    "raion_id": r.kato_raion,
+                    "raion": r.kato_rainame or f"Район {r.kato_raion}",
+                    "region": r.kato_regname or "",
+                    "count": r.cnt,
+                    "total_max": total_max,
+                    "total_dec": total_dec,
+                    "pct": pct,
+                })
+            result.sort(key=lambda x: x["pct"])
+            return result
+        else:
+            rows = db.query(
+                Payment.pay_type,
+                func.count(Payment.id).label("cnt"),
+                func.sum(Payment.max_pay_sum).label("total_max"),
+                func.sum(Payment.dec_pay_sum).label("total_dec"),
+            ).filter(
+                Payment.kato_raion == raion_id,
+                Payment.pay_type.isnot(None),
+            ).group_by(Payment.pay_type).all()
+
+            result = []
+            for r in rows:
+                total_max = float(r.total_max or 0)
+                total_dec = float(r.total_dec or 0)
+                pct = round(total_dec / total_max * 100, 1) if total_max > 0 else 0.0
+                result.append({
+                    "pay_type": r.pay_type,
+                    "count": r.cnt,
+                    "total_max": total_max,
+                    "total_dec": total_dec,
+                    "pct": pct,
+                })
+            result.sort(key=lambda x: x["pct"])
+            return result
 
 
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static"), html=True), name="static")

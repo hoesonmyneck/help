@@ -8,19 +8,19 @@
   --bd-main:    #2a3050;
   --bd-mid:     #2a3a60;
   --bd-hi:      #3a4f88;
-  --tx-main:    #e0e6f0;
-  --tx-dim:     #7a8aaa;
-  --tx-label:   #a0b0d0;
-  --tx-cell:    #c8d8f0;
-  --tx-head:    #c8d8ff;
-  --tx-sub:     #c0d0ff;
-  --tx-muted:   #5b6a88;
+  --tx-main:    #ffffff;
+  --tx-dim:     #ffffff;
+  --tx-label:   #ffffff;
+  --tx-cell:    #ffffff;
+  --tx-head:    #ffffff;
+  --tx-sub:     #ffffff;
+  --tx-muted:   #ffffff;
   --ac-blue:    #5b8af8;
   --ac-teal:    #4ecdc4;
   --ac-male:    #5b8af8;
   --ac-female:  #f875c3;
   --map-lbl-bg: rgba(10,14,30,0.78);
-  --map-lbl-tx: #e0ecff;
+  --map-lbl-tx: #ffffff;
 }
 
 :root[data-theme="light"] {
@@ -158,9 +158,22 @@ header {
 
 header h1 {
   font-size: 1.15rem;
-  font-weight: 600;
+  font-weight: 800;
   color: var(--tx-head);
   letter-spacing: 0.5px;
+}
+
+.header-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.header-date {
+  font-size: 0.68rem;
+  color: var(--tx-dim);
+  letter-spacing: 0.3px;
+  opacity: 0.75;
 }
 
 .breadcrumb {
@@ -216,9 +229,9 @@ header h1 {
   min-height: 0;
 }
 
-/* KPI panel — fills left area up to the map */
+/* KPI panel — fixed width next to the map */
 .kpi-panel {
-  flex: 1;
+  flex: 0 0 380px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -281,6 +294,24 @@ header h1 {
   margin: 0;
 }
 .kpi-tab-pane .sdu-legend { flex: 1; min-width: 0; }
+
+/* Gender / Age tab — vertical layout, fills full card height */
+#ktab-ga.active {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+#ktab-ga .ga-chart {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#ktab-ga .ga-age-row {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
 
 .data-tab-info { margin-bottom: 8px; font-size: 0.78rem; color: var(--tx-dim); }
 
@@ -409,7 +440,7 @@ header h1 {
   display: none;
   align-items: stretch;
   font-size: 0.8rem;
-  pointer-events: auto;
+  pointer-events: none;
 }
 .geo-panel.visible { display: flex; flex-direction: row-reverse; }
 .gp-main {
@@ -575,7 +606,8 @@ body.fs-open .table-section:not(.is-fullscreen) { display: none; }
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 0.78rem;
   white-space: nowrap;
 }
@@ -1106,6 +1138,7 @@ header h1 {
   -webkit-text-fill-color: transparent;
   background-clip: text;
   font-size: 1.28rem;
+  font-weight: 800;
   letter-spacing: 1.2px;
 }
 
@@ -1191,12 +1224,15 @@ thead th {
   letter-spacing: 0.3px;
 }
 tbody tr {
-  transition: background 0.15s ease, border-color 0.15s ease;
-  border-left: 3px solid transparent;
+  transition: background 0.15s ease;
 }
 tbody tr:hover {
   background: rgba(91,138,248,0.06) !important;
-  border-left-color: rgba(91,138,248,0.55);
+}
+/* Left accent on hover — via td:first-child shadow to avoid stacking-context issues
+   that border-left on tr causes with position:sticky in border-collapse:collapse tables */
+tbody tr:hover td:first-child {
+  box-shadow: inset 3px 0 0 rgba(91,138,248,0.55);
 }
 
 /* ── Table fade-in ── */
@@ -1429,9 +1465,9 @@ th.sort-active { color: #8ab4ff !important; }
   box-shadow: 0 0 0 1px rgba(91,138,248,0.15), 0 8px 40px rgba(0,0,0,0.5);
 }
 
-/* ── Clickable row glow ── */
-.ranking-row:hover, .coverage-row:hover {
-  box-shadow: inset 3px 0 0 rgba(91,138,248,0.6), inset 0 0 40px rgba(91,138,248,0.03);
+/* ── Clickable row glow — only on td:first-child to avoid sticky z-index conflicts ── */
+.ranking-row:hover td:first-child, .coverage-row:hover td:first-child {
+  box-shadow: inset 3px 0 0 rgba(91,138,248,0.6);
 }
 
 /* ── SDU legend hover ── */
@@ -1474,22 +1510,24 @@ th.sort-active { color: #8ab4ff !important; }
 }
 
 /* ── Sticky left columns: Матрица видов помощи ── */
-/* Col widths: geo=220, vidy=92, kategorii=92, lyudei=92, summa=130 */
+/* Col widths: geo=220, vidy=92, lyudei=92, summa=130 */
 #presence-table th:nth-child(1), #presence-table td:nth-child(1) { position: sticky; left: 0;     z-index: 2; }
 #presence-table th:nth-child(2), #presence-table td:nth-child(2) { position: sticky; left: 220px; z-index: 2; }
 #presence-table th:nth-child(3), #presence-table td:nth-child(3) { position: sticky; left: 312px; z-index: 2; }
 #presence-table th:nth-child(4), #presence-table td:nth-child(4) { position: sticky; left: 404px; z-index: 2; }
-#presence-table th:nth-child(5), #presence-table td:nth-child(5) { position: sticky; left: 496px; z-index: 2; }
 /* Header corner cells: stick top+left simultaneously → highest z-index */
-#presence-table thead th:nth-child(-n+5) { z-index: 4; }
+#presence-table thead th:nth-child(-n+4) { z-index: 4; }
 /* Body sticky cells need explicit bg so scrolled content is hidden */
-#presence-table tbody td:nth-child(-n+5) { background: var(--bg-card); }
-#presence-table tbody tr:hover td:nth-child(-n+5) { background: rgba(91,138,248,0.06) !important; }
-#presence-table tbody tr.prs-total-row td:nth-child(-n+5) {
+#presence-table tbody td:nth-child(-n+4) { background: var(--bg-card); }
+#presence-table tbody tr:hover td:nth-child(-n+4) {
+  background-color: var(--bg-card) !important;
+  background-image: linear-gradient(rgba(91,138,248,0.08), rgba(91,138,248,0.08)) !important;
+}
+#presence-table tbody tr.prs-total-row td:nth-child(-n+4) {
   background-color: var(--bg-card);
   background-image: linear-gradient(rgba(78,205,196,0.10), rgba(78,205,196,0.10));
 }
-#presence-table tbody tr.prs-total-row:hover td:nth-child(-n+5) {
+#presence-table tbody tr.prs-total-row:hover td:nth-child(-n+4) {
   background-color: var(--bg-card) !important;
   background-image: linear-gradient(rgba(78,205,196,0.14), rgba(78,205,196,0.14)) !important;
 }
@@ -1498,7 +1536,10 @@ th.sort-active { color: #8ab4ff !important; }
 #tab-groups table th:nth-child(1), #tab-groups table td:nth-child(1) { position: sticky; left: 0; z-index: 2; }
 #tab-groups table thead th:nth-child(1) { z-index: 4; }
 #tab-groups table tbody td:nth-child(1) { background: var(--bg-card); }
-#tab-groups table tbody tr:hover td:nth-child(1) { background: rgba(91,138,248,0.06) !important; }
+#tab-groups table tbody tr:hover td:nth-child(1) {
+  background-color: var(--bg-card) !important;
+  background-image: linear-gradient(rgba(91,138,248,0.08), rgba(91,138,248,0.08)) !important;
+}
 #tab-groups table tbody tr.grp-total-row td:nth-child(1) {
   background-color: var(--bg-card);
   background-image: linear-gradient(rgba(78,205,196,0.10), rgba(78,205,196,0.10));
@@ -1509,9 +1550,10 @@ th.sort-active { color: #8ab4ff !important; }
 }
 
 /* Light theme body bg for sticky cells */
-:root[data-theme="light"] #presence-table tbody tr:hover td:nth-child(-n+5),
+:root[data-theme="light"] #presence-table tbody tr:hover td:nth-child(-n+4),
 :root[data-theme="light"] #tab-groups table tbody tr:hover td:nth-child(1) {
-  background: rgba(80,90,110,0.06) !important;
+  background-color: var(--bg-card) !important;
+  background-image: linear-gradient(rgba(80,90,110,0.08), rgba(80,90,110,0.08)) !important;
 }
 
 /* ═══════════════════════════════════════════════
@@ -1732,3 +1774,246 @@ th.sort-active { color: #8ab4ff !important; }
   font-size: 0.65rem;
 }
 .pt-empty { color: var(--tx-muted); font-size: 0.68rem; padding: 8px 0; }
+
+/* ═══════════════════════════════════════════════
+   ALL TEXT → WHITE
+   ═══════════════════════════════════════════════ */
+
+/* Gradient text elements: strip gradient, force white fill */
+header h1,
+:root[data-theme="light"] header h1 {
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  background-clip: initial !important;
+  -webkit-text-fill-color: #fff !important;
+  color: #fff !important;
+}
+.value.accent,
+:root[data-theme="light"] .value.accent {
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  background-clip: initial !important;
+  -webkit-text-fill-color: #fff !important;
+  color: #fff !important;
+  filter: none !important;
+  animation: none !important;
+}
+.gender-item.male .value,
+.gender-item.female .value,
+:root[data-theme="light"] .gender-item.male .value,
+:root[data-theme="light"] .gender-item.female .value {
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  background-clip: initial !important;
+  -webkit-text-fill-color: #fff !important;
+  color: #fff !important;
+}
+.table-header h2,
+.ranking-section .table-header h2,
+:root[data-theme="light"] .table-header h2,
+:root[data-theme="light"] .ranking-section .table-header h2 {
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  background-clip: initial !important;
+  -webkit-text-fill-color: #fff !important;
+  color: #fff !important;
+}
+
+/* Hardcoded text colors → white */
+.auth-title  { color: #fff !important; }
+.auth-sub    { color: #fff !important; }
+.auth-card input { color: #fff !important; }
+.auth-error  { color: #fff !important; }
+
+.gp-yes .gp-pay, .gp-yes .gp-cnt,
+.gp-no  .gp-pay, .gp-no  .gp-cnt { color: #fff !important; }
+.prs-yes { color: #fff !important; }
+.prs-no  { color: #fff !important; }
+.grp-green  { color: #fff !important; }
+.grp-orange { color: #fff !important; }
+.grp-red    { color: #fff !important; }
+.unc-count, .unc-count:hover { color: #fff !important; }
+.ga-female-txt, .ga-male-txt { color: #fff !important; }
+
+/* Accent-colored text → white */
+.breadcrumb span        { color: #fff !important; }
+.breadcrumb span:hover  { color: #fff !important; text-shadow: none !important; }
+.kpi-tab-btn.active     { color: #fff !important; }
+.kpi-title              { color: #fff !important; }
+.tab-btn.active         { color: #fff !important; }
+.tab-btn:hover:not(.active) { color: #fff !important; }
+.gp-side-title          { color: #fff !important; }
+.prs-total-row .prs-geo-cell { color: #fff !important; }
+.grp-total-row > td:first-child { color: #fff !important; }
+.prs-mini-sum           { color: #fff !important; }
+.cr-cat:hover           { color: #fff !important; }
+.cr-reg, .cr-reg:hover  { color: #fff !important; }
+.mid-chart-title        { color: #fff !important; }
+.mid-tab-btn            { color: #fff !important; }
+.mid-tab-btn:hover      { color: #fff !important; }
+.mid-tab-btn.active     { color: #fff !important; }
+.ra-name, .ra-val       { color: #fff !important; }
+.pt-sum                 { color: #fff !important; }
+.pt-header              { color: #fff !important; }
+.gender-item.kpi-mini .value { color: #fff !important; -webkit-text-fill-color: #fff !important; }
+.val-male, .val-female  { color: #fff !important; }
+th.sort-active          { color: #fff !important; }
+.pagination button:not(:disabled):hover { color: #fff !important; }
+#btn-back:hover,
+#ranking-btn-back:hover,
+#coverage-btn-back:hover { color: #fff !important; }
+
+/* ── SDU filter ── */
+.sdu-legend-item { cursor: pointer; border-radius: 5px; transition: background 0.15s, outline 0.15s; }
+.sdu-legend-item:hover { background: rgba(255,255,255,0.06); }
+.sdu-legend-item.sdu-active {
+  background: rgba(255,255,255,0.1);
+  outline: 1px solid rgba(255,255,255,0.35);
+}
+.kpi-sdu-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sdu-clear-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  font-size: 0.65rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.sdu-clear-btn:hover { background: rgba(231,76,60,0.45); border-color: rgba(231,76,60,0.7); }
+
+/* ═══════════════════════════════════════════════
+   ANOMALY SECTION
+   ═══════════════════════════════════════════════ */
+
+.anomaly-section {
+  margin-top: 24px;
+  border-top: 1px solid rgba(231,76,60,0.2);
+  padding-top: 4px;
+}
+
+.anomaly-header { margin-bottom: 14px; }
+
+.anomaly-title {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #fff;
+  padding: 0 0 2px;
+  display: inline-block;
+  border-bottom: 2px solid rgba(231,76,60,0.55);
+}
+
+.anomaly-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.an-card { position: relative; }
+
+.an-alarm {
+  color: #e74c3c !important;
+  -webkit-text-fill-color: #e74c3c !important;
+}
+
+.an-sub {
+  font-size: 0.62rem;
+  color: var(--tx-muted);
+  margin-top: 3px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.anomaly-tabs-section { margin-top: 0; }
+
+.an-util-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0 8px;
+  font-size: 0.82rem;
+  color: var(--tx-dim);
+}
+.an-util-bar button {
+  background: var(--bg-deep);
+  border: 1px solid var(--bd-hi);
+  color: var(--tx-sub);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.an-util-bar button:hover { background: var(--bd-hi); }
+
+/* Anomaly tab panes */
+.antab-pane { display: none; }
+.antab-pane.active { display: block; }
+.anomaly-tabs-section .table-wrap { height: 380px; overflow-y: auto; }
+
+/* Anomaly value coloring */
+.an-alarm-cell { color: #e74c3c !important; font-weight: 700; }
+.an-warn-cell  { color: #f39c12 !important; font-weight: 700; }
+
+/* CKS badge */
+.an-cks-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: rgba(231,76,60,0.18);
+  color: #e74c3c;
+  border: 1px solid rgba(231,76,60,0.3);
+}
+
+/* Anomaly flag badges */
+.an-flag-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(243,156,18,0.18);
+  color: #f39c12;
+  border: 1px solid rgba(243,156,18,0.3);
+  margin-right: 4px;
+}
+
+.an-ok-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(46,204,113,0.12);
+  color: #2ecc71;
+  border: 1px solid rgba(46,204,113,0.25);
+}
+
+.an-row-flag { background: rgba(243,156,18,0.04); }
+.an-row-flag:hover { background: rgba(243,156,18,0.09) !important; }
+
+/* Force white on alarm/warn cells (all-text-white override) */
+.an-alarm-cell { color: #ff6b6b !important; }
+.an-warn-cell  { color: #ffc107 !important; }
+.an-alarm      { color: #ff6b6b !important; -webkit-text-fill-color: #ff6b6b !important; }
+.an-cks-badge  { color: #ff6b6b !important; }
+.an-flag-badge { color: #ffc107 !important; }
+.an-ok-badge   { color: #2ecc71 !important; }

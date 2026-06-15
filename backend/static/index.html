@@ -3,14 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ЕЦП «Меры государственной поддержки»</title>
+  <title>Единая цифровая платформа "Анализ по мерам государственной поддержке МИО"</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
 <header>
-  <h1>ЕЦП «Меры государственной поддержки»</h1>
+  <div class="header-title-block">
+    <h1>Единая цифровая платформа "Анализ по мерам государственной поддержке МИО"</h1>
+    <div class="header-date" id="header-date"></div>
+  </div>
   <div class="breadcrumb" id="breadcrumb">
     <span onclick="goBack()">Казахстан</span>
   </div>
@@ -39,39 +42,20 @@
         <div class="label">Видов помощи</div>
         <div class="value accent" id="kpi-help-types">—</div>
       </div>
-      <div class="kpi-card">
-        <div class="label">Категорий людей</div>
-        <div class="value accent" id="kpi-people-cats">—</div>
-      </div>
     </div>
 
     <div class="kpi-card kpi-charts-tabs">
-      <div class="kpi-sdu-label">Уровень благосостояния по ЦКС</div>
+      <div class="kpi-tabs-bar">
+        <button type="button" class="kpi-tab-btn active" data-ktab="sdu">Благосостояние</button>
+        <button type="button" class="kpi-tab-btn" data-ktab="ga">Пол / Возраст</button>
+        <button type="button" class="sdu-clear-btn" id="sdu-clear-btn" onclick="clearSduFilter()" title="Сбросить фильтр" style="display:none">✕</button>
+      </div>
       <div class="kpi-tab-pane active" id="ktab-sdu">
         <div class="kpi-chart-area"><div class="sdu-chart-wrap"><canvas id="sdu-chart"></canvas></div></div>
         <div class="sdu-legend" id="sdu-legend"></div>
       </div>
-    </div>
-  </div>
-
-  <!-- Mid Panel: Gender/Age + Region Activity / Pay Types Top -->
-  <div class="mid-panel">
-    <div class="mid-card">
-      <div class="mid-chart-title">Распределение по полу / возрасту</div>
-      <div id="gender-age-chart" class="ga-chart"></div>
-    </div>
-    <div class="mid-card mid-flex-card">
-      <div class="mid-tabs-bar">
-        <button type="button" class="mid-tab-btn active" data-mtab="regions">Активность регионов</button>
-        <button type="button" class="mid-tab-btn" data-mtab="paytypes">Топ видов помощи</button>
-      </div>
-      <div class="mid-tab-pane active" id="mtab-regions">
-        <div class="mid-chart-title">Активность по регионам (виды/14)</div>
-        <div id="region-activity-chart"></div>
-      </div>
-      <div class="mid-tab-pane" id="mtab-paytypes">
-        <div class="mid-chart-title">Виды помощи — топ по суммам</div>
-        <div id="paytypes-top-chart"></div>
+      <div class="kpi-tab-pane" id="ktab-ga">
+        <div id="gender-age-chart" class="ga-chart"></div>
       </div>
     </div>
   </div>
@@ -90,8 +74,6 @@
     <button class="tab-btn active" data-tab="presence">Матрица видов помощи</button>
     <button class="tab-btn" data-tab="coverage">Охват по видам помощи</button>
     <button class="tab-btn" data-tab="groups">Категории по группам</button>
-    <button class="tab-btn" data-tab="cat-regions">Охват по категориям</button>
-    <button class="tab-btn" data-tab="uncovered">Не оказываемые категории</button>
     <button class="tab-btn" data-tab="data">Данные</button>
     <button type="button" id="coverage-btn-back" style="display:none" onclick="goBackFromRanking()">← Все регионы</button>
     <button type="button" class="expand-btn" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
@@ -105,39 +87,13 @@
           <tr>
             <th id="coverage-col-name">Регион</th>
             <th class="col-center sortable" data-sort-col="help_types">Всего видов помощи <span class="sort-icon"></span></th>
-            <th class="col-center sortable" data-sort-col="cat_count">Охвачено категорий <span class="sort-icon"></span></th>
             <th class="col-right sortable" data-sort-col="max_sum">Макс сумма <span class="sort-icon"></span></th>
             <th class="col-right sortable" data-sort-col="total_sum">Сумма <span class="sort-icon"> ▼</span></th>
             <th class="col-right sortable" data-sort-col="pct">% освоения <span class="sort-icon"></span></th>
           </tr>
         </thead>
         <tbody id="coverage-body">
-          <tr><td colspan="6" class="loading">Загрузка...</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Tab: Cat-regions -->
-  <div class="tab-pane" id="tab-cat-regions">
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th id="cat-regions-name-header">
-              <div class="cr-name-head">
-                <span class="cr-name-sort sortable">Категория <span class="sort-icon" id="cat-regions-name-icon"> ▲</span></span>
-                <input type="text" id="cat-regions-search" class="cr-search" placeholder="Поиск категории...">
-              </div>
-            </th>
-            <th class="col-right sortable" id="cat-regions-geo-header">
-              <span id="cat-regions-geo-label">В скольких регионах положено</span>
-              <span class="sort-icon" id="cat-regions-sort-icon"></span>
-            </th>
-          </tr>
-        </thead>
-        <tbody id="cat-regions-body">
-          <tr><td colspan="2" class="loading">Загрузка...</td></tr>
+          <tr><td colspan="5" class="loading">Загрузка...</td></tr>
         </tbody>
       </table>
     </div>
@@ -167,26 +123,6 @@
     </div>
   </div>
 
-  <!-- Tab: Uncovered categories -->
-  <div class="tab-pane" id="tab-uncovered">
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th id="uncovered-col-name">Регион</th>
-            <th class="col-center sortable" id="uncovered-count-header">
-              Не оказываемых категорий
-              <span class="sort-icon" id="uncovered-sort-icon"> ▼</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody id="uncovered-body">
-          <tr><td colspan="2" class="loading">Загрузка...</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
   <!-- Tab: Data table -->
   <div class="tab-pane" id="tab-data">
     <div class="data-tab-info"><span class="table-info" id="table-info"></span></div>
@@ -202,6 +138,129 @@
       <button id="btn-prev" disabled>‹ Пред.</button>
       <span class="page-info" id="page-info">1 / 1</span>
       <button id="btn-next">След. ›</button>
+    </div>
+  </div>
+</div>
+
+<!-- Anomaly Section -->
+<div class="anomaly-section table-section">
+  <div class="anomaly-header">
+    <h2 class="anomaly-title">Аномалии</h2>
+  </div>
+  <div class="anomaly-kpi-row">
+    <div class="kpi-card an-card">
+      <div class="label">Зависших заявок</div>
+      <div class="value an-alarm" id="an-kpi-pending">—</div>
+      <div class="an-sub">статус НОВОЕ</div>
+    </div>
+    <div class="kpi-card an-card">
+      <div class="label">Нецелевые ЦКС</div>
+      <div class="value an-alarm" id="an-kpi-cks">—</div>
+      <div class="an-sub">уровень A и B</div>
+    </div>
+    <div class="kpi-card an-card">
+      <div class="label">Пустых видов помощи</div>
+      <div class="value an-alarm" id="an-kpi-empty">—</div>
+      <div class="an-sub">задеклар. без выплат</div>
+    </div>
+    <div class="kpi-card an-card">
+      <div class="label">Уникальных видов (1–2 рег.)</div>
+      <div class="value" id="an-kpi-unique">—</div>
+      <div class="an-sub">геогр. концентрация</div>
+    </div>
+  </div>
+
+  <div class="tabs-section anomaly-tabs-section">
+    <div class="tabs-bar">
+      <button class="tab-btn antab-btn active" data-antab="cks">ЦКС</button>
+      <button class="tab-btn antab-btn" data-antab="utilization">% Освоения по регионам</button>
+      <button class="tab-btn antab-btn" data-antab="utilraion">% Освоения по районам</button>
+      <button class="tab-btn antab-btn" data-antab="unique">Уникальные виды</button>
+      <button class="tab-btn antab-btn" data-antab="demo">Демография</button>
+    </div>
+
+    <div class="tab-pane antab-pane active" id="antab-cks">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Регион</th>
+            <th class="col-center">ЦКС</th>
+            <th>Вид помощи</th>
+            <th class="col-center sortable" data-antab="cks" data-ancol="count" onclick="anToggleSort(this)">Заявок <span class="an-sort-icon"></span></th>
+            <th class="col-center sortable" data-antab="cks" data-ancol="recipients" onclick="anToggleSort(this)">Получателей <span class="an-sort-icon"></span></th>
+            <th class="col-right sortable" data-antab="cks" data-ancol="total_dec" onclick="anToggleSort(this)">Сумма выплат <span class="an-sort-icon"></span></th>
+          </tr></thead>
+          <tbody id="antab-cks-body"><tr><td colspan="6" class="loading">Загрузка...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab-pane antab-pane" id="antab-utilization">
+      <div class="an-util-bar">
+        <button id="an-util-back" style="display:none" onclick="anUtilGoBack()">← Все регионы</button>
+        <span id="an-util-title"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th id="an-util-geo-col">Регион</th>
+            <th class="col-center sortable" data-antab="utilization" data-ancol="count" onclick="anToggleSort(this)">Заявок <span class="an-sort-icon"></span></th>
+            <th class="col-right sortable" data-antab="utilization" data-ancol="total_max" onclick="anToggleSort(this)">Макс. сумма <span class="an-sort-icon"></span></th>
+            <th class="col-right sortable" data-antab="utilization" data-ancol="total_dec" onclick="anToggleSort(this)">Факт выплата <span class="an-sort-icon"></span></th>
+            <th class="col-right sortable" data-antab="utilization" data-ancol="pct" onclick="anToggleSort(this)">% освоения <span class="an-sort-icon"></span></th>
+          </tr></thead>
+          <tbody id="antab-utilization-body"><tr><td colspan="5" class="loading">Загрузка...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab-pane antab-pane" id="antab-utilraion">
+      <div class="an-util-bar">
+        <button id="an-utilraion-back" style="display:none" onclick="anUtilRaionGoBack()">← Все районы</button>
+        <span id="an-utilraion-title"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th id="an-utilraion-geo-col">Район</th>
+            <th id="an-utilraion-reg-th">Регион</th>
+            <th class="col-center sortable" data-antab="utilraion" data-ancol="count" onclick="anToggleSort(this)">Заявок <span class="an-sort-icon"></span></th>
+            <th class="col-right sortable" data-antab="utilraion" data-ancol="total_max" onclick="anToggleSort(this)">Макс. сумма <span class="an-sort-icon"></span></th>
+            <th class="col-right sortable" data-antab="utilraion" data-ancol="total_dec" onclick="anToggleSort(this)">Факт выплата <span class="an-sort-icon"></span></th>
+            <th class="col-right sortable" data-antab="utilraion" data-ancol="pct" onclick="anToggleSort(this)">% освоения <span class="an-sort-icon"></span></th>
+          </tr></thead>
+          <tbody id="antab-utilraion-body"><tr><td colspan="6" class="loading">Загрузка...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab-pane antab-pane" id="antab-unique">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Вид помощи</th>
+            <th class="col-center sortable" data-antab="unique" data-ancol="reg_count" onclick="anToggleSort(this)">Регионов <span class="an-sort-icon"></span></th>
+            <th>Регионы</th>
+          </tr></thead>
+          <tbody id="antab-unique-body"><tr><td colspan="3" class="loading">Загрузка...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab-pane antab-pane" id="antab-demo">
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Вид помощи</th>
+            <th class="col-center sortable" data-antab="demo" data-ancol="total" onclick="anToggleSort(this)">Всего <span class="an-sort-icon"></span></th>
+            <th class="col-center sortable" data-antab="demo" data-ancol="pct_male" onclick="anToggleSort(this)">% мужчин <span class="an-sort-icon"></span></th>
+            <th class="col-center sortable" data-antab="demo" data-ancol="pct_female" onclick="anToggleSort(this)">% женщин <span class="an-sort-icon"></span></th>
+            <th class="col-right sortable" data-antab="demo" data-ancol="avg_age" onclick="anToggleSort(this)">Ср. возраст <span class="an-sort-icon"></span></th>
+            <th>Аномалия</th>
+          </tr></thead>
+          <tbody id="antab-demo-body"><tr><td colspan="6" class="loading">Загрузка...</td></tr></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
