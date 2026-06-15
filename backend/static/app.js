@@ -7,7 +7,32 @@ let regionCentroids = {}, raionCentroids = {};
 let regionStats = {}, raionStats = {};
 let currentRegion = null, currentRaion = null;
 let currentSdu = null;
+let currentGender = null;
+let currentAgeGroup = null;
 let _sduSeq = 0;
+
+function buildFilterParams(geoMode = 'full') {
+  const p = new URLSearchParams();
+  if (geoMode === 'full') {
+    if (currentRaion) p.set('raion_id', currentRaion);
+    else if (currentRegion) p.set('region_id', currentRegion);
+  } else if (geoMode === 'region' && currentRegion) {
+    p.set('region_id', currentRegion);
+  }
+  if (currentSdu)      p.set('sdu_filter',   currentSdu);
+  if (currentGender)   p.set('gender_filter', String(currentGender));
+  if (currentAgeGroup) p.set('age_group',     currentAgeGroup);
+  return p;
+}
+
+function setGenderFilter(g) {
+  currentGender = (currentGender === g) ? null : g;
+  _refreshAfterFilterChange();
+}
+function setAgeFilter(key) {
+  currentAgeGroup = (currentAgeGroup === key) ? null : key;
+  _refreshAfterFilterChange();
+}
 let currentPage = 1;
 let ageChart = null;
 
@@ -15,6 +40,29 @@ function stripHelpPrefix(name) {
   if (!name) return name;
   return name.replace(/^\s*СОЦИАЛЬНАЯ\s+ПОМОЩЬ\s+/i, '');
 }
+
+function fmtCompact(v) {
+  if (!v || v === 0) return '';
+  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1).replace(/\.0$/, '') + ' млн';
+  if (v >= 1_000) return Math.round(v / 1_000) + ' тыс';
+  return String(Math.round(v));
+}
+
+const PAY_TYPE_DESCRIPTIONS = {
+  'НА ЛЕЧЕНИЕ (ОЗДОРОВЛЕНИЕ)': 'МИО предоставляют единовременную социальную помощь гражданам для возмещения расходов на лечение и оздоровление',
+  'ЛИЦАМ С ИНВАЛИДНОСТЬЮ 1 ГРУППЫ, ИСПОЛЬЗУЮЩИХ АППАРАТ ГЕМОДИАЛИЗА': 'МИО предоставляют денежную помощь для возмещения дополнительных расходов, связанных с проведением гемодиализа',
+  'НА ОПОРНО-ДВИГАТЕЛЬНЫЙ АППАРАТ': 'МИО предоставляют социальную помощь на приобретение и ремонт протезно-ортопедических изделий и иных средств, способствующих передвижению',
+  'ДЕТЯМ С ИНВАЛИДНОСТЬЮ НА ЛЕЧЕНИЕ': 'МИО предоставляют денежную помощь для оплаты лечения, медицинской реабилитации и оздоровления детей с инвалидностью',
+  'ЛИЦАМ, СТРАДАЮЩИМ ХРОНИЧЕСКОЙ ПОЧЕЧНОЙ НЕДОСТАТОЧНОСТЬЮ': 'МИО предоставляют денежную помощь для компенсации расходов, связанных с лечением и проведением процедур гемодиализа',
+  'НА ЛЕКАРСТВЕННОЕ ОБЕСПЕЧЕНИЕ': 'МИО предоставляют денежную помощь на приобретение лекарственных средств по медицинским показаниям',
+  'НА САНАТОРНО-КУРОРТНОЕ ЛЕЧЕНИЕ': 'МИО предоставляют денежную помощь на оплату санаторно-курортного лечения и оздоровления',
+  'СОПРОВОЖДАЮЩЕМУ ЛИЦО С ИНВАЛИДНОСТЬЮ ПЕРВОЙ ГРУППЫ НА САНАТОРНО-КУРОРТНОЕ ЛЕЧЕНИЕ': 'МИО предоставляют денежную помощь на оплату для сопровождающего лица с инвалидностью 1 группы',
+  'НА ОПЛАТУ КОММУНАЛЬНЫХ УСЛУГ': 'МИО предоставляют компенсацию расходов на оплату коммунальных услуг отдельным категориям граждан',
+  'НА СОДЕРЖАНИЕ ЖИЛЬЯ': 'МИО предоставляют денежную помощь для возмещения расходов по содержанию жилья',
+  'НА БЫТОВЫЕ НУЖДЫ': 'МИО предоставляют денежную помощь для удовлетворения первоочередных бытовых потребностей граждан',
+  'НА ПРИОБРЕТЕНИЕ ТВЕРДОГО ТОПЛИВА': 'МИО предоставляют денежную помощь на приобретение твердого топлива для отопления жилого помещения в отопительный сезон',
+  'В ВИДЕ ДЕНЕЖНОЙ ПОМОЩИ': 'МИО предоставляют единовременную или периодическую денежную выплату лицам, нуждающимся в социальной поддержке.',
+};
 
 /* ── Pseudo-auth (client-side only) ── */
 const AUTH_USER = 'admin';
@@ -27,7 +75,7 @@ function showLogin() {
   ov.className = 'auth-overlay';
   ov.innerHTML = `
     <form class="auth-card" id="auth-form">
-      <div class="auth-title">Единая цифровая платформа "Анализ по мерам государственной поддержке МИО"</div>
+      <div class="auth-title">ЕЦП "Анализ по мерам государственной поддержке МИО"</div>
       <div class="auth-sub">Вход в систему</div>
       <input type="text" id="auth-login" placeholder="Логин" autocomplete="username" autofocus>
       <input type="password" id="auth-pass" placeholder="Пароль" autocomplete="current-password">
@@ -135,7 +183,7 @@ async function init() {
 
   renderRegions();
   await refreshKPI();
-  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadHelpPresence()]);
+  await Promise.all([loadSummary(), loadHelpPresence(), loadGapAnalysis()]);
 }
 
 function getColor(value, max) {
@@ -291,7 +339,7 @@ async function drillRegionFromRanking(regionId) {
   updateBreadcrumb(regionName, null);
   loadDistinct('kato_rainame');
   await refreshKPI();
-  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadHelpPresence()]);
+  await Promise.all([loadSummary(), loadHelpPresence(), loadGapAnalysis()]);
 }
 
 async function drillRegion(regionId) {
@@ -334,7 +382,7 @@ async function drillRegion(regionId) {
   updateBreadcrumb(regionName, null);
   loadDistinct('kato_rainame');
   await refreshKPI();
-  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadHelpPresence()]);
+  await Promise.all([loadSummary(), loadHelpPresence(), loadGapAnalysis()]);
 }
 
 async function selectRaion(raionId) {
@@ -344,7 +392,6 @@ async function selectRaion(raionId) {
   const regionName = regionStats[currentRegion]?.name || '';
   updateBreadcrumb(regionName, raionName);
   await refreshKPI();
-  await loadTable(1);
   // ranking stays on raion list when a raion is selected
 }
 
@@ -370,9 +417,7 @@ function goBack() {
   renderRegions();
   map.setView([48, 68], 4);
   refreshKPI();
-  loadTable(1);
   loadSummary();
-  loadCoverageGroups();
   loadHelpPresence();
 }
 
@@ -386,9 +431,7 @@ function goBackFromRanking() {
   clearLabels();
   renderRegions();
   refreshKPI();
-  loadTable(1);
   loadSummary();
-  loadCoverageGroups();
   loadHelpPresence();
   requestAnimationFrame(() => window.scrollTo({ top: savedScroll, behavior: 'instant' }));
 }
@@ -403,10 +446,7 @@ function updateBreadcrumb(region, raion) {
 
 
 async function refreshKPI(sduSeq) {
-  const params = new URLSearchParams();
-  if (currentRaion) params.set('raion_id', currentRaion);
-  else if (currentRegion) params.set('region_id', currentRegion);
-  if (currentSdu) params.set('sdu_filter', currentSdu);
+  const params = buildFilterParams();
 
   const data = await fetch(`/api/kpi?${params}`).then(r => r.json());
   if (sduSeq < _sduSeq) return; // stale — a newer sdu change superseded this call
@@ -514,21 +554,54 @@ function renderSduChart(sdu) {
 }
 
 function setSduFilter(k) {
-  if (currentSdu === k) return; // already active — use X button to clear
+  if (currentSdu === k) return;
   currentSdu = k;
-  _refreshAfterSduChange();
+  _refreshAfterFilterChange();
 }
 
 function clearSduFilter() {
   currentSdu = null;
-  _refreshAfterSduChange();
+  _refreshAfterFilterChange();
 }
 
-function _refreshAfterSduChange() {
+function _invalidateAnomCaches() {
+  Object.keys(_anTabCache).forEach(k => delete _anTabCache[k]);
+  Object.keys(_anUtilCache).forEach(k => delete _anUtilCache[k]);
+  Object.keys(_anRaionCache).forEach(k => delete _anRaionCache[k]);
+}
+
+async function refreshMapStats() {
+  const fp = buildFilterParams('none');
+  if (currentRaion) return; // raion level — map already filtered
+  if (currentRegion) {
+    fp.set('region_id', currentRegion);
+    const data = await fetch(`/api/raions?${fp}`).then(r => r.json());
+    raionStats = {};
+    data.forEach(r => { raionStats[r.id_rai] = r; });
+    renderRaions();
+  } else {
+    const data = await fetch(`/api/regions?${fp}`).then(r => r.json());
+    regionStats = {};
+    data.forEach(r => { regionStats[r.id_reg] = r; });
+    renderRegions();
+  }
+}
+
+function _refreshAfterFilterChange() {
+  _invalidateAnomCaches();
+  _gapData = []; _gapTotal = 0;
+  Object.values(_gapCharts).forEach(c => { try { c.destroy(); } catch(_) {} });
+  Object.keys(_gapCharts).forEach(k => delete _gapCharts[k]);
+
   const seq = ++_sduSeq;
   refreshKPI(seq);
   loadSummary(seq);
-  loadTable(currentPage);
+  loadHelpPresence();
+  refreshMapStats();
+  loadGapAnalysis();
+
+  const activeAntab = document.querySelector('.antab-btn.active');
+  if (activeAntab) loadAnomalyTab(activeAntab.dataset.antab);
 }
 
 const AGE_META = [
@@ -594,24 +667,27 @@ function renderGenderAgeBar(male, female, age) {
   const fPct = total > 0 ? Math.round(female / total * 100) : 50;
   const mPct = 100 - fPct;
   const ageTotal = GA_AGE_META.reduce((s, m) => s + (age[m.key] || 0), 0);
+  const gfA = currentGender === 2 ? ' ga-filter-active' : '';
+  const gmA = currentGender === 1 ? ' ga-filter-active' : '';
   el.innerHTML = `
     <div class="ga-gender-labels">
-      <span class="ga-female-txt">Женщины</span>
-      <span class="ga-male-txt">Мужчины</span>
+      <span class="ga-female-txt ga-clickable${gfA}" onclick="setGenderFilter(2)">Женщины</span>
+      <span class="ga-male-txt ga-clickable${gmA}" onclick="setGenderFilter(1)">Мужчины</span>
     </div>
     <div class="ga-gender-bar-outer">
-      <div class="ga-bar-f" style="width:${fPct}%"></div>
-      <div class="ga-bar-m" style="width:${mPct}%"></div>
+      <div class="ga-bar-f${gfA}" style="width:${fPct}%" onclick="setGenderFilter(2)" title="Женщины ${fPct}%"></div>
+      <div class="ga-bar-m${gmA}" style="width:${mPct}%" onclick="setGenderFilter(1)" title="Мужчины ${mPct}%"></div>
     </div>
     <div class="ga-gender-pcts">
-      <span class="ga-female-txt">${fPct}%</span>
-      <span class="ga-male-txt">${mPct}%</span>
+      <span class="ga-female-txt ga-clickable${gfA}" onclick="setGenderFilter(2)">${fPct}%</span>
+      <span class="ga-male-txt ga-clickable${gmA}" onclick="setGenderFilter(1)">${mPct}%</span>
     </div>
     <div class="ga-age-hdr">Возрастные группы</div>
     ${GA_AGE_META.map(m => {
       const cnt = age[m.key] || 0;
       const pct = ageTotal > 0 ? Math.round(cnt / ageTotal * 100) : 0;
-      return `<div class="ga-age-row">
+      const isActive = currentAgeGroup === m.key;
+      return `<div class="ga-age-row ga-clickable${isActive ? ' ga-filter-active' : ''}" onclick="setAgeFilter('${m.key}')">
         <span class="ga-age-lbl">${m.label}</span>
         <div class="ga-age-bar-wrap"><div class="ga-age-bar" style="width:${pct}%;background:${m.color}"></div></div>
         <span class="ga-age-pct">${pct}%</span>
@@ -694,8 +770,7 @@ function hideGeoPanelNow() {
 }
 
 async function loadHelpPresence() {
-  const params = new URLSearchParams();
-  if (currentRegion) params.set('region_id', currentRegion);
+  const params = buildFilterParams('region');
 
   document.getElementById('presence-body').innerHTML =
     '<tr><td colspan="2" class="loading">Загрузка...</td></tr>';
@@ -728,7 +803,9 @@ function renderHelpPresence() {
   // Header: geo + mini-table (4 sortable cols) + one column per pay type
   const cols = presenceColumns.map(c => {
     const full = stripHelpPrefix(c.name);
-    return `<th class="col-center prs-grp-hdr" title="${full}"><span class="prs-hdr-txt">${full}</span></th>`;
+    const desc = PAY_TYPE_DESCRIPTIONS[full.trim().toUpperCase()] || '';
+    const descAttr = desc ? ` data-pay-name="${full.replace(/"/g,'&quot;')}" data-pay-desc="${desc.replace(/"/g,'&quot;')}"` : '';
+    return `<th class="col-center prs-grp-hdr${desc ? ' has-pay-tip' : ''}"${descAttr}><span class="prs-hdr-txt">${full}</span></th>`;
   }).join('');
 
   const miniHdr = (key, label, extraCls, title) => {
@@ -765,10 +842,15 @@ function renderHelpPresence() {
       ? `onclick="drillRegionFromRanking(${r.id})" style="cursor:pointer"` : '';
     const cls = isTotal ? 'prs-total-row' : (!currentRegion ? 'coverage-row' : '');
     const m = r.mini || {};
-    const cells = r.presence.map(p => p
-      ? `<td class="prs-cell prs-yes">✓</td>`
-      : `<td class="prs-cell prs-no">✕</td>`
-    ).join('');
+    const cells = r.presence.map(p => {
+      const present = typeof p === 'object' ? p.p : p;
+      const mx = typeof p === 'object' ? p.mx : 0;
+      if (present) {
+        const s = fmtCompact(mx);
+        return `<td class="prs-cell prs-yes">✓${s ? `<span class="prs-cell-sum">${s}</span>` : ''}</td>`;
+      }
+      return `<td class="prs-cell prs-no">✕</td>`;
+    }).join('');
     return `<tr ${clickAttr} class="${cls}">
       <td class="prs-geo-cell">${r.name || '—'}</td>
       <td class="col-center prs-mini">${m.vidy ?? 0}</td>
@@ -904,10 +986,8 @@ function renderCoverage() {
 }
 
 async function loadSummary(sduSeq) {
-  const params = new URLSearchParams();
+  const params = buildFilterParams('region');
   const isRegionView = !!currentRegion;
-  if (isRegionView) params.set('region_id', currentRegion);
-  if (currentSdu) params.set('sdu_filter', currentSdu);
 
   document.getElementById('coverage-body').innerHTML =
     '<tr><td colspan="6" class="loading">Загрузка...</td></tr>';
@@ -1065,6 +1145,163 @@ let _anRaionDrillName = '';
 const _anRaionCache = {};
 const _anSort = {};
 
+/* ── Pay-gap accordion ─────────────────────────────────────── */
+let _gapData = [];
+let _gapTotal = 0;
+const _gapCharts = {};
+
+async function loadGapAnalysis() {
+  const list = document.getElementById('gap-list');
+  if (_gapData.length) { if (list) renderGapAccordion(); return; }
+  if (list) list.innerHTML = '<div class="loading">Загрузка...</div>';
+  try {
+    const data = await fetch(`/api/anomalies/pay-gap?${buildFilterParams('none')}`).then(r => r.json());
+    _gapData = data.gaps || [];
+    _gapTotal = data.total || 0;
+    updateGapKpi();
+    if (list) renderGapAccordion();
+  } catch (e) { console.error('pay-gap', e); }
+}
+
+function updateGapKpi() {
+  const elAn = document.getElementById('kpi-gap-anomaly');
+  const elMx = document.getElementById('kpi-gap-max');
+  const elNm = document.getElementById('kpi-gap-normal');
+  if (elAn) elAn.textContent = _gapData.length;
+  if (elMx) elMx.textContent = _gapData.length ? '×' + Math.max(..._gapData.map(d => d.ratio)) : '—';
+  if (elNm) elNm.textContent = _gapTotal - _gapData.length;
+
+  const list = document.getElementById('gap-side-list');
+  if (!list) return;
+  if (!_gapData.length) {
+    list.innerHTML = '<div class="gsp-empty">Аномалий нет</div>';
+    return;
+  }
+  const fmtDistrict = d => d.raion
+    .replace(/\s+Г\.?А\.?$/i, ' г.а.')
+    .replace(/\s+ГОРОД$/i, ' г.')
+    .replace(/\s+РАЙОН$/i, ' р-н');
+  list.innerHTML = _gapData.map(item => {
+    const name = _shortPayType(item.pay_type);
+    const badgeCls = item.ratio >= 10 ? 'gap-badge-high' : item.ratio >= 5 ? 'gap-badge-mid' : 'gap-badge-low';
+    const low  = item.districts[0];
+    const high = item.districts[item.districts.length - 1];
+    return `<div class="kpi-card gsp-service-card">
+      <div class="gsp-svc-head">
+        <span class="gap-badge ${badgeCls}">×${item.ratio}</span>
+        <span class="gsp-svc-name" title="${name}">${name}</span>
+      </div>
+      <div class="gsp-dist-row gsp-dist-low">
+        <span class="gsp-arr">↓</span>
+        <span class="gsp-d-name">${fmtDistrict(low)}</span>
+        <span class="gsp-d-val">${fmtCompact(low.total_max) || formatNum(low.total_max)}</span>
+      </div>
+      <div class="gsp-dist-row gsp-dist-high">
+        <span class="gsp-arr">↑</span>
+        <span class="gsp-d-name">${fmtDistrict(high)}</span>
+        <span class="gsp-d-val">${fmtCompact(high.total_max) || formatNum(high.total_max)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderGapAccordion() {
+  const list = document.getElementById('gap-list');
+  if (!list) return;
+  if (!_gapData.length) {
+    list.innerHTML = '<div class="no-data">Аномальных разрывов не обнаружено</div>';
+    return;
+  }
+  list.innerHTML = _gapData.map((item, i) => {
+    const name = _shortPayType(item.pay_type);
+    const badgeCls = item.ratio >= 10 ? 'gap-badge-high' : item.ratio >= 5 ? 'gap-badge-mid' : 'gap-badge-low';
+    return `<div class="gap-item">
+      <div class="gap-header" onclick="toggleGapItem(${i})">
+        <span class="gap-badge ${badgeCls}">Разрыв ×${item.ratio}</span>
+        <span class="gap-name">${name}</span>
+        <span class="gap-stats">${item.district_count} р-нов/г · ${formatNum(item.total_cnt)} заявок · ${formatNum(item.total_approved)} одобрено</span>
+        <span class="gap-chevron" id="gap-chevron-${i}">▼</span>
+      </div>
+      <div class="gap-body" id="gap-body-${i}" style="display:none">
+        <div class="gap-chart-label">Максимальная сумма выплаты — по районам и городам</div>
+        <div class="gap-canvas-wrap" style="position:relative;height:${Math.max(220, item.districts.length * 34)}px">
+          <canvas id="gap-canvas-${i}"></canvas>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleGapItem(idx) {
+  const body = document.getElementById(`gap-body-${idx}`);
+  const chevron = document.getElementById(`gap-chevron-${idx}`);
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (chevron) chevron.textContent = isOpen ? '▼' : '▲';
+  if (!isOpen) renderGapChart(idx);
+}
+
+function renderGapChart(idx) {
+  if (_gapCharts[idx]) return;
+  const item = _gapData[idx];
+  const canvas = document.getElementById(`gap-canvas-${idx}`);
+  if (!canvas || !item) return;
+
+  const districts = item.districts;
+  const values = districts.map(d => d.total_max);
+  const maxVal = Math.max(...values);
+  const medianIdx = Math.floor(values.length / 2);
+  const median = values[medianIdx];
+
+  const labels = districts.map(d => `${d.raion} (${(d.region || '').replace(/\s+ОБЛАСТЬ$/i, '')})`);
+  const colors = values.map(v => {
+    const t = maxVal > 0 ? v / maxVal : 0;
+    return v >= median
+      ? `rgba(91,138,248,${0.45 + 0.55 * t})`
+      : `rgba(220,80,70,${0.35 + 0.65 * (1 - t)})`;
+  });
+
+  _gapCharts[idx] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors,
+        borderRadius: 3,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${formatNum(ctx.raw)} ₸`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(128,128,128,0.12)' },
+          ticks: {
+            color: 'var(--tx-dim)',
+            callback: v => v >= 1_000_000 ? (v/1_000_000).toFixed(1)+'M'
+                        : v >= 1000 ? Math.round(v/1000)+'K' : v
+          }
+        },
+        y: {
+          ticks: { color: '#ffffff', font: { size: 11 } }
+        }
+      }
+    }
+  });
+}
+
 function anToggleSort(th) {
   const tab = th.dataset.antab, col = th.dataset.ancol;
   let sortKey = tab;
@@ -1108,11 +1345,11 @@ async function loadAnomalyKpi() {
 }
 
 async function loadAnUtil() {
-  const cacheKey = _anUtilRegionId != null ? String(_anUtilRegionId) : 'all';
+  const fp = buildFilterParams('none');
+  const cacheKey = (_anUtilRegionId != null ? String(_anUtilRegionId) : 'all') + fp;
   if (_anUtilCache[cacheKey]) { renderAnUtil(_anUtilCache[cacheKey]); return; }
-  const url = _anUtilRegionId != null
-    ? `/api/anomalies/utilization?region_id=${_anUtilRegionId}`
-    : '/api/anomalies/utilization';
+  if (_anUtilRegionId != null) fp.set('region_id', _anUtilRegionId);
+  const url = `/api/anomalies/utilization?${fp}`;
   try {
     const data = await fetch(url).then(r => r.json());
     _anUtilCache[cacheKey] = data;
@@ -1133,11 +1370,11 @@ function anUtilDrill(regionId, regionName) {
 }
 
 async function loadAnUtilRaion() {
-  const cacheKey = _anRaionDrillId != null ? `r${_anRaionDrillId}` : 'all';
+  const fp = buildFilterParams('none');
+  const cacheKey = (_anRaionDrillId != null ? `r${_anRaionDrillId}` : 'all') + fp;
   if (_anRaionCache[cacheKey]) { renderAnUtilRaion(_anRaionCache[cacheKey]); return; }
-  const url = _anRaionDrillId != null
-    ? `/api/anomalies/utilization-raion?raion_id=${_anRaionDrillId}`
-    : '/api/anomalies/utilization-raion';
+  if (_anRaionDrillId != null) fp.set('raion_id', _anRaionDrillId);
+  const url = `/api/anomalies/utilization-raion?${fp}`;
   try {
     const data = await fetch(url).then(r => r.json());
     _anRaionCache[cacheKey] = data;
@@ -1151,16 +1388,19 @@ function anUtilRaionDrill(raionId, raionName) { _anRaionDrillId = raionId; _anRa
 async function loadAnomalyTab(tab) {
   if (tab === 'utilization') { await loadAnUtil(); return; }
   if (tab === 'utilraion')   { await loadAnUtilRaion(); return; }
-  if (_anTabCache[tab]) { renderAnomalyTab(tab, _anTabCache[tab]); return; }
-  const urlMap = {
+  const fp = buildFilterParams('none');
+  const cacheKey = tab + fp;
+  if (_anTabCache[cacheKey]) { renderAnomalyTab(tab, _anTabCache[cacheKey]); return; }
+  const baseUrlMap = {
     cks:    '/api/anomalies/cks-ab',
     unique: '/api/anomalies/unique-help',
     demo:   '/api/anomalies/demographic',
   };
-  if (!urlMap[tab]) return;
+  if (!baseUrlMap[tab]) return;
+  const tabUrl = tab === 'unique' ? baseUrlMap[tab] : `${baseUrlMap[tab]}?${fp}`;
   try {
-    const data = await fetch(urlMap[tab]).then(r => r.json());
-    _anTabCache[tab] = data;
+    const data = await fetch(tabUrl).then(r => r.json());
+    _anTabCache[cacheKey] = data;
     renderAnomalyTab(tab, data);
   } catch(e) { console.error(`anomalies/${tab}`, e); }
 }
@@ -1313,6 +1553,32 @@ function renderAnDemo(rows) {
 
 window.addEventListener('load', () => { if (map) map.invalidateSize(); });
 
+function initPayTooltip() {
+  const tip = document.getElementById('pay-tooltip');
+  if (!tip) return;
+  let active = false;
+  document.getElementById('tab-presence')?.addEventListener('mouseover', e => {
+    const th = e.target.closest('[data-pay-desc]');
+    if (!th) { if (active) { tip.style.display = 'none'; active = false; } return; }
+    tip.innerHTML = `<div class="pt-title">${th.dataset.payName}</div><div class="pt-desc">${th.dataset.payDesc}</div>`;
+    tip.style.display = 'block';
+    active = true;
+  });
+  document.getElementById('tab-presence')?.addEventListener('mousemove', e => {
+    if (!active) return;
+    tip.style.left = (e.clientX + 18) + 'px';
+    tip.style.top  = (e.clientY + 18) + 'px';
+    const r = tip.getBoundingClientRect();
+    if (r.right  > window.innerWidth  - 8) tip.style.left = (e.clientX - r.width  - 8) + 'px';
+    if (r.bottom > window.innerHeight - 8) tip.style.top  = (e.clientY - r.height - 8) + 'px';
+  });
+  document.getElementById('tab-presence')?.addEventListener('mouseout', e => {
+    if (!e.target.closest('[data-pay-desc]')) return;
+    tip.style.display = 'none';
+    active = false;
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const savedTheme = localStorage.getItem('theme') || 'dark';
   if (savedTheme === 'light') {
@@ -1324,10 +1590,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Pseudo-auth gate — show login until correct credentials are entered
   if (!isAuthed()) { showLogin(); return; }
 
-  initTableHead();
+  initPayTooltip();
   init();
-  document.getElementById('btn-prev').addEventListener('click', () => loadTable(currentPage - 1));
-  document.getElementById('btn-next').addEventListener('click', () => loadTable(currentPage + 1));
+
 
   document.querySelectorAll('#tab-coverage th[data-sort-col]').forEach(th => {
     th.style.cursor = 'pointer';
@@ -1355,6 +1620,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.classList.add('active');
       const pane = document.getElementById(`tab-${btn.dataset.tab}`);
       if (pane) pane.classList.add('active');
+      if (btn.dataset.tab === 'gap') loadGapAnalysis();
     });
   });
 

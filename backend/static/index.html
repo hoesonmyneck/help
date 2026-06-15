@@ -30,7 +30,7 @@
   <div class="kpi-panel">
 
     <div class="kpi-numbers-row">
-      <div class="kpi-card">
+      <div class="kpi-card kpi-wide">
         <div class="label">Сумма</div>
         <div class="value accent" id="kpi-dec">—</div>
       </div>
@@ -46,7 +46,7 @@
 
     <div class="kpi-card kpi-charts-tabs">
       <div class="kpi-tabs-bar">
-        <button type="button" class="kpi-tab-btn active" data-ktab="sdu">Благосостояние</button>
+        <button type="button" class="kpi-tab-btn active" data-ktab="sdu">Уровень благосостояния по ЦКС</button>
         <button type="button" class="kpi-tab-btn" data-ktab="ga">Пол / Возраст</button>
         <button type="button" class="sdu-clear-btn" id="sdu-clear-btn" onclick="clearSduFilter()" title="Сбросить фильтр" style="display:none">✕</button>
       </div>
@@ -58,6 +58,28 @@
         <div id="gender-age-chart" class="ga-chart"></div>
       </div>
     </div>
+  </div>
+
+  <!-- Gap Side Panel -->
+  <div class="gap-side-panel" id="gap-side-panel">
+    <div class="kpi-card gsp-summary-card">
+      <div class="label">Разрывы по выплатам</div>
+      <div class="gsp-summary-row">
+        <div class="gsp-summary-item">
+          <div class="value" id="kpi-gap-anomaly">—</div>
+          <div class="gsp-sub-lbl">с разрывом</div>
+        </div>
+        <div class="gsp-summary-item">
+          <div class="value" id="kpi-gap-max">—</div>
+          <div class="gsp-sub-lbl">макс разрыв</div>
+        </div>
+        <div class="gsp-summary-item">
+          <div class="value" id="kpi-gap-normal">—</div>
+          <div class="gsp-sub-lbl">без разрыва</div>
+        </div>
+      </div>
+    </div>
+    <div class="gsp-list" id="gap-side-list"></div>
   </div>
 
   <!-- Map Panel -->
@@ -73,9 +95,8 @@
   <div class="tabs-bar">
     <button class="tab-btn active" data-tab="presence">Матрица видов помощи</button>
     <button class="tab-btn" data-tab="coverage">Охват по видам помощи</button>
-    <button class="tab-btn" data-tab="groups">Категории по группам</button>
-    <button class="tab-btn" data-tab="data">Данные</button>
     <button type="button" id="coverage-btn-back" style="display:none" onclick="goBackFromRanking()">← Все регионы</button>
+    <button class="tab-btn" data-tab="gap">Разрывы по выплатам</button>
     <button type="button" class="expand-btn" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
   </div>
 
@@ -89,7 +110,7 @@
             <th class="col-center sortable" data-sort-col="help_types">Всего видов помощи <span class="sort-icon"></span></th>
             <th class="col-right sortable" data-sort-col="max_sum">Макс сумма <span class="sort-icon"></span></th>
             <th class="col-right sortable" data-sort-col="total_sum">Сумма <span class="sort-icon"> ▼</span></th>
-            <th class="col-right sortable" data-sort-col="pct">% освоения <span class="sort-icon"></span></th>
+            <th class="col-right sortable" data-sort-col="pct">% Выплаты <span class="sort-icon"></span></th>
           </tr>
         </thead>
         <tbody id="coverage-body">
@@ -99,16 +120,9 @@
     </div>
   </div>
 
-  <!-- Tab: Groups -->
-  <div class="tab-pane" id="tab-groups">
-    <div class="table-wrap">
-      <table>
-        <thead id="groups-thead"></thead>
-        <tbody id="groups-body">
-          <tr><td colspan="4" class="loading">Загрузка...</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <!-- Tab: Pay gaps -->
+  <div class="tab-pane" id="tab-gap">
+    <div id="gap-list" class="gap-accordion"></div>
   </div>
 
   <!-- Tab: Help presence -->
@@ -123,58 +137,18 @@
     </div>
   </div>
 
-  <!-- Tab: Data table -->
-  <div class="tab-pane" id="tab-data">
-    <div class="data-tab-info"><span class="table-info" id="table-info"></span></div>
-    <div class="table-wrap data-table-wrap">
-      <table>
-        <thead id="table-head"></thead>
-        <tbody id="table-body">
-          <tr><td colspan="16" class="loading">Загрузка...</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="pagination">
-      <button id="btn-prev" disabled>‹ Пред.</button>
-      <span class="page-info" id="page-info">1 / 1</span>
-      <button id="btn-next">След. ›</button>
-    </div>
-  </div>
 </div>
 
 <!-- Anomaly Section -->
 <div class="anomaly-section table-section">
-  <div class="anomaly-header">
-    <h2 class="anomaly-title">Аномалии</h2>
-  </div>
-  <div class="anomaly-kpi-row">
-    <div class="kpi-card an-card">
-      <div class="label">Зависших заявок</div>
-      <div class="value an-alarm" id="an-kpi-pending">—</div>
-      <div class="an-sub">статус НОВОЕ</div>
-    </div>
-    <div class="kpi-card an-card">
-      <div class="label">Нецелевые ЦКС</div>
-      <div class="value an-alarm" id="an-kpi-cks">—</div>
-      <div class="an-sub">уровень A и B</div>
-    </div>
-    <div class="kpi-card an-card">
-      <div class="label">Пустых видов помощи</div>
-      <div class="value an-alarm" id="an-kpi-empty">—</div>
-      <div class="an-sub">задеклар. без выплат</div>
-    </div>
-    <div class="kpi-card an-card">
-      <div class="label">Уникальных видов (1–2 рег.)</div>
-      <div class="value" id="an-kpi-unique">—</div>
-      <div class="an-sub">геогр. концентрация</div>
-    </div>
-  </div>
+  
+  
 
   <div class="tabs-section anomaly-tabs-section">
     <div class="tabs-bar">
-      <button class="tab-btn antab-btn active" data-antab="cks">ЦКС</button>
-      <button class="tab-btn antab-btn" data-antab="utilization">% Освоения по регионам</button>
-      <button class="tab-btn antab-btn" data-antab="utilraion">% Освоения по районам</button>
+      <button class="tab-btn antab-btn active" data-antab="cks">Уровень благосостояния</button>
+      <button class="tab-btn antab-btn" data-antab="utilization">% Выплаты по регионам</button>
+      <button class="tab-btn antab-btn" data-antab="utilraion">% Выплаты по районам</button>
       <button class="tab-btn antab-btn" data-antab="unique">Уникальные виды</button>
       <button class="tab-btn antab-btn" data-antab="demo">Демография</button>
     </div>
@@ -207,7 +181,7 @@
             <th class="col-center sortable" data-antab="utilization" data-ancol="count" onclick="anToggleSort(this)">Заявок <span class="an-sort-icon"></span></th>
             <th class="col-right sortable" data-antab="utilization" data-ancol="total_max" onclick="anToggleSort(this)">Макс. сумма <span class="an-sort-icon"></span></th>
             <th class="col-right sortable" data-antab="utilization" data-ancol="total_dec" onclick="anToggleSort(this)">Факт выплата <span class="an-sort-icon"></span></th>
-            <th class="col-right sortable" data-antab="utilization" data-ancol="pct" onclick="anToggleSort(this)">% освоения <span class="an-sort-icon"></span></th>
+            <th class="col-right sortable" data-antab="utilization" data-ancol="pct" onclick="anToggleSort(this)">% Выплаты <span class="an-sort-icon"></span></th>
           </tr></thead>
           <tbody id="antab-utilization-body"><tr><td colspan="5" class="loading">Загрузка...</td></tr></tbody>
         </table>
@@ -227,7 +201,7 @@
             <th class="col-center sortable" data-antab="utilraion" data-ancol="count" onclick="anToggleSort(this)">Заявок <span class="an-sort-icon"></span></th>
             <th class="col-right sortable" data-antab="utilraion" data-ancol="total_max" onclick="anToggleSort(this)">Макс. сумма <span class="an-sort-icon"></span></th>
             <th class="col-right sortable" data-antab="utilraion" data-ancol="total_dec" onclick="anToggleSort(this)">Факт выплата <span class="an-sort-icon"></span></th>
-            <th class="col-right sortable" data-antab="utilraion" data-ancol="pct" onclick="anToggleSort(this)">% освоения <span class="an-sort-icon"></span></th>
+            <th class="col-right sortable" data-antab="utilraion" data-ancol="pct" onclick="anToggleSort(this)">% Выплаты <span class="an-sort-icon"></span></th>
           </tr></thead>
           <tbody id="antab-utilraion-body"><tr><td colspan="6" class="loading">Загрузка...</td></tr></tbody>
         </table>
@@ -269,6 +243,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Interactive map hover panel -->
 <div id="geo-panel" class="geo-panel"></div>
+<div id="pay-tooltip" class="pay-tooltip" style="display:none"></div>
 
 <script src="/app.js"></script>
 </body>

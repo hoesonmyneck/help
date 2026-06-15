@@ -66,7 +66,7 @@
   border: 1px solid #2a3050;
   border-radius: 14px;
   padding: 32px 30px;
-  width: 320px;
+  width: 416px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -244,6 +244,7 @@ header h1 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
+.kpi-wide { grid-column: 1 / -1; }
 
 /* Tabbed charts container (Пол / Благосостояние / Возраст) */
 .kpi-charts-tabs {
@@ -377,6 +378,79 @@ header h1 {
 .gender-item .value { font-size: 1.1rem; font-weight: 700; }
 .gender-item.male .value { color: var(--ac-male); }
 .gender-item.female .value { color: var(--ac-female); }
+
+/* Gap side panel */
+.gap-side-panel {
+  flex: 0 0 240px;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+}
+.gsp-summary-card { flex-shrink: 0; }
+.gsp-summary-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+.gsp-summary-item { flex: 1; }
+.gsp-summary-item .value { font-size: 1.15rem; }
+.gsp-sub-lbl { font-size: 0.68rem; color: var(--tx-dim); margin-top: 2px; }
+.gsp-summary-item:first-child .value { color: #ff6b6b; }
+.gsp-summary-item:last-child  .value { color: #55efc4; }
+.gsp-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.gsp-service-card { padding: 9px 11px; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.gsp-svc-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+.gsp-svc-head .gap-badge { font-size: 0.67rem; padding: 2px 7px; flex-shrink: 0; }
+.gsp-svc-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--tx-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gsp-dist-row {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 0;
+}
+.gsp-arr { font-size: 0.75rem; flex-shrink: 0; width: 12px; }
+.gsp-dist-low  .gsp-arr { color: #ff6b6b; }
+.gsp-dist-high .gsp-arr { color: #74b9ff; }
+.gsp-d-name {
+  flex: 1;
+  font-size: 0.7rem;
+  color: var(--tx-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gsp-d-val {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--tx-main);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.gsp-dist-low  .gsp-d-val { color: #ff6b6b; }
+.gsp-dist-high .gsp-d-val { color: #74b9ff; }
+.gsp-empty { font-size: 0.8rem; color: var(--tx-muted); padding: 8px 4px; }
 
 /* Map panel */
 .map-panel {
@@ -659,6 +733,43 @@ tbody tr:last-child td { border-bottom: none; }
 
 .loading { text-align: center; padding: 40px; color: var(--tx-muted); font-size: 0.9rem; }
 .no-data { text-align: center; padding: 40px; color: var(--tx-muted); font-size: 0.9rem; }
+
+/* Pay-gap accordion */
+.gap-accordion { padding: 4px 0 12px; }
+.gap-item { border-bottom: 1px solid var(--bd-main); }
+.gap-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+.gap-header:hover { background: var(--bg-deep); }
+.gap-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.gap-badge-high { background: rgba(231,76,60,.18); color: #ff6b6b; border: 1px solid rgba(231,76,60,.35); }
+.gap-badge-mid  { background: rgba(243,156,18,.18); color: #ffc107; border: 1px solid rgba(243,156,18,.35); }
+.gap-badge-low  { background: rgba(52,152,219,.18); color: #74b9ff; border: 1px solid rgba(52,152,219,.35); }
+.gap-name { font-size: 0.875rem; font-weight: 600; flex: 1; }
+.gap-stats { font-size: 0.75rem; color: var(--tx-muted); white-space: nowrap; }
+.gap-chevron { font-size: 0.65rem; color: var(--tx-dim); flex-shrink: 0; }
+.gap-body { padding: 12px 20px 20px; background: var(--bg-deep); }
+.gap-chart-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  color: var(--tx-muted);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
 
 /* Tabs */
 .tabs-section { margin-top: 8px; }
@@ -1094,10 +1205,19 @@ th.sort-active { color: var(--ac-blue); }
   color: var(--tx-muted);
   padding: 4px 8px !important;
 }
-.prs-cell { font-weight: 700; font-size: 0.85rem; }
+.prs-cell { font-weight: 700; font-size: 0.85rem; vertical-align: middle; }
 .prs-yes   { background: rgba(46,204,113,0.18); color: #2ecc71; box-shadow: inset 0 0 0 1px rgba(46,204,113,0.22); }
 .prs-no    { background: rgba(231,76,60,0.18);  color: #e74c3c; box-shadow: inset 0 0 0 1px rgba(231,76,60,0.22); }
 .prs-empty { color: var(--tx-muted); opacity: 0.4; }
+.prs-cell-sum {
+  display: block;
+  font-size: 0.6rem;
+  font-weight: 400;
+  color: rgba(255,255,255,0.7);
+  line-height: 1.2;
+  margin-top: 1px;
+  white-space: nowrap;
+}
 
 /* Group column headers — 3-line wrapped, like the presence matrix */
 #tab-groups table { table-layout: fixed; }
@@ -1639,13 +1759,22 @@ th.sort-active { color: #8ab4ff !important; }
   flex-shrink: 0;
 }
 
+.ga-clickable { cursor: pointer; }
+.ga-bar-f, .ga-bar-m { cursor: pointer; transition: opacity 0.15s; }
+.ga-bar-f:hover, .ga-bar-m:hover { opacity: 0.8; }
+.ga-filter-active { outline: 2px solid #fff; outline-offset: 1px; border-radius: 2px; }
+.ga-age-row.ga-filter-active { background: rgba(255,255,255,0.08); border-radius: 4px; padding: 0 3px; }
+
 .ga-age-row {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 0.65rem;
   margin-bottom: 5px;
+  border-radius: 4px;
+  transition: background 0.15s;
 }
+.ga-age-row:hover { background: rgba(255,255,255,0.05); }
 .ga-age-lbl {
   flex: 0 0 60px;
   color: var(--tx-label);
@@ -2017,3 +2146,28 @@ th.sort-active          { color: #fff !important; }
 .an-cks-badge  { color: #ff6b6b !important; }
 .an-flag-badge { color: #ffc107 !important; }
 .an-ok-badge   { color: #2ecc71 !important; }
+
+/* Pay-type tooltip */
+.pay-tooltip {
+  position: fixed;
+  z-index: 9999;
+  background: var(--bg-card);
+  border: 1px solid var(--bd-hi);
+  border-radius: 8px;
+  padding: 10px 14px;
+  max-width: 340px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.45);
+  pointer-events: none;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+.pay-tooltip .pt-title {
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--tx-dim);
+  margin-bottom: 5px;
+  letter-spacing: 0.03em;
+}
+.pay-tooltip .pt-desc { color: var(--tx-main); }
+.has-pay-tip { cursor: help; }

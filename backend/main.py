@@ -11,6 +11,14 @@ from load_data import (load_excel, load_reference_data,
                        raion_names_ref, raion_reg_ref, settings_rows, settings_pay_names)
 import os
 
+EXCLUDED_PAY_SUBSTRINGS = {'АБОНЕНТСКУЮ ПЛАТУ ЗА ТЕЛЕФОН'}
+
+def _is_excluded(pname: str | None) -> bool:
+    if not pname:
+        return False
+    u = pname.upper()
+    return any(s in u for s in EXCLUDED_PAY_SUBSTRINGS)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,21 +42,36 @@ def _all_raions_for_region(region_id, db_katos: set[str]) -> list[str]:
     return sorted(combined, key=lambda k: (int(k) if k.isdigit() else 0, k))
 
 
-def build_filter(q, region_id, raion_id, sdu_filter=None):
+def apply_extra_filters(q, sdu_filter=None, gender_filter=None, age_group=None):
+    if sdu_filter:
+        q = q.filter(func.upper(Payment.sdu_tzhs) == sdu_filter.upper())
+    if gender_filter:
+        q = q.filter(Payment.gender_id == int(gender_filter))
+    if age_group:
+        if age_group == 'до18':
+            q = q.filter(Payment.vozrast < 18)
+        elif age_group == '18-39':
+            q = q.filter(Payment.vozrast >= 18, Payment.vozrast < 40)
+        elif age_group == '40-59':
+            q = q.filter(Payment.vozrast >= 40, Payment.vozrast < 60)
+        elif age_group == '60+':
+            q = q.filter(Payment.vozrast >= 60)
+    return q
+
+
+def build_filter(q, region_id, raion_id, sdu_filter=None, gender_filter=None, age_group=None):
     if raion_id is not None:
         q = q.filter(Payment.kato_raion == raion_id)
     elif region_id is not None:
         q = q.filter(Payment.kato_region == region_id)
-    if sdu_filter:
-        q = q.filter(func.upper(Payment.sdu_tzhs) == sdu_filter.upper())
-    return q
+    return apply_extra_filters(q, sdu_filter, gender_filter, age_group)
 
 
 @app.get("/api/kpi")
-def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: str = Query(None)):
+def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
     with Session(engine) as db:
         base = db.query(Payment)
-        base = build_filter(base, region_id, raion_id, sdu_filter)
+        base = build_filter(base, region_id, raion_id, sdu_filter, gender_filter, age_group)
 
         total_max = base.with_entities(func.sum(Payment.max_pay_sum)).scalar() or 0
         total_dec = base.with_entities(func.sum(Payment.dec_pay_sum)).scalar() or 0
@@ -85,7 +108,7 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
             geo = [r for r in settings_rows if r[0] == str(region_id)]
         else:
             geo = settings_rows
-        help_type_count = len({r[2] for r in geo})
+        help_type_count = len({r[2] for r in geo if not _is_excluded(r[3])})
         people_cat_count = len({r[4] for r in geo if r[5] is not None})
 
         return {
@@ -102,16 +125,16 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
 
 
 @app.get("/api/regions")
-def regions():
+def regions(sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
     with Session(engine) as db:
-        rows = db.query(
+        rows = apply_extra_filters(db.query(
             Payment.kato_region,
             Payment.kato_regname,
             func.count(Payment.id).label("count"),
             func.sum(Payment.max_pay_sum).label("total_max"),
             func.count(distinct(Payment.pay_type_id)).label("pay_type_count"),
             func.count(distinct(Payment.cat_type_id)).label("cat_type_count"),
-        ).group_by(Payment.kato_region, Payment.kato_regname).all()
+        ), sdu_filter, gender_filter, age_group).group_by(Payment.kato_region, Payment.kato_regname).all()
 
         return [
             {
@@ -127,9 +150,9 @@ def regions():
 
 
 @app.get("/api/raions")
-def raions(region_id: int = Query(...)):
+def raions(region_id: int = Query(...), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
     with Session(engine) as db:
-        rows = db.query(
+        rows = apply_extra_filters(db.query(
             Payment.kato_raion,
             Payment.kato_rainame,
             func.count(Payment.id).label("count"),
@@ -138,7 +161,7 @@ def raions(region_id: int = Query(...)):
             func.count(distinct(Payment.cat_type_id)).label("cat_type_count"),
         ).filter(
             Payment.kato_region == region_id
-        ).group_by(Payment.kato_raion, Payment.kato_rainame).all()
+        ), sdu_filter, gender_filter, age_group).group_by(Payment.kato_raion, Payment.kato_rainame).all()
 
         return [
             {
@@ -154,29 +177,24 @@ def raions(region_id: int = Query(...)):
 
 
 @app.get("/api/ranking")
-def ranking(region_id: int = Query(None)):
+def ranking(region_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
     with Session(engine) as db:
+        def _q(): return db.query(
+            Payment.kato_region.label("id") if region_id is None else Payment.kato_raion.label("id"),
+            Payment.kato_regname.label("name") if region_id is None else Payment.kato_rainame.label("name"),
+            func.count(Payment.id).label("count"),
+            func.count(Payment.dec_pay_sum).label("accepted"),
+            func.count(distinct(Payment.sicid)).label("recipients"),
+            func.sum(Payment.dec_pay_sum).label("total_dec"),
+        )
         if region_id is None:
-            rows = db.query(
-                Payment.kato_region.label("id"),
-                Payment.kato_regname.label("name"),
-                func.count(Payment.id).label("count"),
-                func.count(Payment.dec_pay_sum).label("accepted"),
-                func.count(distinct(Payment.sicid)).label("recipients"),
-                func.sum(Payment.dec_pay_sum).label("total_dec"),
-            ).group_by(Payment.kato_region, Payment.kato_regname) \
-             .order_by(func.sum(Payment.dec_pay_sum).desc()).all()
+            rows = apply_extra_filters(_q(), sdu_filter, gender_filter, age_group) \
+                .group_by(Payment.kato_region, Payment.kato_regname) \
+                .order_by(func.sum(Payment.dec_pay_sum).desc()).all()
         else:
-            rows = db.query(
-                Payment.kato_raion.label("id"),
-                Payment.kato_rainame.label("name"),
-                func.count(Payment.id).label("count"),
-                func.count(Payment.dec_pay_sum).label("accepted"),
-                func.count(distinct(Payment.sicid)).label("recipients"),
-                func.sum(Payment.dec_pay_sum).label("total_dec"),
-            ).filter(Payment.kato_region == region_id) \
-             .group_by(Payment.kato_raion, Payment.kato_rainame) \
-             .order_by(func.sum(Payment.dec_pay_sum).desc()).all()
+            rows = apply_extra_filters(_q().filter(Payment.kato_region == region_id), sdu_filter, gender_filter, age_group) \
+                .group_by(Payment.kato_raion, Payment.kato_rainame) \
+                .order_by(func.sum(Payment.dec_pay_sum).desc()).all()
 
         result = []
         for r in rows:
@@ -265,7 +283,7 @@ def table(
 
 
 @app.get("/api/summary")
-def summary(region_id: int = Query(None), sdu_filter: str = Query(None)):
+def summary(region_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
     from sqlalchemy import case as sa_case
     # Макс сумма = сумма max_pay_sum только по записям с фактической выплатой
     paid_max = func.sum(sa_case((Payment.dec_pay_sum.isnot(None), Payment.max_pay_sum), else_=0))
@@ -274,9 +292,7 @@ def summary(region_id: int = Query(None), sdu_filter: str = Query(None)):
         return round(ts / ms * 100, 1) if ms else 0.0
 
     def sdu_q(q):
-        if sdu_filter:
-            q = q.filter(func.upper(Payment.sdu_tzhs) == sdu_filter.upper())
-        return q
+        return apply_extra_filters(q, sdu_filter, gender_filter, age_group)
 
     with Session(engine) as db:
         if region_id is None:
@@ -446,13 +462,16 @@ def coverage_groups(region_id: int = Query(None)):
 
 
 @app.get("/api/help-presence")
-def help_presence(region_id: int = Query(None)):
+def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
     """Per region/raion: which pay types are configured (max sum set in settings) → ✓/✕,
     plus a mini-table (виды помощи / категории — should be provided; кол-во людей / сумма — actual)."""
     from collections import defaultdict
     with Session(engine) as db:
-        # Columns = pay types from the settings file (НАИМЕНОВАНИЕ ВЫПЛАТЫ)
-        pay_defs = sorted(settings_pay_names.items())   # [(id, name)]
+        def af(q): return apply_extra_filters(q, sdu_filter, gender_filter, age_group)
+
+        # Columns = pay types from the settings file, excluding phone subscription
+        pay_defs = [(pid, pname) for pid, pname in sorted(settings_pay_names.items())
+                    if not _is_excluded(pname)]
         columns = [{'id': pid, 'name': pname} for pid, pname in pay_defs]
 
         if region_id is None:
@@ -463,22 +482,35 @@ def help_presence(region_id: int = Query(None)):
             nat_pay, nat_cat = set(), set()
             nat_pay_cat = defaultdict(set)                       # pid -> {cat} nationwide
             for kreg, kdis, pid, pname, cat, mx in settings_rows:
-                if mx is None:
+                if mx is None or _is_excluded(pname):
                     continue
                 geo_pay[kreg].add(pid); geo_cat[kreg].add(cat)
                 geo_pay_cat[kreg][pid].add(cat)
                 nat_pay.add(pid); nat_cat.add(cat)
                 nat_pay_cat[pid].add(cat)
 
-            pay_rows = db.query(Payment.kato_region,
+            pay_rows = af(db.query(Payment.kato_region,
                                 func.count(distinct(Payment.sicid)),
-                                func.sum(Payment.dec_pay_sum)).group_by(Payment.kato_region).all()
+                                func.sum(Payment.dec_pay_sum))).group_by(Payment.kato_region).all()
             geo_people = {str(r[0]): r[1] for r in pay_rows}
             geo_sum = {str(r[0]): float(r[2] or 0) for r in pay_rows}
             name_map = {str(r.kato_region): r.kato_regname
                         for r in db.query(Payment.kato_region, Payment.kato_regname).distinct().all()}
-            nat_people = db.query(func.count(distinct(Payment.sicid))).scalar() or 0
-            nat_sum = float(db.query(func.sum(Payment.dec_pay_sum)).scalar() or 0)
+            nat_people = af(db.query(func.count(distinct(Payment.sicid)))).scalar() or 0
+            nat_sum = float(af(db.query(func.sum(Payment.dec_pay_sum))).scalar() or 0)
+
+            # Max entitled sum per (region, pay_type_id) from actual payments
+            mx_rows = af(db.query(Payment.kato_region, Payment.pay_type_id,
+                               func.sum(Payment.max_pay_sum).label("tot_mx")) \
+                        .filter(Payment.pay_type_id.isnot(None))) \
+                        .group_by(Payment.kato_region, Payment.pay_type_id).all()
+            geo_pid_max: dict = defaultdict(dict)
+            for r in mx_rows:
+                geo_pid_max[str(r.kato_region)][r.pay_type_id] = float(r.tot_mx or 0)
+            nat_pid_max: dict = {}
+            for pid_d in geo_pid_max.values():
+                for pid, v in pid_d.items():
+                    nat_pid_max[pid] = nat_pid_max.get(pid, 0) + v
 
             body = []
             for kato in all_region_katos:
@@ -486,7 +518,9 @@ def help_presence(region_id: int = Query(None)):
                 body.append({
                     'id': int(kato) if kato.isdigit() else kato,
                     'name': REGION_NAMES.get(kato) or name_map.get(kato) or kato,
-                    'presence': [pid in present for pid, _ in pay_defs],
+                    'presence': [{"p": pid in present,
+                                  "mx": geo_pid_max.get(kato, {}).get(pid, 0.0)}
+                                 for pid, _ in pay_defs],
                     'pay_cat_lists': [sorted(geo_pay_cat.get(kato, {}).get(pid, ())) for pid, _ in pay_defs],
                     'mini': {
                         'vidy': len(geo_pay.get(kato, set())),
@@ -500,7 +534,8 @@ def help_presence(region_id: int = Query(None)):
 
             total = {
                 'id': None, 'name': 'Республика Казахстан', 'is_total': True,
-                'presence': [pid in nat_pay for pid, _ in pay_defs],
+                'presence': [{"p": pid in nat_pay, "mx": nat_pid_max.get(pid, 0.0)}
+                             for pid, _ in pay_defs],
                 'pay_cat_lists': [sorted(nat_pay_cat.get(pid, ())) for pid, _ in pay_defs],
                 'mini': {'vidy': len(nat_pay), 'kategorii': len(nat_cat),
                          'lyudei': nat_people, 'summa': _fmt_money(nat_sum), 'summa_val': nat_sum},
@@ -512,16 +547,16 @@ def help_presence(region_id: int = Query(None)):
         dis_pay_cat = defaultdict(lambda: defaultdict(set))  # kato_dis -> pid -> {cat}
         reg_pay_cat = defaultdict(set)                        # pid -> {cat} for region total
         for kreg, kdis, pid, pname, cat, mx in settings_rows:
-            if mx is None or kreg != str(region_id):
+            if mx is None or kreg != str(region_id) or _is_excluded(pname):
                 continue
             dis_pay[kdis].add(pid); dis_cat[kdis].add(cat)
             dis_pay_cat[kdis][pid].add(cat)
             reg_pay_cat[pid].add(cat)
 
-        pay_rows = db.query(Payment.kato_raion, Payment.kato_rainame,
+        pay_rows = af(db.query(Payment.kato_raion, Payment.kato_rainame,
                             func.count(distinct(Payment.sicid)),
                             func.sum(Payment.dec_pay_sum)) \
-                     .filter(Payment.kato_region == region_id) \
+                     .filter(Payment.kato_region == region_id)) \
                      .group_by(Payment.kato_raion, Payment.kato_rainame).all()
         dis_names, dis_people, dis_sum = {}, {}, {}
         for r in pay_rows:
@@ -530,13 +565,27 @@ def help_presence(region_id: int = Query(None)):
         for d in all_dis:
             dis_names.setdefault(d, raion_names_ref.get(d) or f"Район {d}")
 
-        reg_people = db.query(func.count(distinct(Payment.sicid))) \
-                       .filter(Payment.kato_region == region_id).scalar() or 0
-        reg_sum = float(db.query(func.sum(Payment.dec_pay_sum))
-                        .filter(Payment.kato_region == region_id).scalar() or 0)
+        reg_people = af(db.query(func.count(distinct(Payment.sicid))) \
+                       .filter(Payment.kato_region == region_id)).scalar() or 0
+        reg_sum = float(af(db.query(func.sum(Payment.dec_pay_sum))
+                        .filter(Payment.kato_region == region_id)).scalar() or 0)
         reg_pay_all, reg_cat_all = set(), set()
         for s in dis_pay.values(): reg_pay_all |= s
         for s in dis_cat.values(): reg_cat_all |= s
+
+        # Max entitled sum per (raion, pay_type_id) from actual payments
+        mx_rows2 = af(db.query(Payment.kato_raion, Payment.pay_type_id,
+                            func.sum(Payment.max_pay_sum).label("tot_mx")) \
+                     .filter(Payment.kato_region == region_id,
+                             Payment.pay_type_id.isnot(None))) \
+                     .group_by(Payment.kato_raion, Payment.pay_type_id).all()
+        dis_pid_max: dict = defaultdict(dict)
+        for r in mx_rows2:
+            dis_pid_max[str(r.kato_raion)][r.pay_type_id] = float(r.tot_mx or 0)
+        reg_pid_max: dict = {}
+        for pid_d in dis_pid_max.values():
+            for pid, v in pid_d.items():
+                reg_pid_max[pid] = reg_pid_max.get(pid, 0) + v
 
         body = []
         for d in all_dis:
@@ -544,7 +593,9 @@ def help_presence(region_id: int = Query(None)):
             body.append({
                 'id': int(d) if d.isdigit() else d,
                 'name': dis_names[d],
-                'presence': [pid in present for pid, _ in pay_defs],
+                'presence': [{"p": pid in present,
+                              "mx": dis_pid_max.get(d, {}).get(pid, 0.0)}
+                             for pid, _ in pay_defs],
                 'pay_cat_lists': [sorted(dis_pay_cat.get(d, {}).get(pid, ())) for pid, _ in pay_defs],
                 'mini': {
                     'vidy': len(dis_pay.get(d, set())),
@@ -559,7 +610,8 @@ def help_presence(region_id: int = Query(None)):
         total = {
             'id': None, 'name': REGION_NAMES.get(str(region_id)) or f'Регион {region_id}',
             'is_total': True,
-            'presence': [pid in reg_pay_all for pid, _ in pay_defs],
+            'presence': [{"p": pid in reg_pay_all, "mx": reg_pid_max.get(pid, 0.0)}
+                         for pid, _ in pay_defs],
             'pay_cat_lists': [sorted(reg_pay_cat.get(pid, ())) for pid, _ in pay_defs],
             'mini': {'vidy': len(reg_pay_all), 'kategorii': len(reg_cat_all),
                      'lyudei': reg_people, 'summa': _fmt_money(reg_sum), 'summa_val': reg_sum},
@@ -747,13 +799,13 @@ def breakdown(
 
 
 @app.get("/api/paytypes-top")
-def paytypes_top(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: str = Query(None)):
+def paytypes_top(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
     with Session(engine) as db:
         q = db.query(
             Payment.pay_type,
             func.sum(Payment.dec_pay_sum).label("total_sum"),
         )
-        q = build_filter(q, region_id, raion_id, sdu_filter)
+        q = build_filter(q, region_id, raion_id, sdu_filter, gender_filter, age_group)
         q = q.filter(Payment.pay_type.isnot(None), Payment.dec_pay_sum.isnot(None))
         q = q.group_by(Payment.pay_type)
         q = q.order_by(func.sum(Payment.dec_pay_sum).desc())
@@ -831,9 +883,9 @@ def anomalies_pending():
 
 
 @app.get("/api/anomalies/cks-ab")
-def anomalies_cks_ab():
+def anomalies_cks_ab(gender_filter: str = Query(None), age_group: str = Query(None)):
     with Session(engine) as db:
-        rows = db.query(
+        rows = apply_extra_filters(db.query(
             Payment.kato_regname,
             func.upper(Payment.sdu_tzhs).label("cks"),
             Payment.pay_type,
@@ -843,7 +895,7 @@ def anomalies_cks_ab():
         ).filter(
             func.upper(Payment.sdu_tzhs).in_(['A', 'B']),
             Payment.dec_pay_sum > 0,
-        ).group_by(
+        ), gender_filter=gender_filter, age_group=age_group).group_by(
             Payment.kato_regname, func.upper(Payment.sdu_tzhs), Payment.pay_type
         ).order_by(Payment.kato_regname, func.count(Payment.id).desc()).all()
 
@@ -861,16 +913,17 @@ def anomalies_cks_ab():
 
 
 @app.get("/api/anomalies/utilization")
-def anomalies_utilization(region_id: int = Query(None)):
+def anomalies_utilization(region_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
     with Session(engine) as db:
+        def af(q): return apply_extra_filters(q, sdu_filter, gender_filter, age_group)
         if region_id is None:
-            rows = db.query(
+            rows = af(db.query(
                 Payment.kato_region,
                 Payment.kato_regname,
                 func.count(Payment.id).label("cnt"),
                 func.sum(Payment.max_pay_sum).label("total_max"),
                 func.sum(Payment.dec_pay_sum).label("total_dec"),
-            ).filter(Payment.max_pay_sum > 0).group_by(
+            ).filter(Payment.max_pay_sum > 0)).group_by(
                 Payment.kato_region, Payment.kato_regname
             ).all()
 
@@ -903,7 +956,7 @@ def anomalies_utilization(region_id: int = Query(None)):
             result.sort(key=lambda x: x["name"])
             return result
         else:
-            rows = db.query(
+            rows = af(db.query(
                 Payment.pay_type,
                 func.count(Payment.id).label("cnt"),
                 func.sum(Payment.max_pay_sum).label("total_max"),
@@ -911,7 +964,7 @@ def anomalies_utilization(region_id: int = Query(None)):
             ).filter(
                 Payment.kato_region == region_id,
                 Payment.max_pay_sum > 0
-            ).group_by(Payment.pay_type).all()
+            )).group_by(Payment.pay_type).all()
 
             result = []
             for r in rows:
@@ -934,7 +987,7 @@ def anomalies_unique_help():
     from collections import defaultdict
     pay_type_regions: dict = defaultdict(set)
     for kreg, kdis, pid, pname, cat, mx in settings_rows:
-        if pname:
+        if pname and not _is_excluded(pname):
             pay_type_regions[pname].add(kreg)
 
     result = [
@@ -977,16 +1030,16 @@ def anomalies_empty_help():
 
 
 @app.get("/api/anomalies/demographic")
-def anomalies_demographic():
+def anomalies_demographic(sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
     from sqlalchemy import case as sa_case
     with Session(engine) as db:
-        rows = db.query(
+        rows = apply_extra_filters(db.query(
             Payment.pay_type,
             func.count(Payment.id).label("total"),
             func.sum(sa_case((Payment.gender_id == 1, 1), else_=0)).label("male_cnt"),
             func.sum(sa_case((Payment.gender_id == 2, 1), else_=0)).label("female_cnt"),
             func.avg(Payment.vozrast).label("avg_age"),
-        ).filter(Payment.pay_type.isnot(None)).group_by(Payment.pay_type).all()
+        ).filter(Payment.pay_type.isnot(None)), sdu_filter, gender_filter, age_group).group_by(Payment.pay_type).all()
 
         result = []
         for r in rows:
@@ -1019,17 +1072,18 @@ def anomalies_demographic():
 
 
 @app.get("/api/anomalies/utilization-raion")
-def anomalies_utilization_raion(raion_id: int = Query(None)):
+def anomalies_utilization_raion(raion_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
     with Session(engine) as db:
+        def af(q): return apply_extra_filters(q, sdu_filter, gender_filter, age_group)
         if raion_id is None:
-            rows = db.query(
+            rows = af(db.query(
                 Payment.kato_raion,
                 Payment.kato_rainame,
                 Payment.kato_regname,
                 func.count(Payment.id).label("cnt"),
                 func.sum(Payment.max_pay_sum).label("total_max"),
                 func.sum(Payment.dec_pay_sum).label("total_dec"),
-            ).filter(Payment.kato_raion.isnot(None)).group_by(
+            ).filter(Payment.kato_raion.isnot(None))).group_by(
                 Payment.kato_raion, Payment.kato_rainame, Payment.kato_regname
             ).all()
 
@@ -1050,7 +1104,7 @@ def anomalies_utilization_raion(raion_id: int = Query(None)):
             result.sort(key=lambda x: x["pct"])
             return result
         else:
-            rows = db.query(
+            rows = af(db.query(
                 Payment.pay_type,
                 func.count(Payment.id).label("cnt"),
                 func.sum(Payment.max_pay_sum).label("total_max"),
@@ -1058,7 +1112,7 @@ def anomalies_utilization_raion(raion_id: int = Query(None)):
             ).filter(
                 Payment.kato_raion == raion_id,
                 Payment.pay_type.isnot(None),
-            ).group_by(Payment.pay_type).all()
+            )).group_by(Payment.pay_type).all()
 
             result = []
             for r in rows:
@@ -1074,6 +1128,69 @@ def anomalies_utilization_raion(raion_id: int = Query(None)):
                 })
             result.sort(key=lambda x: x["pct"])
             return result
+
+
+@app.get("/api/anomalies/pay-gap")
+def anomalies_pay_gap(sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
+    from collections import defaultdict
+    from sqlalchemy import case as sa_case
+    with Session(engine) as db:
+        rows = apply_extra_filters(db.query(
+            Payment.pay_type,
+            Payment.kato_rainame,
+            Payment.kato_regname,
+            func.count(Payment.id).label("cnt"),
+            func.sum(sa_case((Payment.dec_pay_sum > 0, 1), else_=0)).label("approved"),
+            func.max(Payment.max_pay_sum).label("total_max"),
+        ).filter(
+            Payment.pay_type.isnot(None),
+            Payment.kato_rainame.isnot(None),
+        ), sdu_filter, gender_filter, age_group).group_by(
+            Payment.pay_type, Payment.kato_rainame, Payment.kato_regname
+        ).all()
+
+        pay_type_data: dict = defaultdict(list)
+        for r in rows:
+            if _is_excluded(r.pay_type):
+                continue
+            pay_type_data[r.pay_type].append({
+                "raion": r.kato_rainame or "—",
+                "region": r.kato_regname or "",
+                "cnt": r.cnt,
+                "approved": int(r.approved or 0),
+                "total_max": float(r.total_max or 0),
+            })
+
+        result = []
+        for pay_type, districts in pay_type_data.items():
+            vals = [d["total_max"] for d in districts if d["total_max"] > 0]
+            if len(vals) < 2:
+                continue
+            min_val = min(vals)
+            max_val = max(vals)
+            if min_val <= 0:
+                continue
+            ratio = round(max_val / min_val, 1)
+            if ratio < 2.0:
+                continue
+            districts_sorted = sorted(
+                [d for d in districts if d["total_max"] > 0],
+                key=lambda d: d["total_max"]
+            )
+            result.append({
+                "pay_type": pay_type,
+                "ratio": ratio,
+                "district_count": len(districts_sorted),
+                "total_cnt": sum(d["cnt"] for d in districts),
+                "total_approved": sum(d["approved"] for d in districts),
+                "districts": districts_sorted,
+            })
+
+        result.sort(key=lambda x: -x["ratio"])
+        return {
+            "gaps": result,
+            "total": len(pay_type_data),
+        }
 
 
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static"), html=True), name="static")
