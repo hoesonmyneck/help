@@ -261,6 +261,13 @@ header h1 {
 .kpi-tab-btn:hover { color: var(--tx-sub); }
 .kpi-tab-btn.active { color: var(--ac-teal); border-bottom-color: var(--ac-teal); font-weight: 600; }
 
+.kpi-sdu-label {
+  font-size: 0.65rem;
+  color: var(--tx-dim);
+  flex-shrink: 0;
+  margin-bottom: 2px;
+}
+
 .kpi-tab-pane { display: none; flex: 1; min-height: 0; }
 .kpi-tab-pane.active {
   display: flex;
@@ -343,7 +350,7 @@ header h1 {
 /* Map panel */
 .map-panel {
   flex: 0 1 auto;
-  width: 70vw;
+  width: 50vw;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1506,3 +1513,222 @@ th.sort-active { color: #8ab4ff !important; }
 :root[data-theme="light"] #tab-groups table tbody tr:hover td:nth-child(1) {
   background: rgba(80,90,110,0.06) !important;
 }
+
+/* ═══════════════════════════════════════════════
+   MID PANEL
+   ═══════════════════════════════════════════════ */
+
+.mid-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.mid-card {
+  background: linear-gradient(145deg, rgba(20,27,52,0.97) 0%, rgba(13,19,38,0.97) 100%);
+  border: 1px solid rgba(91,138,248,0.1);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.mid-flex-card {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mid-chart-title {
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  color: var(--ac-teal);
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-bottom: 2px;
+}
+
+/* ── Gender / Age bar ── */
+.ga-chart { display: flex; flex-direction: column; gap: 0; }
+
+.ga-gender-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.ga-female-txt { color: #f875c3; }
+.ga-male-txt   { color: #5b8af8; }
+
+.ga-gender-bar-outer {
+  display: flex;
+  height: 13px;
+  border-radius: 7px;
+  overflow: hidden;
+  width: 100%;
+}
+.ga-bar-f { background: linear-gradient(90deg, #d63af9, #f875c3); }
+.ga-bar-m { background: linear-gradient(90deg, #5b8af8, #4ecdc4); }
+
+.ga-gender-pcts {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-top: 3px;
+  margin-bottom: 8px;
+}
+
+.ga-age-hdr {
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--tx-muted);
+  margin-bottom: 4px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.ga-age-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.65rem;
+  margin-bottom: 5px;
+}
+.ga-age-lbl {
+  flex: 0 0 60px;
+  color: var(--tx-label);
+  font-size: 0.62rem;
+}
+.ga-age-bar-wrap {
+  flex: 1;
+  height: 9px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.ga-age-bar {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.5s ease;
+}
+.ga-age-pct {
+  flex: 0 0 26px;
+  text-align: right;
+  font-weight: 700;
+  font-size: 0.65rem;
+  color: var(--tx-cell);
+}
+
+/* ── Mid panel tabs ── */
+.mid-tabs-bar {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--bd-main);
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+.mid-tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--tx-dim);
+  font-family: inherit;
+  font-size: 0.66rem;
+  padding: 4px 6px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  position: relative;
+  bottom: -1px;
+}
+.mid-tab-btn:hover { color: var(--tx-sub); }
+.mid-tab-btn.active { color: var(--ac-teal); border-bottom-color: var(--ac-teal); font-weight: 600; }
+
+.mid-tab-pane { display: none; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
+.mid-tab-pane.active { display: flex; }
+
+/* ── Region activity bars ── */
+.ra-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.65rem;
+  margin-bottom: 5px;
+}
+.ra-name {
+  flex: 0 0 74px;
+  color: var(--tx-label);
+  font-size: 0.62rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ra-bar-wrap {
+  flex: 1;
+  height: 9px;
+  background: rgba(91,138,248,0.07);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.ra-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #3a6ad8, #5b8af8);
+  border-radius: 5px;
+  transition: width 0.5s ease;
+}
+.ra-val {
+  flex: 0 0 30px;
+  text-align: right;
+  font-weight: 700;
+  font-size: 0.65rem;
+  color: var(--ac-teal);
+}
+
+/* ── Pay types top ── */
+.pt-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--tx-muted);
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--bd-main);
+  flex-shrink: 0;
+  margin-bottom: 2px;
+}
+.pt-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.035);
+  font-size: 0.68rem;
+}
+.pt-row:last-child { border-bottom: none; }
+.pt-name {
+  color: var(--tx-cell);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.65rem;
+}
+.pt-sum {
+  color: var(--ac-teal);
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 0.65rem;
+}
+.pt-empty { color: var(--tx-muted); font-size: 0.68rem; padding: 8px 0; }

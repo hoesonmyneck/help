@@ -13,6 +13,7 @@ pay_type_names:  dict[int, str] = {}   # {pay_type_id: НАИМЕНОВАНИЕ 
 # Region/raion display names by KATO code — populated from the reference files
 REGION_NAMES:    dict[str, str] = {}   # {kato_reg: REG name} from REGION.xlsx
 raion_names_ref: dict[str, str] = {}   # {kato_dis: DIS name} from RAION.xlsx
+raion_reg_ref:   dict[str, str] = {}   # {kato_dis: kato_reg} — region that owns each raion
 
 # Payment settings rows from PAYMENT_SETTING_FOR_QLIK.xlsx
 # each item: (kato_reg_str, kato_dis_str, pay_type_id, pay_name, cat_type, max_val|None)
@@ -69,14 +70,18 @@ def load_reference_data():
     ws = wb.active
     raion_help_ids.clear()
     raion_names_ref.clear()
+    raion_reg_ref.clear()
     for row in ws.iter_rows(min_row=2, values_only=True):
         # cols: 0=KATO_REG, 1=KATO_DIS, 2=PAY_TYPE_ID, 3=PAY_TYPE, 4=FLAG_ID, 5=FLAG, 6=REG, 7=DIS(name)
+        reg_kato = _to_kato_str(row[0])
         kato = _to_kato_str(row[1])
         pay_id = int(row[2]) if row[2] is not None else None
         flag = str(row[4]).strip() if row[4] is not None else ''
         dis_name = str(row[7]).strip() if row[7] is not None else None
         if kato and dis_name:
             raion_names_ref.setdefault(kato, dis_name)
+        if kato and reg_kato:
+            raion_reg_ref.setdefault(kato, reg_kato)
         if kato and pay_id and flag == '1':
             raion_help_ids.setdefault(kato, set()).add(pay_id)
     wb.close()

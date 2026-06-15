@@ -25,7 +25,7 @@ function showLogin() {
   ov.className = 'auth-overlay';
   ov.innerHTML = `
     <form class="auth-card" id="auth-form">
-      <div class="auth-title">МГП</div>
+      <div class="auth-title">ЕЦП «Меры государственной поддержки»</div>
       <div class="auth-sub">Вход в систему</div>
       <input type="text" id="auth-login" placeholder="Логин" autocomplete="username" autofocus>
       <input type="password" id="auth-pass" placeholder="Пароль" autocomplete="current-password">
@@ -124,7 +124,7 @@ async function init() {
 
   renderRegions();
   await refreshKPI();
-  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadCatRegions(), loadUncovered(), loadHelpPresence()]);
+  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadCatRegions(), loadUncovered(), loadHelpPresence(), loadPayTypesTop()]);
 }
 
 function getColor(value, max) {
@@ -280,7 +280,7 @@ async function drillRegionFromRanking(regionId) {
   updateBreadcrumb(regionName, null);
   loadDistinct('kato_rainame');
   await refreshKPI();
-  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadCatRegions(), loadUncovered(), loadHelpPresence()]);
+  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadCatRegions(), loadUncovered(), loadHelpPresence(), loadPayTypesTop()]);
 }
 
 async function drillRegion(regionId) {
@@ -323,7 +323,7 @@ async function drillRegion(regionId) {
   updateBreadcrumb(regionName, null);
   loadDistinct('kato_rainame');
   await refreshKPI();
-  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadCatRegions(), loadUncovered(), loadHelpPresence()]);
+  await Promise.all([loadTable(1), loadSummary(), loadCoverageGroups(), loadCatRegions(), loadUncovered(), loadHelpPresence(), loadPayTypesTop()]);
 }
 
 async function selectRaion(raionId) {
@@ -334,6 +334,7 @@ async function selectRaion(raionId) {
   updateBreadcrumb(regionName, raionName);
   await refreshKPI();
   await loadTable(1);
+  loadPayTypesTop();
   // ranking stays on raion list when a raion is selected
 }
 
@@ -365,6 +366,7 @@ function goBack() {
   loadCatRegions();
   loadUncovered();
   loadHelpPresence();
+  loadPayTypesTop();
 }
 
 function goBackFromRanking() {
@@ -383,6 +385,7 @@ function goBackFromRanking() {
   loadCatRegions();
   loadUncovered();
   loadHelpPresence();
+  loadPayTypesTop();
   requestAnimationFrame(() => window.scrollTo({ top: savedScroll, behavior: 'instant' }));
 }
 
@@ -406,9 +409,8 @@ async function refreshKPI() {
   animateCounter('kpi-recipients',  data.unique_recipients,  v => formatInt(v));
   animateCounter('kpi-help-types',  data.help_type_count || 0,  v => formatInt(v));
   animateCounter('kpi-people-cats', data.people_cat_count || 0, v => formatInt(v));
-  renderGenderChart(data.male_count || 0, data.female_count || 0);
+  renderGenderAgeBar(data.male_count || 0, data.female_count || 0, data.age || {});
   renderSduChart(data.sdu || {});
-  renderAgeChart(data.age || {});
 }
 
 let genderChart = null;
@@ -546,6 +548,98 @@ function renderAgeChart(age) {
       },
     },
   });
+}
+
+/* ── Mid-panel charts ── */
+function fmtMln(v) {
+  if (!v) return '0';
+  if (v >= 1e9) return `${(v/1e9).toFixed(1).replace('.', ',')} млрд`;
+  if (v >= 1e6) return `${(v/1e6).toFixed(1).replace('.', ',')} млн`;
+  if (v >= 1e3) return `${Math.round(v/1e3)} тыс`;
+  return `${Math.round(v)}`;
+}
+
+const GA_AGE_META = [
+  { key: 'до 18', label: 'до 18 лет', color: '#a29bfe' },
+  { key: '18-39', label: '18–39 лет',  color: '#74b9ff' },
+  { key: '40-59', label: '40–59 лет',  color: '#00b894' },
+  { key: '60+',   label: '60+ лет',    color: '#fdcb6e' },
+];
+
+function renderGenderAgeBar(male, female, age) {
+  const el = document.getElementById('gender-age-chart');
+  if (!el) return;
+  const total = male + female;
+  const fPct = total > 0 ? Math.round(female / total * 100) : 50;
+  const mPct = 100 - fPct;
+  const ageTotal = GA_AGE_META.reduce((s, m) => s + (age[m.key] || 0), 0);
+  el.innerHTML = `
+    <div class="ga-gender-labels">
+      <span class="ga-female-txt">Женщины</span>
+      <span class="ga-male-txt">Мужчины</span>
+    </div>
+    <div class="ga-gender-bar-outer">
+      <div class="ga-bar-f" style="width:${fPct}%"></div>
+      <div class="ga-bar-m" style="width:${mPct}%"></div>
+    </div>
+    <div class="ga-gender-pcts">
+      <span class="ga-female-txt">${fPct}%</span>
+      <span class="ga-male-txt">${mPct}%</span>
+    </div>
+    <div class="ga-age-hdr">Возрастные группы</div>
+    ${GA_AGE_META.map(m => {
+      const cnt = age[m.key] || 0;
+      const pct = ageTotal > 0 ? Math.round(cnt / ageTotal * 100) : 0;
+      return `<div class="ga-age-row">
+        <span class="ga-age-lbl">${m.label}</span>
+        <div class="ga-age-bar-wrap"><div class="ga-age-bar" style="width:${pct}%;background:${m.color}"></div></div>
+        <span class="ga-age-pct">${pct}%</span>
+      </div>`;
+    }).join('')}`;
+}
+
+function renderRegionActivity() {
+  const el = document.getElementById('region-activity-chart');
+  if (!el) return;
+  const totalTypes = presenceColumns.length || 14;
+  const rows = presenceRows
+    .filter(r => !r.is_total)
+    .sort((a, b) => (b.mini?.vidy || 0) - (a.mini?.vidy || 0));
+  const top = rows.slice(0, 6);
+  const rest = rows.slice(6);
+  const items = [...top];
+  if (rest.length > 0) items.push({ name: `${rest.length} регионов`, mini: { vidy: 0 }, _dim: true });
+  el.innerHTML = items.map(r => {
+    const vidy = r.mini?.vidy || 0;
+    const pct = totalTypes > 0 ? (vidy / totalTypes * 100) : 0;
+    return `<div class="ra-row">
+      <span class="ra-name" title="${r.name || ''}">${r.name || '—'}</span>
+      <div class="ra-bar-wrap"><div class="ra-bar" style="width:${pct}%;opacity:${r._dim ? 0.28 : 1}"></div></div>
+      <span class="ra-val">${vidy}/${totalTypes}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderPayTypesTop(rows) {
+  const el = document.getElementById('paytypes-top-chart');
+  if (!el) return;
+  if (!rows || !rows.length) { el.innerHTML = '<div class="pt-empty">Нет данных</div>'; return; }
+  el.innerHTML = `<div class="pt-header"><span>Вид помощи</span><span>Сумма</span></div>` +
+    rows.map(r => {
+      const name = stripHelpPrefix(r.name);
+      return `<div class="pt-row">
+        <span class="pt-name" title="${r.name}">${name}</span>
+        <span class="pt-sum">${fmtMln(r.total)}</span>
+      </div>`;
+    }).join('');
+}
+
+async function loadPayTypesTop() {
+  const params = new URLSearchParams();
+  if (currentRaion) params.set('raion_id', currentRaion);
+  else if (currentRegion) params.set('region_id', currentRegion);
+  const rows = await fetch(`/api/paytypes-top?${params}`).then(r => r.json());
+  renderPayTypesTop(rows);
 }
 
 let coverageData = [];
@@ -745,6 +839,7 @@ async function loadHelpPresence() {
   presenceRows.forEach(r => { if (r.id != null) presenceById[r.id] = r; });
   maxEntitledVidy = Math.max(1, ...presenceRows.filter(r => !r.is_total).map(r => r.mini?.vidy || 0));
   renderHelpPresence();
+  renderRegionActivity();
   // refresh map labels + fill colours now that entitlement data is available
   if (map && labelsLayer) {
     if (currentRegion) { renderRaionLabels(); raionsLayer?.setStyle(raionStyle); }
@@ -1224,7 +1319,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // KPI chart tabs (Пол / Благосостояние / Возраст)
+  // Mid-panel tabs (Активность регионов / Топ видов помощи)
+  document.querySelectorAll('.mid-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.mid-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.mid-tab-pane').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      const pane = document.getElementById(`mtab-${btn.dataset.mtab}`);
+      if (pane) pane.classList.add('active');
+    });
+  });
+
+  // KPI chart tabs (Благосостояние)
   document.querySelectorAll('.kpi-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.kpi-tab-btn').forEach(b => b.classList.remove('active'));

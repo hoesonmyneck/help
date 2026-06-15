@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>МГП</title>
+  <title>ЕЦП «Меры государственной поддержки»</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
 <header>
-  <h1>МГП</h1>
+  <h1>ЕЦП «Меры государственной поддержки»</h1>
   <div class="breadcrumb" id="breadcrumb">
     <span onclick="goBack()">Казахстан</span>
   </div>
@@ -46,22 +46,32 @@
     </div>
 
     <div class="kpi-card kpi-charts-tabs">
-      <div class="kpi-tabs-bar">
-        <button type="button" class="kpi-tab-btn active" data-ktab="sdu">Благосостояние</button>
-        <button type="button" class="kpi-tab-btn" data-ktab="gender">Пол</button>
-        <button type="button" class="kpi-tab-btn" data-ktab="age">Возраст</button>
-      </div>
+      <div class="kpi-sdu-label">Уровень благосостояния по ЦКС</div>
       <div class="kpi-tab-pane active" id="ktab-sdu">
         <div class="kpi-chart-area"><div class="sdu-chart-wrap"><canvas id="sdu-chart"></canvas></div></div>
         <div class="sdu-legend" id="sdu-legend"></div>
       </div>
-      <div class="kpi-tab-pane" id="ktab-gender">
-        <div class="kpi-chart-area"><div class="sdu-chart-wrap"><canvas id="gender-chart"></canvas></div></div>
-        <div class="sdu-legend" id="gender-legend"></div>
+    </div>
+  </div>
+
+  <!-- Mid Panel: Gender/Age + Region Activity / Pay Types Top -->
+  <div class="mid-panel">
+    <div class="mid-card">
+      <div class="mid-chart-title">Распределение по полу / возрасту</div>
+      <div id="gender-age-chart" class="ga-chart"></div>
+    </div>
+    <div class="mid-card mid-flex-card">
+      <div class="mid-tabs-bar">
+        <button type="button" class="mid-tab-btn active" data-mtab="regions">Активность регионов</button>
+        <button type="button" class="mid-tab-btn" data-mtab="paytypes">Топ видов помощи</button>
       </div>
-      <div class="kpi-tab-pane" id="ktab-age">
-        <div class="kpi-chart-area"><div class="sdu-chart-wrap"><canvas id="age-chart"></canvas></div></div>
-        <div class="sdu-legend" id="age-legend"></div>
+      <div class="mid-tab-pane active" id="mtab-regions">
+        <div class="mid-chart-title">Активность по регионам (виды/14)</div>
+        <div id="region-activity-chart"></div>
+      </div>
+      <div class="mid-tab-pane" id="mtab-paytypes">
+        <div class="mid-chart-title">Виды помощи — топ по суммам</div>
+        <div id="paytypes-top-chart"></div>
       </div>
     </div>
   </div>

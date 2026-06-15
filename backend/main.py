@@ -8,7 +8,7 @@ from database import engine, Payment
 from load_data import (load_excel, load_reference_data,
                        region_help_ids, raion_help_ids,
                        all_region_katos, pay_type_names, REGION_NAMES,
-                       raion_names_ref, settings_rows, settings_pay_names)
+                       raion_names_ref, raion_reg_ref, settings_rows, settings_pay_names)
 import os
 
 
@@ -25,6 +25,13 @@ app = FastAPI(lifespan=lifespan)
 def get_db():
     with Session(engine) as session:
         yield session
+
+
+def _all_raions_for_region(region_id, db_katos: set[str]) -> list[str]:
+    """All raion kato strings for a region: reference RAION.xlsx ∪ DB records."""
+    ref = {d for d, r in raion_reg_ref.items() if r == str(region_id)}
+    combined = ref | db_katos
+    return sorted(combined, key=lambda k: (int(k) if k.isdigit() else 0, k))
 
 
 def build_filter(q, region_id, raion_id):
@@ -56,12 +63,10 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None)):
 
         from sqlalchemy import case as sa_case
         age_group = sa_case(
-            (Payment.vozrast < 18, 'до18'),
-            (Payment.vozrast < 26, '18-25'),
-            (Payment.vozrast < 36, '25-35'),
-            (Payment.vozrast < 46, '35-45'),
-            (Payment.vozrast < 56, '45-55'),
-            else_='55+'
+            (Payment.vozrast < 18, 'до 18'),
+            (Payment.vozrast < 40, '18-39'),
+            (Payment.vozrast < 60, '40-59'),
+            else_='60+'
         )
         age_rows = (
             base.with_entities(age_group, func.count(Payment.id))
@@ -314,13 +319,18 @@ def summary(region_id: int = Query(None)):
                 paid_max.label("max_sum"),
             ).filter(Payment.kato_region == region_id).group_by(Payment.kato_raion, Payment.kato_rainame).all()
 
+            db_dict = {str(r.kato_raion): r for r in rows}
+            all_dis = _all_raions_for_region(region_id, set(db_dict.keys()))
             result = []
-            for r in rows:
-                ts = float(r.total_sum or 0); ms = float(r.max_sum or 0)
+            for d in all_dis:
+                r = db_dict.get(d)
+                ts = float(r.total_sum or 0) if r else 0.0
+                ms = float(r.max_sum or 0) if r else 0.0
+                name = (r.kato_rainame if r else raion_names_ref.get(d) or f'Район {d}')
                 result.append({
-                    "id": r.kato_raion, "name": r.kato_rainame,
-                    "help_types": len(raion_help_ids.get(str(r.kato_raion), set())),
-                    "cat_count": r.cat_count, "total_sum": round(ts, 2),
+                    "id": int(d) if d.isdigit() else d, "name": name,
+                    "help_types": len(raion_help_ids.get(d, set())),
+                    "cat_count": r.cat_count if r else 0, "total_sum": round(ts, 2),
                     "max_sum": round(ms, 2), "pct": pct(ts, ms),
                 })
 
@@ -375,7 +385,9 @@ def coverage_groups(region_id: int = Query(None)):
             for row in covered_rows:
                 covered_map.setdefault(str(row.kato_raion), {})[row.pay_type_id] = row.covered
 
-            kato_list = sorted(name_map.keys(), key=lambda k: int(k) if k.isdigit() else k)
+            kato_list = _all_raions_for_region(region_id, set(name_map.keys()))
+            for d in kato_list:
+                name_map.setdefault(d, raion_names_ref.get(d) or f'Район {d}')
 
         result = []
         for kato in kato_list:
@@ -507,7 +519,8 @@ def help_presence(region_id: int = Query(None)):
         dis_names, dis_people, dis_sum = {}, {}, {}
         for r in pay_rows:
             d = str(r[0]); dis_names[d] = r[1]; dis_people[d] = r[2]; dis_sum[d] = float(r[3] or 0)
-        for d in dis_pay:
+        all_dis = _all_raions_for_region(region_id, set(dis_names.keys()) | set(dis_pay.keys()))
+        for d in all_dis:
             dis_names.setdefault(d, raion_names_ref.get(d) or f"Район {d}")
 
         reg_people = db.query(func.count(distinct(Payment.sicid))) \
@@ -519,7 +532,7 @@ def help_presence(region_id: int = Query(None)):
         for s in dis_cat.values(): reg_cat_all |= s
 
         body = []
-        for d in dis_names:
+        for d in all_dis:
             present = dis_pay.get(d, set())
             body.append({
                 'id': int(d) if d.isdigit() else d,
@@ -644,17 +657,20 @@ def uncovered_cats(region_id: int = Query(None)):
             rows = db.query(Payment.kato_raion, Payment.kato_rainame, Payment.cat_type)\
                      .filter(Payment.kato_region == region_id)\
                      .filter(Payment.cat_type.isnot(None)).distinct().all()
-            covered_map = {}
+            covered_map: dict[str, dict] = {}
             for kr, name, cat in rows:
-                g = covered_map.setdefault(kr, {"name": name, "cats": set()})
+                g = covered_map.setdefault(str(kr), {"name": name, "cats": set()})
                 g["cats"].add(cat)
 
+            all_dis = _all_raions_for_region(region_id, set(covered_map.keys()))
             result = []
-            for kato, info in covered_map.items():
-                uncovered = sorted(all_cats - info["cats"])
+            for kato in all_dis:
+                info = covered_map.get(kato)
+                name = info["name"] if info else raion_names_ref.get(kato) or f'Район {kato}'
+                uncovered = sorted(all_cats - (info["cats"] if info else set()))
                 result.append({
-                    "id": kato,
-                    "name": info["name"],
+                    "id": int(kato) if kato.isdigit() else kato,
+                    "name": name,
                     "uncovered_count": len(uncovered),
                     "uncovered_cats": uncovered,
                 })
@@ -721,6 +737,27 @@ def breakdown(
                 for r in rows
             ],
         }
+
+
+@app.get("/api/paytypes-top")
+def paytypes_top(region_id: int = Query(None), raion_id: int = Query(None)):
+    with Session(engine) as db:
+        q = db.query(
+            Payment.pay_type,
+            func.sum(Payment.dec_pay_sum).label("total_sum"),
+        )
+        q = build_filter(q, region_id, raion_id)
+        q = q.filter(Payment.pay_type.isnot(None), Payment.dec_pay_sum.isnot(None))
+        q = q.group_by(Payment.pay_type)
+        q = q.order_by(func.sum(Payment.dec_pay_sum).desc())
+        rows = q.all()
+        top = rows[:6]
+        rest = rows[6:]
+        result = [{"name": r.pay_type, "total": round(float(r.total_sum or 0), 2)} for r in top]
+        if rest:
+            rest_sum = sum(float(r.total_sum or 0) for r in rest)
+            result.append({"name": f"Прочие ({len(rest)} видов)", "total": round(rest_sum, 2)})
+        return result
 
 
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static"), html=True), name="static")
