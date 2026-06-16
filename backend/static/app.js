@@ -75,8 +75,9 @@ function showLogin() {
   ov.className = 'auth-overlay';
   ov.innerHTML = `
     <form class="auth-card" id="auth-form">
+      <div class="auth-logo">🏛️</div>
       <div class="auth-title">Анализ по мерам государственной поддержке МИО</div>
-      <div class="auth-sub">Вход в систему</div>
+      <div class="auth-sub">Войдите в систему, чтобы продолжить</div>
       <input type="text" id="auth-login" placeholder="Логин" autocomplete="username" autofocus>
       <input type="password" id="auth-pass" placeholder="Пароль" autocomplete="current-password">
       <div class="auth-error" id="auth-error"></div>
@@ -181,31 +182,29 @@ async function init() {
     if (el) el.textContent = `данные актуализированы ${dd}.${mm}.${d.getFullYear()}`;
   })();
 
+  // Map legend
+  const mapLegend = L.control({ position: 'bottomright' });
+  mapLegend.onAdd = function() {
+    const div = L.DomUtil.create('div', 'map-legend');
+    div.innerHTML = `
+      <div class="ml-item"><span class="ml-dot" style="background:#c0392b"></span>0 видов помощи</div>
+      <div class="ml-item"><span class="ml-dot" style="background:#e67e22"></span>1–4 вида</div>
+      <div class="ml-item"><span class="ml-dot" style="background:#27ae60"></span>5 и более</div>`;
+    return div;
+  };
+  mapLegend.addTo(map);
+
   renderRegions();
   await refreshKPI();
   await Promise.all([loadSummary(), loadHelpPresence(), loadGapAnalysis()]);
 }
 
-function getColor(value, max) {
-  if (!max || max === 0) return 'rgba(15,22,58,0.85)';
-  const t = Math.min(value / max, 1);
-  // deep indigo → royal blue → vivid blue → cyan → teal-mint
-  const stops = [
-    [15, 22, 58],
-    [24, 60, 160],
-    [48, 120, 220],
-    [30, 190, 200],
-    [0,  220, 180],
-  ];
-  const seg = t * (stops.length - 1);
-  const lo = Math.floor(seg), hi = Math.min(lo + 1, stops.length - 1);
-  const f = seg - lo;
-  const [r, g, b] = stops[lo].map((v, i) => Math.round(v + (stops[hi][i] - v) * f));
-  return `rgba(${r},${g},${b},0.88)`;
+function getColor(vidy) {
+  if (vidy === 0)  return '#c0392b';
+  if (vidy <= 4)   return '#e67e22';
+  return '#27ae60';
 }
 
-// Map fill is driven by the number of entitled help types (x in "x/y"):
-// 0 → standard blue, higher → toward the teal/green high end.
 let maxEntitledVidy = 1;
 
 function geoVidy(id) {
@@ -214,7 +213,7 @@ function geoVidy(id) {
 
 function regionStyle(feature) {
   return {
-    fillColor: getColor(geoVidy(feature.properties.id_reg), maxEntitledVidy),
+    fillColor: getColor(geoVidy(feature.properties.id_reg)),
     weight: 1,
     color: '#3a5090',
     fillOpacity: 0.75,
@@ -223,7 +222,7 @@ function regionStyle(feature) {
 
 function raionStyle(feature) {
   return {
-    fillColor: getColor(geoVidy(feature.properties.id_rai), maxEntitledVidy),
+    fillColor: getColor(geoVidy(feature.properties.id_rai)),
     weight: 1,
     color: '#3a5090',
     fillOpacity: 0.75,
@@ -507,7 +506,6 @@ const SDU_META = {
 function renderSduChart(sdu) {
   const keys = ['A', 'B', 'C', 'D', 'E'];
   const values = keys.map(k => sdu[k] || 0);
-  const colors = keys.map(k => SDU_META[k].color);
   const total = values.reduce((a, b) => a + b, 0);
 
   // Legend — clickable for filtering
@@ -532,22 +530,47 @@ function renderSduChart(sdu) {
   const ctx = document.getElementById('sdu-chart').getContext('2d');
   if (sduChart) sduChart.destroy();
   sduChart = new Chart(ctx, {
-    type: 'doughnut',
+    type: 'bar',
     data: {
-      labels: keys.map(k => SDU_META[k].label),
-      datasets: [{ data: values, backgroundColor: colors, borderWidth: 0, hoverOffset: 6 }],
+      labels: keys,
+      datasets: [{
+        data: values,
+        backgroundColor: keys.map(k => SDU_META[k].color + (currentSdu && currentSdu !== k ? '66' : '')),
+        borderColor: keys.map(k => currentSdu === k ? '#fff' : 'transparent'),
+        borderWidth: 2,
+        borderRadius: 4,
+      }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      cutout: '62%',
       plugins: {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: ctx => ` ${ctx.label}: ${formatInt(ctx.raw)}`,
+            title: c => SDU_META[c[0].label]?.label || c[0].label,
+            label: c => ` ${formatInt(c.raw)}`,
           },
         },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: '#fff', font: { weight: '700' } },
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,0.07)' },
+          ticks: { color: '#aaa', callback: v => fmtCompact(v) || String(v) },
+        },
+      },
+      onClick(e, elements) {
+        if (elements.length) {
+          const k = keys[elements[0].index];
+          if (currentSdu === k) clearSduFilter(); else setSduFilter(k);
+        }
+      },
+      onHover(_e, elements, chart) {
+        chart.canvas.style.cursor = elements.length ? 'pointer' : 'default';
       },
     },
   });
@@ -819,7 +842,7 @@ function renderHelpPresence() {
        <th class="prs-geo-hdr">${geoLabel}</th>
        ${miniHdr('vidy', 'Виды помощи', '', 'Виды помощи, которые должны оказываться')}
        ${miniHdr('lyudei', 'Людей', '', 'Количество людей, которым оказывается услуга')}
-       ${miniHdr('summa', 'Сумма', 'prs-mini-sum', 'Макс. выплата')}
+       ${miniHdr('summa', 'Сумма', 'prs-mini-sum', 'Фактически выплачено')}
        ${cols}
      </tr>`;
 
@@ -1202,11 +1225,7 @@ async function loadGapAnalysis() {
 
 function updateGapKpi() {
   const elAn = document.getElementById('kpi-gap-anomaly');
-  const elMx = document.getElementById('kpi-gap-max');
-  const elNm = document.getElementById('kpi-gap-normal');
-  if (elAn) elAn.textContent = _gapData.length;
-  if (elMx) elMx.textContent = _gapData.length ? '×' + Math.max(..._gapData.map(d => d.ratio)) : '—';
-  if (elNm) elNm.textContent = _gapTotal - _gapData.length;
+  if (elAn) elAn.textContent = _gapData.length || '0';
 
   const list = document.getElementById('gap-side-list');
   if (!list) return;
@@ -1245,6 +1264,8 @@ function updateGapKpi() {
 function renderGapAccordion() {
   const list = document.getElementById('gap-list');
   if (!list) return;
+  Object.values(_gapCharts).forEach(c => { try { c.destroy(); } catch(_) {} });
+  Object.keys(_gapCharts).forEach(k => delete _gapCharts[k]);
   if (!_gapData.length) {
     list.innerHTML = '<div class="no-data">Аномальных разрывов не обнаружено</div>';
     return;
@@ -1291,6 +1312,10 @@ function renderGapChart(idx) {
   const medianIdx = Math.floor(values.length / 2);
   const median = values[medianIdx];
 
+  const isLight = document.documentElement.dataset.theme === 'light';
+  const tickColor = isLight ? '#202124' : '#ffffff';
+  const gridColor = isLight ? 'rgba(60,64,67,0.12)' : 'rgba(128,128,128,0.12)';
+
   const labels = districts.map(d => `${d.raion} (${(d.region || '').replace(/\s+ОБЛАСТЬ$/i, '')})`);
   const colors = values.map(v => {
     const t = maxVal > 0 ? v / maxVal : 0;
@@ -1324,15 +1349,15 @@ function renderGapChart(idx) {
       },
       scales: {
         x: {
-          grid: { color: 'rgba(128,128,128,0.12)' },
+          grid: { color: gridColor },
           ticks: {
-            color: 'var(--tx-dim)',
+            color: tickColor,
             callback: v => v >= 1_000_000 ? (v/1_000_000).toFixed(1)+'M'
                         : v >= 1000 ? Math.round(v/1000)+'K' : v
           }
         },
         y: {
-          ticks: { color: '#ffffff', font: { size: 11 } }
+          ticks: { color: tickColor, font: { size: 11 } }
         }
       }
     }
@@ -1617,12 +1642,10 @@ function initPayTooltip() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  const savedTheme = localStorage.getItem('theme') || 'dark';
-  if (savedTheme === 'light') {
-    document.documentElement.dataset.theme = 'light';
-    const sw = document.getElementById('theme-switch');
-    if (sw) sw.checked = true;
-  }
+  const savedTheme = localStorage.getItem('theme') || 'light';
+  document.documentElement.dataset.theme = savedTheme === 'light' ? 'light' : '';
+  const sw = document.getElementById('theme-switch');
+  if (sw) sw.checked = savedTheme === 'light';
 
   // Pseudo-auth gate — show login until correct credentials are entered
   if (!isAuthed()) { showLogin(); return; }

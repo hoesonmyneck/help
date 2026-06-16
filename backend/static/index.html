@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,7 +11,7 @@
 
 <header>
   <div class="header-title-block">
-    <h1>Единая цифровая платформа "Анализ по мерам государственной поддержке МИО"</h1>
+    <h0>Единая цифровая платформа "Анализ по мерам государственной поддержке МИО"</h0>
     <div class="header-date" id="header-date"></div>
   </div>
   <div class="breadcrumb" id="breadcrumb">
@@ -30,17 +30,17 @@
   <div class="kpi-panel">
 
     <div class="kpi-numbers-row">
-      <div class="kpi-card kpi-wide">
-        <div class="label">Сумма</div>
-        <div class="value accent" id="kpi-dec">—</div>
+      <div class="kpi-card">
+        <div class="label">Видов помощи</div>
+        <div class="value accent" id="kpi-help-types">—</div>
       </div>
       <div class="kpi-card">
         <div class="label">Услугополучатели</div>
         <div class="value" id="kpi-recipients">—</div>
       </div>
-      <div class="kpi-card">
-        <div class="label">Видов помощи</div>
-        <div class="value accent" id="kpi-help-types">—</div>
+      <div class="kpi-card kpi-wide">
+        <div class="label">Сумма</div>
+        <div class="value accent" id="kpi-dec">—</div>
       </div>
     </div>
 
@@ -63,20 +63,10 @@
   <!-- Gap Side Panel -->
   <div class="gap-side-panel" id="gap-side-panel">
     <div class="kpi-card gsp-summary-card">
-      <div class="label">Разрывы по выплатам</div>
-      <div class="gsp-summary-row">
-        <div class="gsp-summary-item">
-          <div class="value" id="kpi-gap-anomaly">—</div>
-          <div class="gsp-sub-lbl">с разрывом</div>
-        </div>
-        <div class="gsp-summary-item">
-          <div class="value" id="kpi-gap-max">—</div>
-          <div class="gsp-sub-lbl">макс разрыв</div>
-        </div>
-        <div class="gsp-summary-item">
-          <div class="value" id="kpi-gap-normal">—</div>
-          <div class="gsp-sub-lbl">без разрыва</div>
-        </div>
+      <div class="label">Разрывы по выплатам между районами</div>
+      <div class="gsp-anomaly-row">
+        <span class="value accent" id="kpi-gap-anomaly">—</span>
+        <span class="gsp-sub-lbl">критичных аномалий</span>
       </div>
     </div>
     <div class="gsp-list" id="gap-side-list"></div>

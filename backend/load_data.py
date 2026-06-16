@@ -181,7 +181,7 @@ def load_excel():
         if count > 0:
             return
 
-    path = os.path.join(os.path.dirname(__file__), "data", "cbdiapp_for_qliknew.xlsx")
+    path = os.path.join(os.path.dirname(__file__), "data", "new2.xlsx")
     wb = load_workbook(path, read_only=True, data_only=True)
     ws = wb.active
 

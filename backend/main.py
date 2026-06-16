@@ -326,7 +326,7 @@ def summary(region_id: int = Query(None), sdu_filter: str = Query(None), gender_
             nat_cat = sdu_q(db.query(func.count(distinct(Payment.cat_type_id)))).scalar() or 0
             nat_total = float(sdu_q(db.query(func.sum(Payment.dec_pay_sum))).scalar() or 0)
             nat_max = float(sdu_q(db.query(paid_max)).scalar() or 0)
-            nat_help = len(set().union(*region_help_ids.values())) if region_help_ids else 0
+            nat_help = len([p for p, n in settings_pay_names.items() if not _is_excluded(n)])
             total = {
                 "id": None, "name": "Республика Казахстан", "is_total": True,
                 "help_types": nat_help, "cat_count": nat_cat,
@@ -491,17 +491,17 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
 
             pay_rows = af(db.query(Payment.kato_region,
                                 func.count(distinct(Payment.sicid)),
-                                func.sum(Payment.max_pay_sum))).group_by(Payment.kato_region).all()
+                                func.sum(Payment.dec_pay_sum))).group_by(Payment.kato_region).all()
             geo_people = {str(r[0]): r[1] for r in pay_rows}
             geo_sum = {str(r[0]): float(r[2] or 0) for r in pay_rows}
             name_map = {str(r.kato_region): r.kato_regname
                         for r in db.query(Payment.kato_region, Payment.kato_regname).distinct().all()}
             nat_people = af(db.query(func.count(distinct(Payment.sicid)))).scalar() or 0
-            nat_sum = float(af(db.query(func.sum(Payment.max_pay_sum))).scalar() or 0)
+            nat_sum = float(af(db.query(func.sum(Payment.dec_pay_sum))).scalar() or 0)
 
-            # Max entitled sum per (region, pay_type_id) from actual payments
+            # Actual payment sum per (region, pay_type_id)
             mx_rows = af(db.query(Payment.kato_region, Payment.pay_type_id,
-                               func.sum(Payment.max_pay_sum).label("tot_mx")) \
+                               func.sum(Payment.dec_pay_sum).label("tot_mx")) \
                         .filter(Payment.pay_type_id.isnot(None))) \
                         .group_by(Payment.kato_region, Payment.pay_type_id).all()
             geo_pid_max: dict = defaultdict(dict)
@@ -518,7 +518,7 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
                 body.append({
                     'id': int(kato) if kato.isdigit() else kato,
                     'name': REGION_NAMES.get(kato) or name_map.get(kato) or kato,
-                    'presence': [{"p": pid in present,
+                    'presence': [{"p": geo_pid_max.get(kato, {}).get(pid, 0.0) > 0,
                                   "mx": geo_pid_max.get(kato, {}).get(pid, 0.0)}
                                  for pid, _ in pay_defs],
                     'pay_cat_lists': [sorted(geo_pay_cat.get(kato, {}).get(pid, ())) for pid, _ in pay_defs],
@@ -534,10 +534,10 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
 
             total = {
                 'id': None, 'name': 'Республика Казахстан', 'is_total': True,
-                'presence': [{"p": pid in nat_pay, "mx": nat_pid_max.get(pid, 0.0)}
+                'presence': [{"p": nat_pid_max.get(pid, 0.0) > 0, "mx": nat_pid_max.get(pid, 0.0)}
                              for pid, _ in pay_defs],
                 'pay_cat_lists': [sorted(nat_pay_cat.get(pid, ())) for pid, _ in pay_defs],
-                'mini': {'vidy': len(nat_pay), 'kategorii': len(nat_cat),
+                'mini': {'vidy': len(pay_defs), 'kategorii': len(nat_cat),
                          'lyudei': nat_people, 'summa': _fmt_money(nat_sum), 'summa_val': nat_sum},
             }
             return {'columns': columns, 'rows': [total] + body, 'level': 'region'}
@@ -555,7 +555,7 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
 
         pay_rows = af(db.query(Payment.kato_raion, Payment.kato_rainame,
                             func.count(distinct(Payment.sicid)),
-                            func.sum(Payment.max_pay_sum)) \
+                            func.sum(Payment.dec_pay_sum)) \
                      .filter(Payment.kato_region == region_id)) \
                      .group_by(Payment.kato_raion, Payment.kato_rainame).all()
         dis_names, dis_people, dis_sum = {}, {}, {}
@@ -567,15 +567,15 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
 
         reg_people = af(db.query(func.count(distinct(Payment.sicid))) \
                        .filter(Payment.kato_region == region_id)).scalar() or 0
-        reg_sum = float(af(db.query(func.sum(Payment.max_pay_sum))
+        reg_sum = float(af(db.query(func.sum(Payment.dec_pay_sum))
                         .filter(Payment.kato_region == region_id)).scalar() or 0)
         reg_pay_all, reg_cat_all = set(), set()
         for s in dis_pay.values(): reg_pay_all |= s
         for s in dis_cat.values(): reg_cat_all |= s
 
-        # Max entitled sum per (raion, pay_type_id) from actual payments
+        # Actual payment sum per (raion, pay_type_id)
         mx_rows2 = af(db.query(Payment.kato_raion, Payment.pay_type_id,
-                            func.sum(Payment.max_pay_sum).label("tot_mx")) \
+                            func.sum(Payment.dec_pay_sum).label("tot_mx")) \
                      .filter(Payment.kato_region == region_id,
                              Payment.pay_type_id.isnot(None))) \
                      .group_by(Payment.kato_raion, Payment.pay_type_id).all()
@@ -593,7 +593,7 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
             body.append({
                 'id': int(d) if d.isdigit() else d,
                 'name': dis_names[d],
-                'presence': [{"p": pid in present,
+                'presence': [{"p": dis_pid_max.get(d, {}).get(pid, 0.0) > 0,
                               "mx": dis_pid_max.get(d, {}).get(pid, 0.0)}
                              for pid, _ in pay_defs],
                 'pay_cat_lists': [sorted(dis_pay_cat.get(d, {}).get(pid, ())) for pid, _ in pay_defs],
@@ -610,7 +610,7 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
         total = {
             'id': None, 'name': REGION_NAMES.get(str(region_id)) or f'Регион {region_id}',
             'is_total': True,
-            'presence': [{"p": pid in reg_pay_all, "mx": reg_pid_max.get(pid, 0.0)}
+            'presence': [{"p": reg_pid_max.get(pid, 0.0) > 0, "mx": reg_pid_max.get(pid, 0.0)}
                          for pid, _ in pay_defs],
             'pay_cat_lists': [sorted(reg_pay_cat.get(pid, ())) for pid, _ in pay_defs],
             'mini': {'vidy': len(reg_pay_all), 'kategorii': len(reg_cat_all),
