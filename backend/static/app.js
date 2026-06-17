@@ -508,7 +508,9 @@ function renderSduChart(sdu) {
   const values = keys.map(k => sdu[k] || 0);
   const total = values.reduce((a, b) => a + b, 0);
 
-  // Legend — clickable for filtering
+  const pcts = values.map(v => total ? Math.round(v / total * 100) : 0);
+
+  // Legend — clickable for filtering (percentages now drawn above the bars)
   const legend = document.getElementById('sdu-legend');
   legend.innerHTML = keys.map(k => {
     const count = sdu[k] || 0;
@@ -519,13 +521,35 @@ function renderSduChart(sdu) {
       title="${SDU_META[k].label}: ${formatInt(count)} (${pct}%)">
       <span class="sdu-dot" style="background:${SDU_META[k].color}"></span>
       <span class="sdu-leg-label">${SDU_META[k].label}</span>
-      <span class="sdu-leg-val">${pct}%</span>
     </div>`;
   }).join('');
 
   // Show/hide clear button
   const clearBtn = document.getElementById('sdu-clear-btn');
   if (clearBtn) clearBtn.style.display = currentSdu ? 'inline-flex' : 'none';
+
+  const isLight = document.documentElement.dataset.theme === 'light';
+  const tickColor = isLight ? '#202124' : '#ffffff';
+  const axisColor = isLight ? '#5f6368' : '#aaaaaa';
+  const gridColor = isLight ? 'rgba(60,64,67,0.10)' : 'rgba(255,255,255,0.07)';
+
+  // Draws "NN%" centred above each bar
+  const sduPctLabels = {
+    id: 'sduPctLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      const meta = chart.getDatasetMeta(0);
+      ctx.save();
+      ctx.font = "700 11px 'Roboto', sans-serif";
+      ctx.fillStyle = tickColor;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      meta.data.forEach((bar, i) => {
+        ctx.fillText(pcts[i] + '%', bar.x, bar.y - 4);
+      });
+      ctx.restore();
+    }
+  };
 
   const ctx = document.getElementById('sdu-chart').getContext('2d');
   if (sduChart) sduChart.destroy();
@@ -536,14 +560,16 @@ function renderSduChart(sdu) {
       datasets: [{
         data: values,
         backgroundColor: keys.map(k => SDU_META[k].color + (currentSdu && currentSdu !== k ? '66' : '')),
-        borderColor: keys.map(k => currentSdu === k ? '#fff' : 'transparent'),
+        borderColor: keys.map(k => currentSdu === k ? (isLight ? '#202124' : '#fff') : 'transparent'),
         borderWidth: 2,
         borderRadius: 4,
       }],
     },
+    plugins: [sduPctLabels],
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { top: 18 } },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -556,11 +582,11 @@ function renderSduChart(sdu) {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { color: '#fff', font: { weight: '700' } },
+          ticks: { color: tickColor, font: { weight: '700' } },
         },
         y: {
-          grid: { color: 'rgba(255,255,255,0.07)' },
-          ticks: { color: '#aaa', callback: v => fmtCompact(v) || String(v) },
+          grid: { color: gridColor },
+          ticks: { color: axisColor, callback: v => fmtCompact(v) || String(v) },
         },
       },
       onClick(e, elements) {
@@ -698,8 +724,8 @@ function renderGenderAgeBar(male, female, age) {
       <span class="ga-male-txt ga-clickable${gmA}" onclick="setGenderFilter(1)">Мужчины</span>
     </div>
     <div class="ga-gender-bar-outer">
-      <div class="ga-bar-f${gfA}" style="width:${fPct}%" onclick="setGenderFilter(2)" title="Женщины ${fPct}%"></div>
-      <div class="ga-bar-m${gmA}" style="width:${mPct}%" onclick="setGenderFilter(1)" title="Мужчины ${mPct}%"></div>
+      <div class="ga-bar-f${gfA}" style="width:${fPct}%" onclick="setGenderFilter(2)" title="Женщины: ${formatInt(female)} (${fPct}%)"></div>
+      <div class="ga-bar-m${gmA}" style="width:${mPct}%" onclick="setGenderFilter(1)" title="Мужчины: ${formatInt(male)} (${mPct}%)"></div>
     </div>
     <div class="ga-gender-pcts">
       <span class="ga-female-txt ga-clickable${gfA}" onclick="setGenderFilter(2)">${fPct}%</span>
@@ -710,7 +736,7 @@ function renderGenderAgeBar(male, female, age) {
       const cnt = age[m.key] || 0;
       const pct = ageTotal > 0 ? Math.round(cnt / ageTotal * 100) : 0;
       const isActive = currentAgeGroup === m.key;
-      return `<div class="ga-age-row ga-clickable${isActive ? ' ga-filter-active' : ''}" onclick="setAgeFilter('${m.key}')">
+      return `<div class="ga-age-row ga-clickable${isActive ? ' ga-filter-active' : ''}" onclick="setAgeFilter('${m.key}')" title="${m.label}: ${formatInt(cnt)} (${pct}%)">
         <span class="ga-age-lbl">${m.label}</span>
         <div class="ga-age-bar-wrap"><div class="ga-age-bar" style="width:${pct}%;background:${m.color}"></div></div>
         <span class="ga-age-pct">${pct}%</span>
@@ -1324,6 +1350,25 @@ function renderGapChart(idx) {
       : `rgba(220,80,70,${0.35 + 0.65 * (1 - t)})`;
   });
 
+  // Draws the value just past the tip of each horizontal bar
+  const gapValueLabels = {
+    id: 'gapValueLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      const meta = chart.getDatasetMeta(0);
+      ctx.save();
+      ctx.font = "700 10px 'Roboto', sans-serif";
+      ctx.fillStyle = tickColor;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      meta.data.forEach((bar, i) => {
+        const label = fmtCompact(values[i]) || formatNum(values[i]);
+        ctx.fillText(label, bar.x + 6, bar.y);
+      });
+      ctx.restore();
+    }
+  };
+
   _gapCharts[idx] = new Chart(canvas, {
     type: 'bar',
     data: {
@@ -1335,10 +1380,12 @@ function renderGapChart(idx) {
         borderSkipped: false,
       }]
     },
+    plugins: [gapValueLabels],
     options: {
       indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { right: 54 } },
       plugins: {
         legend: { display: false },
         tooltip: {
