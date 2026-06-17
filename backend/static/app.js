@@ -404,6 +404,14 @@ function toggleTheme(isLight) {
         : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
     );
   }
+  // Charts bake tick/label colours at render time → re-render for the new theme
+  refreshKPI();
+  Object.values(_gapCharts).forEach(c => { try { c.destroy(); } catch(_) {} });
+  Object.keys(_gapCharts).forEach(k => delete _gapCharts[k]);
+  _gapData.forEach((_, i) => {
+    const body = document.getElementById(`gap-body-${i}`);
+    if (body && body.style.display !== 'none') renderGapChart(i);
+  });
 }
 
 function goBack() {
