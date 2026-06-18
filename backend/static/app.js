@@ -1551,8 +1551,10 @@ function renderAnUtil(rows) {
   const backBtn = document.getElementById('an-util-back');
   const geoCol  = document.getElementById('an-util-geo-col');
   const titleEl = document.getElementById('an-util-title');
+  const bar     = backBtn ? backBtn.closest('.an-util-bar') : null;
 
   if (_anUtilRegionId != null) {
+    if (bar)      bar.style.display = 'flex';
     if (backBtn)  backBtn.style.display = 'inline-block';
     if (geoCol)   geoCol.textContent = 'Вид помощи';
     if (titleEl)  titleEl.textContent = _anUtilRegionName;
@@ -1569,6 +1571,7 @@ function renderAnUtil(rows) {
       </tr>`;
     }).join('');
   } else {
+    if (bar)      bar.style.display = 'none';
     if (backBtn)  backBtn.style.display = 'none';
     if (geoCol)   geoCol.textContent = 'Регион';
     if (titleEl)  titleEl.textContent = '';
@@ -1596,8 +1599,10 @@ function renderAnUtilRaion(rows) {
   const geoCol  = document.getElementById('an-utilraion-geo-col');
   const regTh   = document.getElementById('an-utilraion-reg-th');
   const titleEl = document.getElementById('an-utilraion-title');
+  const bar     = backBtn ? backBtn.closest('.an-util-bar') : null;
 
   if (_anRaionDrillId != null) {
+    if (bar)      bar.style.display = 'flex';
     if (backBtn)  backBtn.style.display = 'inline-block';
     if (geoCol)   geoCol.textContent = 'Вид помощи';
     if (regTh)    regTh.style.display = 'none';
@@ -1616,6 +1621,7 @@ function renderAnUtilRaion(rows) {
       </tr>`;
     }).join('');
   } else {
+    if (bar)      bar.style.display = 'none';
     if (backBtn)  backBtn.style.display = 'none';
     if (geoCol)   geoCol.textContent = 'Район';
     if (regTh)    regTh.style.display = '';

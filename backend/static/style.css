@@ -1,14 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Google+Sans:wght@400;500;700&display=swap');
 
 :root {
-  --bg-body:    #07091a;
-  --bg-card:    #1a1f2e;
-  --bg-deep:    #1e2740;
-  --bg-deeper:  #161b2c;
-  --bg-hover:   #20283c;
-  --bd-main:    #2a3050;
-  --bd-mid:     #2a3a60;
-  --bd-hi:      #3a4f88;
+  --bg-body:    #141831;
+  --bg-card:    #272d40;
+  --bg-deep:    #2c3552;
+  --bg-deeper:  #222942;
+  --bg-hover:   #2e374e;
+  --bd-main:    #383f63;
+  --bd-mid:     #394a74;
+  --bd-hi:      #4a5f98;
   --tx-main:    #ffffff;
   --tx-dim:     #ffffff;
   --tx-label:   #ffffff;
@@ -153,7 +153,7 @@ html { font-size: 115%; }
 
 body {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  background: linear-gradient(-45deg, #07091a, #0a0d20, #060818, #08101e);
+  background: linear-gradient(-45deg, #141831, #181d38, #12152e, #161e34);
   background-size: 400% 400%;
   animation: bg-drift 24s ease infinite;
   color: var(--tx-main);
@@ -1296,8 +1296,8 @@ th.sort-active { color: var(--ac-blue); }
 
 /* ── Header ── */
 header {
-  background: linear-gradient(135deg, #07091a 0%, #0e1322 50%, #111828 100%);
-  border-bottom: 1px solid rgba(91,138,248,0.18);
+  background: linear-gradient(135deg, #1e2440 0%, #232a48 50%, #262e4e 100%);
+  border-bottom: 1px solid rgba(91,138,248,0.22);
   box-shadow: 0 1px 0 rgba(91,138,248,0.08), 0 4px 28px rgba(0,0,0,0.65);
 }
 header h1 {
@@ -1312,7 +1312,7 @@ header h1 {
 
 /* ── Card glass effect ── */
 .kpi-card {
-  background: linear-gradient(145deg, rgba(20,27,52,0.97) 0%, rgba(13,19,38,0.97) 100%);
+  background: linear-gradient(145deg, rgba(42,50,78,0.97) 0%, rgba(32,40,64,0.97) 100%);
   border: 1px solid rgba(91,138,248,0.1);
   border-radius: 14px;
   box-shadow:
@@ -1387,8 +1387,8 @@ header h1 {
 
 /* ── Table enhancements ── */
 thead th {
-  background: linear-gradient(180deg, #192040 0%, #111830 100%);
-  border-bottom: 1px solid rgba(91,138,248,0.2);
+  background: linear-gradient(180deg, #2c3556 0%, #242c4a 100%);
+  border-bottom: 1px solid rgba(91,138,248,0.24);
   letter-spacing: 0.3px;
 }
 tbody tr {
@@ -1739,7 +1739,7 @@ th.sort-active { color: #8ab4ff !important; }
 }
 
 .mid-card {
-  background: linear-gradient(145deg, rgba(20,27,52,0.97) 0%, rgba(13,19,38,0.97) 100%);
+  background: linear-gradient(145deg, rgba(42,50,78,0.97) 0%, rgba(32,40,64,0.97) 100%);
   border: 1px solid rgba(91,138,248,0.1);
   border-radius: 14px;
   padding: 10px 12px;
