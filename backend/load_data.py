@@ -181,7 +181,7 @@ def load_excel():
         if count > 0:
             return
 
-    path = os.path.join(os.path.dirname(__file__), "data", "new4.xlsx")
+    path = os.path.join(os.path.dirname(__file__), "data", "new5.xlsx")
     wb = load_workbook(path, read_only=True, data_only=True)
     ws = wb.active
 
