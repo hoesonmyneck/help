@@ -64,11 +64,21 @@ const PAY_TYPE_DESCRIPTIONS = {
   'В ВИДЕ ДЕНЕЖНОЙ ПОМОЩИ': 'МИО предоставляют единовременную или периодическую денежную выплату лицам, нуждающимся в социальной поддержке.',
 };
 
-/* ── Pseudo-auth (client-side only) ── */
-const AUTH_USER = 'admin';
-const AUTH_PASS = 'crtr2026';
-function isAuthed() { return sessionStorage.getItem('mgp_auth') === 'ok'; }
-function logout() { sessionStorage.removeItem('mgp_auth'); location.reload(); }
+/* ── Auth (real backend, httponly JWT cookie) ── */
+let CURRENT_USER = null;
+
+async function fetchMe() {
+  try {
+    const r = await fetch('/api/auth/me', { credentials: 'include' });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
+async function logout() {
+  try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
+  location.reload();
+}
 
 function showLogin() {
   const ov = document.createElement('div');
@@ -81,22 +91,269 @@ function showLogin() {
       <input type="text" id="auth-login" placeholder="Логин" autocomplete="username" autofocus>
       <input type="password" id="auth-pass" placeholder="Пароль" autocomplete="current-password">
       <div class="auth-error" id="auth-error"></div>
-      <button type="submit">Войти</button>
+      <button type="submit" id="auth-submit">Войти</button>
     </form>`;
   document.body.appendChild(ov);
   document.getElementById('auth-login').focus();
-  document.getElementById('auth-form').addEventListener('submit', e => {
+  document.getElementById('auth-form').addEventListener('submit', async e => {
     e.preventDefault();
-    const u = document.getElementById('auth-login').value.trim();
-    const p = document.getElementById('auth-pass').value;
-    if (u === AUTH_USER && p === AUTH_PASS) {
-      sessionStorage.setItem('mgp_auth', 'ok');
+    const errEl = document.getElementById('auth-error');
+    const btn = document.getElementById('auth-submit');
+    errEl.textContent = '';
+    const login = document.getElementById('auth-login').value.trim();
+    const password = document.getElementById('auth-pass').value;
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/auth/login', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login, password }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        errEl.textContent = data.detail || 'Ошибка входа';
+        document.getElementById('auth-pass').value = '';
+        btn.disabled = false;
+        return;
+      }
+      if (data.requires_2fa) {
+        errEl.style.color = 'var(--tx-dim)';
+        errEl.textContent = 'Подтвердите вход с помощью ЭЦП…';
+        await runEdsSecondFactor(data.challenge, errEl, btn);
+        return;
+      }
       location.reload();
-    } else {
-      document.getElementById('auth-error').textContent = 'Неверный логин или пароль';
-      document.getElementById('auth-pass').value = '';
+    } catch (err) {
+      errEl.textContent = 'Сеть недоступна';
+      btn.disabled = false;
     }
   });
+}
+
+/* ── ЭЦП второй фактор через NCALayer (Фаза 3) ── */
+const NCALAYER_URLS = ['wss://127.0.0.1:13579/', 'ws://127.0.0.1:14579/'];
+
+function _openNCALayer() {
+  return new Promise((resolve, reject) => {
+    let i = 0;
+    (function tryNext() {
+      if (i >= NCALAYER_URLS.length) return reject(new Error('NCALayer недоступен. Запустите программу NCALayer.'));
+      const ws = new WebSocket(NCALAYER_URLS[i++]);
+      const t = setTimeout(() => { try { ws.close(); } catch (_) {} tryNext(); }, 3000);
+      ws.addEventListener('open',  () => { clearTimeout(t); resolve(ws); });
+      ws.addEventListener('error', () => { clearTimeout(t); try { ws.close(); } catch (_) {} tryNext(); });
+    })();
+  });
+}
+
+async function runEdsSecondFactor(challenge, errEl, btn) {
+  let ws;
+  try {
+    ws = await _openNCALayer();
+  } catch (e) {
+    errEl.style.color = '';
+    errEl.textContent = e.message;
+    if (btn) btn.disabled = false;
+    return;
+  }
+  let handshakeReceived = false;
+
+  function sendSignRequest() {
+    const base64Data = btoa(unescape(encodeURIComponent(challenge)));
+    ws.send(JSON.stringify({
+      module: 'kz.gov.pki.knca.commonUtils',
+      method: 'createCAdESFromBase64',
+      args: ['PKCS12', 'SIGNATURE', base64Data, true],   // attached=true обязателен
+    }));
+  }
+
+  ws.onmessage = async (event) => {
+    const response = JSON.parse(event.data);
+    if (!handshakeReceived && response.result?.version) {
+      handshakeReceived = true;
+      sendSignRequest();
+      return;
+    }
+    if (response.code && response.code !== '200') {
+      errEl.style.color = '';
+      errEl.textContent = response.message || 'Подпись отменена';
+      if (btn) btn.disabled = false;
+      try { ws.close(); } catch (_) {}
+      return;
+    }
+    const signature = response.responseObject ||
+                      (typeof response.result === 'string' ? response.result : null);
+    try { ws.close(); } catch (_) {}
+    if (!signature) {
+      errEl.style.color = '';
+      errEl.textContent = 'Не удалось получить подпись';
+      if (btn) btn.disabled = false;
+      return;
+    }
+    try {
+      const r = await fetch('/api/auth/login-2fa', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challenge, signature }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        errEl.style.color = '';
+        errEl.textContent = data.detail || 'Ошибка проверки ЭЦП';
+        if (btn) btn.disabled = false;
+        return;
+      }
+      location.reload();
+    } catch (err) {
+      errEl.style.color = '';
+      errEl.textContent = 'Сеть недоступна';
+      if (btn) btn.disabled = false;
+    }
+  };
+}
+
+/* ── Админ-панель: управление аккаунтами (Фаза 2) ── */
+function setupAdminPanel() {
+  // Кнопка в шапке (только для админа)
+  const header = document.querySelector('header');
+  const logoutBtn = document.querySelector('.logout-btn');
+  if (header && !document.getElementById('admin-panel-btn')) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'admin-panel-btn';
+    btn.className = 'logout-btn';
+    btn.title = 'Управление аккаунтами';
+    btn.textContent = 'Аккаунты';
+    btn.onclick = openAdminPanel;
+    header.insertBefore(btn, logoutBtn || null);
+  }
+  // Модалка
+  if (!document.getElementById('admin-modal')) {
+    const ov = document.createElement('div');
+    ov.id = 'admin-modal';
+    ov.className = 'rdm-overlay';
+    ov.style.display = 'none';
+    ov.onclick = (e) => { if (e.target === ov) closeAdminPanel(); };
+    ov.innerHTML = `
+      <div class="rdm-box admin-box">
+        <div class="rdm-header">
+          <span>Управление аккаунтами</span>
+          <button type="button" class="rdm-close" onclick="closeAdminPanel()">✕</button>
+        </div>
+        <div class="rdm-body">
+          <form id="admin-create-form" class="admin-form">
+            <div class="admin-form-row">
+              <input type="text" id="admin-new-login" placeholder="Логин (или ИИН для ЭЦП)" autocomplete="off">
+              <input type="text" id="admin-new-pass" placeholder="Пароль" autocomplete="off">
+              <label class="admin-eds-check">
+                <input type="checkbox" id="admin-new-eds"> ЭЦП
+              </label>
+              <select id="admin-new-role">
+                <option value="user">Пользователь</option>
+                <option value="admin">Администратор</option>
+              </select>
+              <button type="submit">Создать</button>
+            </div>
+            <div class="admin-form-err" id="admin-form-err"></div>
+          </form>
+          <table class="rdm-table admin-table">
+            <thead><tr>
+              <th>ID</th><th>Логин</th><th>Роль</th><th class="col-center">ЭЦП</th><th>ФИО</th><th></th>
+            </tr></thead>
+            <tbody id="admin-users-body"></tbody>
+          </table>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    document.getElementById('admin-create-form').addEventListener('submit', adminCreateUser);
+  }
+}
+
+function openAdminPanel() {
+  document.getElementById('admin-modal').style.display = 'flex';
+  loadAdminUsers();
+}
+function closeAdminPanel() {
+  document.getElementById('admin-modal').style.display = 'none';
+}
+
+async function loadAdminUsers() {
+  const body = document.getElementById('admin-users-body');
+  body.innerHTML = `<tr><td colspan="6" class="loading">Загрузка...</td></tr>`;
+  try {
+    const r = await fetch('/api/admin/users', { credentials: 'include' });
+    if (!r.ok) throw new Error();
+    const users = await r.json();
+    body.innerHTML = users.map(u => `
+      <tr>
+        <td>${u.id}</td>
+        <td>${u.login}</td>
+        <td>${u.role === 'admin' ? 'Администратор' : 'Пользователь'}</td>
+        <td class="col-center">${u.is_eds ? '✓' : '—'}</td>
+        <td>${u.fio || '—'}</td>
+        <td class="col-center admin-actions">
+          <button type="button" class="admin-pw-btn" onclick="adminSetPassword(${u.id}, '${u.login.replace(/'/g, "\\'")}')" title="Сменить пароль">🔑</button>
+          ${u.id === CURRENT_USER.id ? ''
+            : `<button type="button" class="admin-del-btn" onclick="adminDeleteUser(${u.id})" title="Удалить">✕</button>`}
+        </td>
+      </tr>`).join('');
+  } catch {
+    body.innerHTML = `<tr><td colspan="6" class="loading">Ошибка загрузки</td></tr>`;
+  }
+}
+
+async function adminCreateUser(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('admin-form-err');
+  errEl.textContent = '';
+  const login = document.getElementById('admin-new-login').value.trim();
+  const password = document.getElementById('admin-new-pass').value;
+  const is_eds = document.getElementById('admin-new-eds').checked;
+  const role = document.getElementById('admin-new-role').value;
+  try {
+    const r = await fetch('/api/admin/users', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login, password, is_eds, role }),
+    });
+    const data = await r.json();
+    if (!r.ok) { errEl.textContent = data.detail || 'Ошибка создания'; return; }
+    document.getElementById('admin-new-login').value = '';
+    document.getElementById('admin-new-pass').value = '';
+    document.getElementById('admin-new-eds').checked = false;
+    document.getElementById('admin-new-role').value = 'user';
+    loadAdminUsers();
+  } catch {
+    errEl.textContent = 'Сеть недоступна';
+  }
+}
+
+async function adminSetPassword(id, login) {
+  const password = prompt(`Новый пароль для «${login}»:`);
+  if (password == null) return;
+  if (!password.trim()) { alert('Пароль не может быть пустым'); return; }
+  try {
+    const r = await fetch(`/api/admin/users/${id}/password`, {
+      method: 'PUT', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    if (!r.ok) { const d = await r.json(); alert(d.detail || 'Ошибка смены пароля'); return; }
+    alert('Пароль изменён');
+  } catch {
+    alert('Сеть недоступна');
+  }
+}
+
+async function adminDeleteUser(id) {
+  if (!confirm('Удалить этот аккаунт?')) return;
+  try {
+    const r = await fetch(`/api/admin/users/${id}`, { method: 'DELETE', credentials: 'include' });
+    if (!r.ok) { const d = await r.json(); alert(d.detail || 'Ошибка удаления'); return; }
+    loadAdminUsers();
+  } catch {
+    alert('Сеть недоступна');
+  }
 }
 
 function toggleFullscreen(btn) {
@@ -1702,14 +1959,16 @@ function initPayTooltip() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const savedTheme = localStorage.getItem('theme') || 'light';
   document.documentElement.dataset.theme = savedTheme === 'light' ? 'light' : '';
   const sw = document.getElementById('theme-switch');
   if (sw) sw.checked = savedTheme === 'light';
 
-  // Pseudo-auth gate — show login until correct credentials are entered
-  if (!isAuthed()) { showLogin(); return; }
+  // Real auth gate — verify session cookie against the backend
+  CURRENT_USER = await fetchMe();
+  if (!CURRENT_USER) { showLogin(); return; }
+  if (CURRENT_USER.role === 'admin') setupAdminPanel();
 
   initPayTooltip();
   init();

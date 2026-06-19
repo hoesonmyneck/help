@@ -1,0 +1,17 @@
+{
+	# disable_redirects: отключает только HTTP→HTTPS редирект,
+	# но ОСТАВЛЯЕТ internal CA (tls internal). НЕ ставить "auto_https off" — сломает tls internal.
+	auto_https disable_redirects
+}
+
+# HTTP (container :80 → host 8083) — обычный доступ без ЭЦП
+:80 {
+	reverse_proxy backend:8000
+}
+
+# HTTPS (container :443 → host 8443) — нужен для ЭЦП через NCALayer (wss).
+# Хосты перечислены ЯВНО, иначе tls internal не знает, на какое имя выпускать серт.
+interaction.enbek.kz, localhost {
+	tls internal
+	reverse_proxy backend:8000
+}

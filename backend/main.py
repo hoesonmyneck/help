@@ -1,14 +1,16 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, Query, Request, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 from sqlalchemy import func, distinct
 from sqlalchemy.orm import Session
-from database import engine, Payment
+from database import engine, Payment, User
 from load_data import (load_excel, load_reference_data,
                        region_help_ids, raion_help_ids,
                        all_region_katos, pay_type_names, REGION_NAMES,
                        raion_names_ref, raion_reg_ref, settings_rows, settings_pay_names)
+import auth
 import os
 
 EXCLUDED_PAY_SUBSTRINGS = {'АБОНЕНТСКУЮ ПЛАТУ ЗА ТЕЛЕФОН'}
@@ -24,15 +26,174 @@ def _is_excluded(pname: str | None) -> bool:
 async def lifespan(app: FastAPI):
     load_excel()
     load_reference_data()
+    auth.seed_admin()
     yield
 
 
 app = FastAPI(lifespan=lifespan)
 
+# Public API paths that must work without a session (login flow itself)
+_PUBLIC_API = {"/api/auth/login", "/api/auth/login-2fa"}
+
+
+@app.middleware("http")
+async def auth_gate(request: Request, call_next):
+    """Protect every /api/* endpoint with the session cookie, except the login flow."""
+    path = request.url.path
+    if path.startswith("/api/") and path not in _PUBLIC_API:
+        token = request.cookies.get(auth.COOKIE_NAME)
+        valid = False
+        if token:
+            try:
+                auth._decode_access(token)
+                valid = True
+            except HTTPException:
+                valid = False
+        if not valid:
+            return JSONResponse({"detail": "Требуется авторизация"}, status_code=401)
+    return await call_next(request)
+
 
 def get_db():
     with Session(engine) as session:
         yield session
+
+
+# ─────────────────────────── Auth & admin ───────────────────────────
+class LoginBody(BaseModel):
+    login: str
+    password: str
+
+
+class Login2FABody(BaseModel):
+    challenge: str
+    signature: str
+
+
+class CreateUserBody(BaseModel):
+    login: str
+    password: str
+    is_eds: bool = False
+    role: str = "user"
+
+
+class PasswordBody(BaseModel):
+    password: str
+
+
+def _user_out(u: User) -> dict:
+    return {"id": u.id, "login": u.login, "role": u.role,
+            "is_eds": u.is_eds, "iin": u.iin, "fio": u.fio}
+
+
+@app.post("/api/auth/login")
+def api_login(body: LoginBody):
+    with Session(engine) as db:
+        user = db.query(User).filter(User.login == body.login.strip()).first()
+        if not user or not auth.verify_password(body.password, user.password_hash):
+            raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+        if user.is_eds:
+            # пароль верный → второй фактор: ЭЦП
+            challenge = auth.generate_challenge(user.id)
+            return {"requires_2fa": True, "challenge": challenge}
+        token = auth.create_access_token(user)
+        resp = JSONResponse(_user_out(user))
+        auth.set_auth_cookie(resp, token)
+        return resp
+
+
+@app.post("/api/auth/login-2fa")
+def api_login_2fa(body: Login2FABody):
+    try:
+        payload = auth.decode_challenge(body.challenge)
+    except auth.EDSError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    with Session(engine) as db:
+        user = db.get(User, payload.get("uid"))
+        if not user:
+            raise HTTPException(status_code=401, detail="Пользователь не найден")
+        try:
+            eds = auth.verify_eds_signature(body.challenge, body.signature)
+        except auth.EDSError as e:
+            raise HTTPException(status_code=401, detail=str(e))
+        if eds["iin"] != (user.iin or user.login):
+            raise HTTPException(status_code=401,
+                detail=f"ИИН в ЭЦП ({eds['iin']}) не совпадает с аккаунтом")
+        user.fio = eds["fio"]
+        db.commit()
+        token = auth.create_access_token(user)
+        resp = JSONResponse(_user_out(user))
+        auth.set_auth_cookie(resp, token)
+        return resp
+
+
+@app.get("/api/auth/me")
+def api_me(user: User = Depends(auth.current_user)):
+    return _user_out(user)
+
+
+@app.post("/api/auth/logout")
+def api_logout():
+    resp = JSONResponse({"ok": True})
+    auth.clear_auth_cookie(resp)
+    return resp
+
+
+@app.get("/api/admin/users")
+def api_admin_users(admin: User = Depends(auth.require_admin)):
+    with Session(engine) as db:
+        users = db.query(User).order_by(User.id).all()
+        return [_user_out(u) for u in users]
+
+
+@app.post("/api/admin/users")
+def api_admin_create_user(body: CreateUserBody, admin: User = Depends(auth.require_admin)):
+    login = body.login.strip()
+    if not login or not body.password:
+        raise HTTPException(status_code=400, detail="Логин и пароль обязательны")
+    if body.is_eds and not login.isdigit():
+        raise HTTPException(status_code=400, detail="Для ЭЦП-аккаунта логин должен быть ИИН (12 цифр)")
+    role = "admin" if body.role == "admin" else "user"
+    with Session(engine) as db:
+        if db.query(User).filter(User.login == login).first():
+            raise HTTPException(status_code=409, detail="Такой логин уже существует")
+        user = User(
+            login=login,
+            password_hash=auth.hash_password(body.password),
+            role=role,
+            is_eds=body.is_eds,
+            iin=login if body.is_eds else None,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return _user_out(user)
+
+
+@app.put("/api/admin/users/{user_id}/password")
+def api_admin_set_password(user_id: int, body: PasswordBody, admin: User = Depends(auth.require_admin)):
+    if not body.password:
+        raise HTTPException(status_code=400, detail="Пароль не может быть пустым")
+    with Session(engine) as db:
+        user = db.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        user.password_hash = auth.hash_password(body.password)
+        db.commit()
+        return {"ok": True}
+
+
+@app.delete("/api/admin/users/{user_id}")
+def api_admin_delete_user(user_id: int, admin: User = Depends(auth.require_admin)):
+    if user_id == admin.id:
+        raise HTTPException(status_code=400, detail="Нельзя удалить самого себя")
+    with Session(engine) as db:
+        user = db.get(User, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        db.delete(user)
+        db.commit()
+        return {"ok": True}
 
 
 def _all_raions_for_region(region_id, db_katos: set[str]) -> list[str]:

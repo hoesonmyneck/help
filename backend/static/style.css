@@ -2634,3 +2634,53 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 /* ── Toggle slider → Google switch colours ── */
 :root[data-theme="light"] .toggle-slider { background: #bdc1c6; }
 :root[data-theme="light"] .theme-toggle input:checked + .toggle-slider { background: #1a73e8; }
+
+/* ── Админ-панель: управление аккаунтами ── */
+.admin-box { max-width: 760px; }
+.admin-form { padding: 16px 18px; border-bottom: 1px solid var(--bd-main); }
+.admin-form-row {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.admin-form-row input[type="text"] {
+  flex: 1 1 160px; min-width: 130px;
+  background: var(--bg-deep); border: 1px solid var(--bd-main);
+  color: var(--tx-main); border-radius: 8px; padding: 8px 12px;
+  font-family: inherit; font-size: 0.9rem;
+}
+.admin-form-row input[type="text"]::placeholder { color: var(--tx-muted); }
+.admin-form-row select {
+  background: var(--bg-deep); border: 1px solid var(--bd-main);
+  color: var(--tx-main); border-radius: 8px; padding: 8px 10px;
+  font-family: inherit; font-size: 0.9rem; cursor: pointer;
+}
+.admin-eds-check {
+  display: flex; align-items: center; gap: 6px;
+  color: var(--tx-dim); font-size: 0.9rem; white-space: nowrap; cursor: pointer;
+}
+.admin-eds-check input { width: 16px; height: 16px; cursor: pointer; }
+.admin-form-row button[type="submit"] {
+  background: var(--ac-blue); border: none; color: #fff;
+  border-radius: 8px; padding: 8px 18px; font-family: inherit;
+  font-size: 0.9rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.admin-form-row button[type="submit"]:hover { filter: brightness(1.08); }
+.admin-form-err { color: #e74c3c; font-size: 0.82rem; margin-top: 8px; min-height: 1em; }
+.admin-actions { display: flex; gap: 6px; justify-content: center; }
+.admin-del-btn {
+  background: none; border: 1px solid var(--bd-main); color: #e74c3c;
+  border-radius: 6px; padding: 2px 9px; cursor: pointer; font-size: 0.9rem;
+}
+.admin-del-btn:hover { background: rgba(231,76,60,0.12); border-color: #e74c3c; }
+.admin-pw-btn {
+  background: none; border: 1px solid var(--bd-main); color: var(--tx-dim);
+  border-radius: 6px; padding: 2px 9px; cursor: pointer; font-size: 0.9rem;
+}
+.admin-pw-btn:hover { background: var(--bg-hover); border-color: var(--bd-hi); }
+
+:root[data-theme="light"] .admin-form-row input[type="text"],
+:root[data-theme="light"] .admin-form-row select {
+  background: #ffffff; border: 1px solid #dadce0; color: #202124;
+}
+:root[data-theme="light"] .admin-form-row button[type="submit"] { background: #1a73e8; }
+:root[data-theme="light"] .admin-del-btn { border-color: #dadce0; color: #c5221f; }
+:root[data-theme="light"] .admin-form { border-bottom: 1px solid #e8eaed; }

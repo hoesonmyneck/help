@@ -1,5 +1,6 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Numeric, Date, DateTime
+from datetime import datetime
+from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Numeric, Date, DateTime, Boolean
 from sqlalchemy.orm import DeclarativeBase
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://cbdi:cbdi123@localhost:5432/cbdi")
@@ -43,3 +44,16 @@ class Payment(Base):
     kato_raion = Column(Integer)
     kato_regname = Column(String(300))
     kato_rainame = Column(String(300))
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    login = Column(String(100), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(20), nullable=False, default="user")   # 'admin' | 'user'
+    is_eds = Column(Boolean, nullable=False, default=False)      # требует ЭЦП 2FA
+    iin = Column(String(12))                                     # для ЭЦП-аккаунтов = login
+    fio = Column(String(300))                                    # ФИО из сертификата
+    created_at = Column(DateTime, default=datetime.utcnow)
