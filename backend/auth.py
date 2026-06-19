@@ -23,6 +23,10 @@ ACCESS_TTL_HOURS = 12
 CHALLENGE_TTL_MINUTES = 5
 COOKIE_NAME = "access_token"
 
+# Постоянный токен для перехода с портала ecosystem.enbek.kz (общий секрет).
+# Пустой => SSO выключен.
+SSO_TOKEN = os.environ.get("SSO_TOKEN", "")
+
 
 # ── Password hashing (stdlib pbkdf2, no extra deps) ──────────────────────────
 def hash_password(password: str) -> str:
@@ -184,6 +188,37 @@ def verify_eds_signature(challenge: str, cms_b64: str) -> dict:
         raise EDSError("Подписанные данные не совпадают с выданным challenge")
 
     return {"iin": _extract_iin(cert), "fio": _extract_fio(cert)}
+
+
+# ── Portal SSO (доверенный переход с ecosystem.enbek.kz) ─────────────────────
+def sso_token_valid(token: str) -> bool:
+    if not SSO_TOKEN:
+        return False
+    return hmac.compare_digest(token or "", SSO_TOKEN)
+
+
+def find_or_create_portal_user(identifier: str, fio: str | None) -> User:
+    """Найти аккаунт по ИИН/БИН (=login) или создать новый (доверяем порталу)."""
+    with Session(engine) as db:
+        user = db.query(User).filter(User.login == identifier).first()
+        if not user:
+            user = User(
+                login=identifier,
+                password_hash=hash_password(secrets.token_urlsafe(24)),  # вход только через портал
+                role="user",
+                is_eds=False,
+                iin=identifier,
+                fio=fio,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        elif fio and user.fio != fio:
+            user.fio = fio
+            db.commit()
+            db.refresh(user)
+        db.expunge(user)
+        return user
 
 
 # ── Seed first admin ─────────────────────────────────────────────────────────

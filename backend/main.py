@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query, Request, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import func, distinct
 from sqlalchemy.orm import Session
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 # Public API paths that must work without a session (login flow itself)
-_PUBLIC_API = {"/api/auth/login", "/api/auth/login-2fa"}
+_PUBLIC_API = {"/api/auth/login", "/api/auth/login-2fa", "/api/auth/sso"}
 
 
 @app.middleware("http")
@@ -125,6 +125,40 @@ def api_login_2fa(body: Login2FABody):
         resp = JSONResponse(_user_out(user))
         auth.set_auth_cookie(resp, token)
         return resp
+
+
+@app.get("/api/auth/sso")
+def api_sso(request: Request,
+            token: str = Query(None), iin: str = Query(None),
+            bin: str = Query(None), type: str = Query(None), fio: str = Query(None)):
+    """Доверенный переход с портала ecosystem.enbek.kz.
+
+    Портал уже авторизовал человека (ЭЦП ФЛ/ЮЛ) и перенаправляет браузер сюда,
+    передавая постоянный токен + личность (ИИН для ФЛ / БИН для ЮЛ).
+    Токен принимается в заголовке X-SSO-Token либо в query-параметре token.
+    """
+    if not auth.SSO_TOKEN:
+        raise HTTPException(status_code=503, detail="SSO не настроен")
+    tok = request.headers.get("X-SSO-Token") or token
+    if not auth.sso_token_valid(tok):
+        raise HTTPException(status_code=403, detail="Недействительный токен")
+
+    t = (type or "").strip().lower()
+    if t == "ul":
+        identifier = (bin or "").strip()
+    elif t == "fl":
+        identifier = (iin or "").strip()
+    else:
+        identifier = (bin or iin or "").strip()   # тип не указан — берём что прислали
+
+    if not (identifier.isdigit() and len(identifier) == 12):
+        raise HTTPException(status_code=400, detail="Не передан корректный ИИН/БИН (12 цифр)")
+
+    user = auth.find_or_create_portal_user(identifier, (fio or None))
+    access = auth.create_access_token(user)
+    resp = RedirectResponse(url="/", status_code=303)
+    auth.set_auth_cookie(resp, access)
+    return resp
 
 
 @app.get("/api/auth/me")

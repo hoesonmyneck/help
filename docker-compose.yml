@@ -26,6 +26,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-in-prod-9f3a2b7c1d8e4f60}
       ADMIN_LOGIN: ${ADMIN_LOGIN:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-crtr2026}
+      # Постоянный токен для перехода с портала ecosystem.enbek.kz:
+      SSO_TOKEN: ${SSO_TOKEN:-}
     volumes:
       - ./backend/static:/app/static
 
