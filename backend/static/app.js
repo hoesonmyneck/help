@@ -596,6 +596,9 @@ async function drillRegionFromRanking(regionId) {
   loadDistinct('kato_rainame');
   await refreshKPI();
   await Promise.all([loadSummary(), loadHelpPresence(), loadGapAnalysis()]);
+  loadRankingPanel();
+  loadDynamics();
+  _syncAnomalyGeo();
 }
 
 async function drillRegion(regionId) {
@@ -639,6 +642,9 @@ async function drillRegion(regionId) {
   loadDistinct('kato_rainame');
   await refreshKPI();
   await Promise.all([loadSummary(), loadHelpPresence(), loadGapAnalysis()]);
+  loadRankingPanel();
+  loadDynamics();
+  _syncAnomalyGeo();
 }
 
 async function selectRaion(raionId) {
@@ -648,7 +654,8 @@ async function selectRaion(raionId) {
   const regionName = regionStats[currentRegion]?.name || '';
   updateBreadcrumb(regionName, raionName);
   await refreshKPI();
-  // ranking stays on raion list when a raion is selected
+  loadDynamics();
+  _syncAnomalyGeo();
 }
 
 function toggleTheme(isLight) {
@@ -683,6 +690,9 @@ function goBack() {
   refreshKPI();
   loadSummary();
   loadHelpPresence();
+  loadRankingPanel();
+  loadDynamics();
+  _syncAnomalyGeo();
 }
 
 function goBackFromRanking() {
@@ -715,9 +725,11 @@ async function refreshKPI(sduSeq) {
   const data = await fetch(`/api/kpi?${params}`).then(r => r.json());
   if (sduSeq < _sduSeq) return; // stale — a newer sdu change superseded this call
 
-  animateCounter('kpi-dec',         data.total_dec_pay_sum,  v => formatNum(v));
-  animateCounter('kpi-recipients',  data.unique_recipients,  v => formatInt(v));
-  animateCounter('kpi-help-types',  data.help_type_count || 0,  v => formatInt(v));
+  animateCounter('kpi-dec',         data.total_dec_pay_sum,   v => formatNum(v));
+  animateCounter('kpi-deliv',       data.total_deliv_sum || 0, v => formatNum(v));
+  animateCounter('kpi-budget',      data.budget_total || 0,    v => formatNum(v));
+  animateCounter('kpi-recipients',  data.unique_recipients,   v => formatInt(v));
+  animateCounter('kpi-help-types',  data.help_type_count || 0, v => formatInt(v));
   renderGenderAgeBar(data.male_count || 0, data.female_count || 0, data.age || {});
   renderSduChart(data.sdu || {});
 }
@@ -900,6 +912,145 @@ async function refreshMapStats() {
   }
 }
 
+let _rankingData = null;
+
+async function loadRankingPanel() {
+  const url = currentRegion
+    ? `/api/ranking-oblasts?region_id=${currentRegion}`
+    : '/api/ranking-oblasts';
+  try {
+    const r = await fetch(url, { credentials: 'include' });
+    _rankingData = r.ok ? await r.json() : [];
+  } catch { _rankingData = []; }
+  _renderRankingTab('sum');
+  _renderRankingTab('recipients');
+}
+
+function _renderRankingTab(tab) {
+  if (!_rankingData) return;
+  const el = document.getElementById(`ranking-list-${tab}`);
+  if (!el) return;
+  const sorted = [..._rankingData].sort((a, b) =>
+    tab === 'sum' ? b.total_deliv - a.total_deliv : b.recipients - a.recipients
+  );
+  if (!sorted.length) { el.innerHTML = '<div class="ranking-loading">Нет данных</div>'; return; }
+  el.innerHTML = sorted.map((row, i) => {
+    const rank = i + 1;
+    const rankClass = rank <= 3 ? ` rank-${rank}` : '';
+    const val = tab === 'sum'
+      ? formatNum(row.total_deliv) + ' ₸'
+      : formatInt(row.recipients);
+    const shortName = (row.name || '').replace(/\s*ОБЛАСТЬ$/i, '').replace(/^ГОРОД\s*/i, 'г.');
+    return `<div class="ranking-item" onclick="_rankingItemClick(${row.id})">
+      <span class="ranking-rank${rankClass}">${rank}</span>
+      <span class="ranking-name" title="${row.name || ''}">${shortName}</span>
+      <span class="ranking-value">${val}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Dynamics chart ────────────────────────────────────────────
+let _dynChart = null;
+let _dynPeriod = 'week';
+let _dynMetric = 'count';
+let _dynData   = null;
+
+async function loadDynamics() {
+  const fp = buildFilterParams('full');
+  fp.set('period', _dynPeriod);
+  try {
+    const r = await fetch(`/api/dynamics?${fp}`, { credentials: 'include' });
+    _dynData = r.ok ? await r.json() : [];
+  } catch { _dynData = []; }
+  renderDynamics(_dynData);
+}
+
+function renderDynamics(rows) {
+  if (!rows) return;
+  const canvas = document.getElementById('dynamics-chart');
+  if (!canvas) return;
+  const isDark = document.documentElement.dataset.theme !== 'light';
+  const lineColor  = isDark ? '#5b8af8' : '#1a73e8';
+  const fillColor  = isDark ? 'rgba(91,138,248,0.15)' : 'rgba(26,115,232,0.10)';
+  const gridColor  = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)';
+  const tickColor  = isDark ? '#9aa0b4' : '#5f6368';
+
+  const labels = rows.map(r => {
+    const [, m, d] = r.period.split('-');
+    return `${d}.${m}`;
+  });
+  const values = rows.map(r => {
+    if (_dynMetric === 'count') return r.people;
+    if (_dynMetric === 'deliv') return r.total_deliv;
+    if (_dynMetric === 'dec')   return r.total_dec;
+    return r.total_max;
+  });
+
+  if (_dynChart) { _dynChart.destroy(); _dynChart = null; }
+  _dynChart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        borderColor: lineColor,
+        backgroundColor: fillColor,
+        borderWidth: 2,
+        pointRadius: rows.length > 90 ? 0 : 3,
+        pointHoverRadius: 5,
+        fill: true,
+        tension: 0.35,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => _dynMetric === 'count'
+              ? formatInt(ctx.parsed.y) + ' чел.'
+              : formatNum(ctx.parsed.y) + ' ₸',
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: tickColor, maxTicksLimit: 12, maxRotation: 40, font: { size: 10 } },
+          grid: { color: gridColor },
+        },
+        y: {
+          ticks: {
+            color: tickColor,
+            font: { size: 10 },
+            callback: v => _dynMetric === 'count' ? formatInt(v) : fmtCompact(v),
+          },
+          grid: { color: gridColor },
+        },
+      },
+    },
+  });
+}
+
+function _rankingItemClick(id) {
+  if (!currentRegion) {
+    drillRegion(id);
+  } else {
+    selectRaion(id);
+    if (raionsLayer) {
+      raionsLayer.eachLayer(layer => {
+        const fid = Math.round(layer.feature?.properties?.id_rai);
+        if (fid === id) {
+          map.fitBounds(layer.getBounds(), { padding: [30, 30] });
+          layer.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 });
+          setTimeout(() => { try { raionsLayer.resetStyle(layer); } catch (_) {} }, 800);
+        }
+      });
+    }
+  }
+}
+
 function _refreshAfterFilterChange() {
   _invalidateAnomCaches();
   _gapData = []; _gapTotal = 0;
@@ -912,6 +1063,8 @@ function _refreshAfterFilterChange() {
   loadHelpPresence();
   refreshMapStats();
   loadGapAnalysis();
+  loadRankingPanel();
+  loadDynamics();
 
   const activeAntab = document.querySelector('.antab-btn.active');
   if (activeAntab) loadAnomalyTab(activeAntab.dataset.antab);
@@ -1027,30 +1180,66 @@ let presenceSortDir = 'desc';
 
 let geoPanelTimer = null;
 let geoPanelLastEv = null;
+const _geoPanelCache = {};
+let _geoPanelActiveId = null;
 
-function showGeoPanel(id, name, ev) {
-  const row = presenceById[Math.round(id)];
+function _buildGeoPanelHtml(provided, stats) {
+  if (!provided.length) return '<div class="gp-empty">Нет данных</div>';
+  return provided.map(({ c }) => {
+    const s = stats && stats[c.id];
+    const recip  = s ? formatInt(s.recipients)              : '0';
+    const deliv  = s && s.total_deliv > 0 ? formatNum(s.total_deliv) : '0';
+    const budget = s && s.budget > 0 ? formatNum(s.budget)  : '—';
+    return `<div class="gp-row gp-yes">
+      <span class="gp-pay">${stripHelpPrefix(c.name)}</span>
+      <span class="gp-stat">${recip}</span>
+      <span class="gp-stat">${deliv} ₸</span>
+      <span class="gp-stat gp-budget">${budget} ₸</span>
+    </div>`;
+  }).join('');
+}
+
+async function showGeoPanel(id, name, ev) {
+  const rid = Math.round(id);
+  _geoPanelActiveId = rid;
+  const row = presenceById[rid];
   const panel = document.getElementById('geo-panel');
   if (!panel) return;
 
-  let listHtml = '';
-  if (row && presenceColumns.length && row.pay_cat_lists) {
-    const provided = presenceColumns
-      .map((c, i) => ({ c, cnt: (row.pay_cat_lists[i] || []).length }))
-      .filter(e => e.cnt > 0);
-    listHtml = provided.map(({ c }) =>
-      `<div class="gp-row gp-yes"><span class="gp-pay">${stripHelpPrefix(c.name)}</span></div>`
-    ).join('');
+  const provided = (row && presenceColumns.length && row.pay_cat_lists)
+    ? presenceColumns.map((c, i) => ({ c, cnt: (row.pay_cat_lists[i] || []).length })).filter(e => e.cnt > 0)
+    : [];
+
+  const geoName = (row && row.name) || name || '—';
+
+  const renderPanel = (stats) => {
+    panel.innerHTML =
+      `<div class="gp-main">
+         <div class="gp-title">${geoName}</div>
+         ${provided.length ? `<div class="gp-hdr-row">
+           <span class="gp-pay gp-hdr">Вид помощи</span>
+           <span class="gp-stat gp-hdr">Услугопол.</span>
+           <span class="gp-stat gp-hdr">Факт выплачено</span>
+           <span class="gp-stat gp-hdr">Бюджет</span>
+         </div>` : ''}
+         <div class="gp-list">${_buildGeoPanelHtml(provided, stats)}</div>
+       </div>`;
+    panel.classList.add('visible');
+    positionGeoPanel(ev);
+  };
+
+  renderPanel(_geoPanelCache[rid] || null);
+
+  if (!_geoPanelCache[rid]) {
+    try {
+      const param = currentRegion ? `raion_id=${rid}` : `region_id=${rid}`;
+      const stats = await fetch(`/api/geo-stats?${param}`).then(r => r.json());
+      _geoPanelCache[rid] = stats;
+    } catch { _geoPanelCache[rid] = {}; }
+    if (_geoPanelActiveId === rid && panel.classList.contains('visible')) {
+      renderPanel(_geoPanelCache[rid]);
+    }
   }
-
-  panel.innerHTML =
-    `<div class="gp-main">
-       <div class="gp-title">${(row && row.name) || name || '—'}</div>
-       <div class="gp-list">${listHtml || '<div class="gp-empty">Нет данных</div>'}</div>
-     </div>`;
-
-  panel.classList.add('visible');
-  positionGeoPanel(ev);
 }
 
 function positionGeoPanel(ev) {
@@ -1767,7 +1956,7 @@ function ensureDataTable() {
 async function loadAnomalyTab(tab) {
   if (tab === 'utilization') { await loadAnUtil(); return; }
   if (tab === 'data') { ensureDataTable(); return; }
-  const fp = buildFilterParams('none');
+  const fp = buildFilterParams('full');
   const cacheKey = tab + fp;
   if (_anTabCache[cacheKey]) { renderAnomalyTab(tab, _anTabCache[cacheKey]); return; }
   const baseUrlMap = {
@@ -1775,12 +1964,31 @@ async function loadAnomalyTab(tab) {
     unique: '/api/anomalies/unique-help',
   };
   if (!baseUrlMap[tab]) return;
-  const tabUrl = tab === 'unique' ? baseUrlMap[tab] : `${baseUrlMap[tab]}?${fp}`;
   try {
-    const data = await fetch(tabUrl).then(r => r.json());
+    const data = await fetch(`${baseUrlMap[tab]}?${fp}`).then(r => r.json());
     _anTabCache[cacheKey] = data;
     renderAnomalyTab(tab, data);
   } catch(e) { console.error(`anomalies/${tab}`, e); }
+}
+
+function _syncAnomalyGeo() {
+  _invalidateAnomCaches();
+  if (currentRaion != null) {
+    _anUtilRegionId   = currentRegion;
+    _anUtilRegionName = regionStats[currentRegion]?.name || '';
+    _anUtilRaionId    = currentRaion;
+    _anUtilRaionName  = raionStats[currentRaion]?.name || '';
+  } else if (currentRegion != null) {
+    _anUtilRegionId   = currentRegion;
+    _anUtilRegionName = regionStats[currentRegion]?.name || '';
+    _anUtilRaionId    = null;
+    _anUtilRaionName  = '';
+  } else {
+    _anUtilRegionId = null; _anUtilRegionName = '';
+    _anUtilRaionId  = null; _anUtilRaionName  = '';
+  }
+  const activeAntab = document.querySelector('.antab-btn.active');
+  if (activeAntab) loadAnomalyTab(activeAntab.dataset.antab);
 }
 
 function renderAnomalyTab(tab, data) {
@@ -1938,6 +2146,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const pane = document.getElementById(`tab-${btn.dataset.tab}`);
       if (pane) pane.classList.add('active');
       if (btn.dataset.tab === 'gap') loadGapAnalysis();
+      if (btn.dataset.tab === 'dynamics') loadDynamics();
     });
   });
 
@@ -1949,13 +2158,47 @@ document.addEventListener('DOMContentLoaded', async () => {
       btn.classList.add('active');
       const pane = document.getElementById('antab-' + btn.dataset.antab);
       if (pane) pane.classList.add('active');
-      if (btn.dataset.antab === 'utilization') anUtilResetToRegions();
-      else { const bb = document.getElementById('an-util-back'); if (bb) bb.style.display = 'none'; }
+      if (btn.dataset.antab === 'utilization') {
+        _anUtilRegionId   = currentRegion || null;
+        _anUtilRegionName = currentRegion ? (regionStats[currentRegion]?.name || '') : '';
+        _anUtilRaionId    = currentRaion  || null;
+        _anUtilRaionName  = currentRaion  ? (raionStats[currentRaion]?.name  || '') : '';
+      } else { const bb = document.getElementById('an-util-back'); if (bb) bb.style.display = 'none'; }
       loadAnomalyTab(btn.dataset.antab);
     });
   });
   loadAnomalyKpi();
   loadAnomalyTab('cks');
+  loadRankingPanel();
+  loadDynamics();
+
+  document.querySelectorAll('[data-dperiod]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-dperiod]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _dynPeriod = btn.dataset.dperiod;
+      loadDynamics();
+    });
+  });
+  document.querySelectorAll('[data-dmetric]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-dmetric]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _dynMetric = btn.dataset.dmetric;
+      renderDynamics(_dynData);
+    });
+  });
+
+  document.querySelectorAll('.ranking-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.ranking-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.ranking-tab-pane').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      const pane = document.getElementById(`rtab-${btn.dataset.rtab}`);
+      if (pane) pane.classList.add('active');
+      _renderRankingTab(btn.dataset.rtab);
+    });
+  });
 
   // Пагинация таблицы "Данные"
   document.getElementById('btn-prev')?.addEventListener('click', () => { if (currentPage > 1) loadTable(currentPage - 1); });

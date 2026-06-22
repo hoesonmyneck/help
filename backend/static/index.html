@@ -39,8 +39,18 @@
         <div class="value" id="kpi-recipients">—</div>
       </div>
       <div class="kpi-card kpi-wide">
-        <div class="label">Сумма</div>
-        <div class="value accent" id="kpi-dec">—</div>
+        <div class="kpi-wide-row">
+          <div class="label">Сумма</div>
+          <div class="value accent" id="kpi-dec">—</div>
+        </div>
+        <div class="kpi-wide-row">
+          <div class="label">Бюджет</div>
+          <div class="value accent" id="kpi-budget">—</div>
+        </div>
+        <div class="kpi-wide-row">
+          <div class="label">Фактически выплачено</div>
+          <div class="value kpi-deliv" id="kpi-deliv">—</div>
+        </div>
       </div>
     </div>
 
@@ -60,16 +70,20 @@
     </div>
   </div>
 
-  <!-- Gap Side Panel -->
-  <div class="gap-side-panel" id="gap-side-panel">
-    <div class="kpi-card gsp-summary-card">
-      <div class="label">Разрывы по выплатам между районами</div>
-      <div class="gsp-anomaly-row">
-        <span class="value accent" id="kpi-gap-anomaly">—</span>
-        <span class="gsp-sub-lbl">критичных аномалий</span>
+  <!-- Ranking Panel -->
+  <div class="ranking-panel" id="ranking-panel">
+    <div class="kpi-card ranking-card">
+      <div class="ranking-tabs-bar">
+        <button class="ranking-tab-btn active" data-rtab="sum">По сумме</button>
+        <button class="ranking-tab-btn" data-rtab="recipients">По получателям</button>
+      </div>
+      <div class="ranking-tab-pane active" id="rtab-sum">
+        <div class="ranking-list" id="ranking-list-sum"><div class="ranking-loading">Загрузка...</div></div>
+      </div>
+      <div class="ranking-tab-pane" id="rtab-recipients">
+        <div class="ranking-list" id="ranking-list-recipients"></div>
       </div>
     </div>
-    <div class="gsp-list" id="gap-side-list"></div>
   </div>
 
   <!-- Map Panel -->
@@ -80,12 +94,14 @@
 
 </div>
 
+
 <!-- Tabs section -->
 <div class="table-section tabs-section">
   <div class="tabs-bar">
     <button class="tab-btn active" data-tab="presence">Матрица видов помощи</button>
     <button class="tab-btn" data-tab="coverage">Охват по видам помощи</button>
-    <button class="tab-btn" data-tab="gap">Разрывы по выплатам</button>
+    <button class="tab-btn" data-tab="dynamics">Динамика</button>
+    <button class="tab-btn" data-tab="gap" style="display:none">Разрывы по выплатам</button>
     <button type="button" id="coverage-btn-back" style="display:none" onclick="goBackFromRanking()">← Все регионы</button>
     <button type="button" class="expand-btn" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
   </div>
@@ -110,8 +126,29 @@
     </div>
   </div>
 
+  <!-- Tab: Dynamics -->
+  <div class="tab-pane" id="tab-dynamics">
+    <div class="dyn-tab-bar">
+      <div class="dyn-controls">
+        <div class="dyn-seg" id="dyn-period-seg">
+          <button class="dyn-seg-btn active" data-dperiod="week">По неделям</button>
+          <button class="dyn-seg-btn" data-dperiod="day">По дням</button>
+        </div>
+        <div class="dyn-seg" id="dyn-metric-seg">
+          <button class="dyn-seg-btn active" data-dmetric="count">Кол-во людей</button>
+          <button class="dyn-seg-btn" data-dmetric="deliv">Факт выплачено</button>
+          <button class="dyn-seg-btn" data-dmetric="dec">Сумма решения</button>
+          <button class="dyn-seg-btn" data-dmetric="max">Макс сумма</button>
+        </div>
+      </div>
+    </div>
+    <div class="dyn-chart-wrap">
+      <canvas id="dynamics-chart"></canvas>
+    </div>
+  </div>
+
   <!-- Tab: Pay gaps -->
-  <div class="tab-pane" id="tab-gap">
+  <div class="tab-pane" id="tab-gap" style="display:none">
     <div id="gap-list" class="gap-accordion"></div>
   </div>
 

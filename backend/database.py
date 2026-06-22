@@ -46,6 +46,16 @@ class Payment(Base):
     kato_rainame = Column(String(300))
 
 
+class BudgetItem(Base):
+    __tablename__ = "budget_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    pay_type_id = Column(Integer, index=True)   # ID from help_types.xlsx
+    kato_region = Column(Integer, index=True)   # 2-digit (KATO_REG // 10_000_000)
+    kato_raion = Column(Integer, index=True)    # 4-digit (KATO_DIS // 100_000)
+    plansum = Column(Numeric(18, 2))
+
+
 class User(Base):
     __tablename__ = "users"
 

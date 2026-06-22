@@ -5,8 +5,8 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import func, distinct
 from sqlalchemy.orm import Session
-from database import engine, Payment, User
-from load_data import (load_excel, load_reference_data,
+from database import engine, Payment, User, BudgetItem
+from load_data import (load_excel, load_budget, load_reference_data,
                        region_help_ids, raion_help_ids,
                        all_region_katos, pay_type_names, REGION_NAMES,
                        raion_names_ref, raion_reg_ref, settings_rows, settings_pay_names)
@@ -25,6 +25,7 @@ def _is_excluded(pname: str | None) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     load_excel()
+    load_budget()
     load_reference_data()
     auth.seed_admin()
     yield
@@ -306,9 +307,26 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
         help_type_count = len({r[2] for r in geo if not _is_excluded(r[3])})
         people_cat_count = len({r[4] for r in geo if r[5] is not None})
 
+        # Фактически выплачено: DELIV_SUM for rows where APP_STATUS = 'Выполнено'
+        deliv_total = (
+            base.filter(Payment.app_status == 'Выполнено')
+            .with_entities(func.sum(Payment.deliv_sum))
+            .scalar() or 0
+        )
+
+        # Бюджет: sum of PLANSUM from budget_items filtered by region/raion
+        budget_q = db.query(BudgetItem)
+        if raion_id is not None:
+            budget_q = budget_q.filter(BudgetItem.kato_raion == raion_id)
+        elif region_id is not None:
+            budget_q = budget_q.filter(BudgetItem.kato_region == region_id)
+        budget_total = budget_q.with_entities(func.sum(BudgetItem.plansum)).scalar() or 0
+
         return {
             "total_max_pay_sum": float(total_max),
             "total_dec_pay_sum": float(total_dec),
+            "total_deliv_sum": float(deliv_total),
+            "budget_total": float(budget_total),
             "unique_recipients": unique_recipients,
             "male_count": male_count,
             "female_count": female_count,
@@ -1101,9 +1119,9 @@ def anomalies_pending():
 
 
 @app.get("/api/anomalies/cks-ab")
-def anomalies_cks_ab(gender_filter: str = Query(None), age_group: str = Query(None)):
+def anomalies_cks_ab(region_id: int = Query(None), raion_id: int = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
     with Session(engine) as db:
-        rows = apply_extra_filters(db.query(
+        q = db.query(
             Payment.kato_regname,
             func.upper(Payment.sdu_tzhs).label("cks"),
             Payment.pay_type,
@@ -1113,7 +1131,12 @@ def anomalies_cks_ab(gender_filter: str = Query(None), age_group: str = Query(No
         ).filter(
             func.upper(Payment.sdu_tzhs).in_(['A', 'B']),
             Payment.dec_pay_sum > 0,
-        ), gender_filter=gender_filter, age_group=age_group).group_by(
+        )
+        if raion_id is not None:
+            q = q.filter(Payment.kato_raion == raion_id)
+        elif region_id is not None:
+            q = q.filter(Payment.kato_region == region_id)
+        rows = apply_extra_filters(q, gender_filter=gender_filter, age_group=age_group).group_by(
             Payment.kato_regname, func.upper(Payment.sdu_tzhs), Payment.pay_type
         ).order_by(Payment.kato_regname, func.count(Payment.id).desc()).all()
 
@@ -1201,22 +1224,22 @@ def anomalies_utilization(region_id: int = Query(None), sdu_filter: str = Query(
 
 
 @app.get("/api/anomalies/unique-help")
-def anomalies_unique_help():
+def anomalies_unique_help(region_id: int = Query(None)):
     from collections import defaultdict
     pay_type_regions: dict = defaultdict(set)
     for kreg, kdis, pid, pname, cat, mx in settings_rows:
         if pname and not _is_excluded(pname):
             pay_type_regions[pname].add(kreg)
 
-    result = [
-        {
-            "pay_type": pname,
-            "reg_count": len(regions),
-            "regions": [REGION_NAMES.get(r, r) for r in sorted(regions)],
-        }
-        for pname, regions in pay_type_regions.items()
-        if len(regions) <= 2
-    ]
+    result = []
+    for pname, regions in pay_type_regions.items():
+        if len(regions) <= 2:
+            if region_id is None or str(region_id) in regions:
+                result.append({
+                    "pay_type": pname,
+                    "reg_count": len(regions),
+                    "regions": [REGION_NAMES.get(r, r) for r in sorted(regions)],
+                })
     result.sort(key=lambda x: x["reg_count"])
     return result
 
@@ -1412,6 +1435,156 @@ def anomalies_pay_gap(sdu_filter: str = Query(None), gender_filter: str = Query(
             "gaps": result,
             "total": len(pay_type_data),
         }
+
+
+@app.get("/api/geo-stats")
+def geo_stats(region_id: int = Query(None), raion_id: int = Query(None)):
+    """Per-help-type stats for a geo unit: recipients, total_dec, budget."""
+    if region_id is None and raion_id is None:
+        return {}
+    with Session(engine) as db:
+        base = db.query(Payment)
+        if raion_id is not None:
+            base = base.filter(Payment.kato_raion == raion_id)
+        else:
+            base = base.filter(Payment.kato_region == region_id)
+
+        from sqlalchemy import case as sa_case
+        pay_rows = (
+            base.with_entities(
+                Payment.pay_type_id,
+                func.count(distinct(Payment.sicid)).label('recipients'),
+                func.sum(
+                    sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)
+                ).label('total_deliv'),
+            )
+            .group_by(Payment.pay_type_id)
+            .all()
+        )
+
+        result = {}
+        for r in pay_rows:
+            if r.pay_type_id is None:
+                continue
+            result[r.pay_type_id] = {
+                'recipients': r.recipients or 0,
+                'total_deliv': float(r.total_deliv or 0),
+                'budget': 0.0,
+            }
+
+        budget_q = db.query(BudgetItem)
+        if raion_id is not None:
+            budget_q = budget_q.filter(BudgetItem.kato_raion == raion_id)
+        else:
+            budget_q = budget_q.filter(BudgetItem.kato_region == region_id)
+
+        for br in budget_q.all():
+            if br.pay_type_id is None:
+                continue
+            if br.pay_type_id not in result:
+                result[br.pay_type_id] = {'recipients': 0, 'total_deliv': 0.0, 'budget': 0.0}
+            result[br.pay_type_id]['budget'] += float(br.plansum or 0)
+
+        return result
+
+
+@app.get("/api/dynamics")
+def dynamics(
+    region_id: int = Query(None),
+    raion_id: int = Query(None),
+    period: str = Query('week'),
+    sdu_filter: str = Query(None),
+    gender_filter: str = Query(None),
+    age_group: str = Query(None),
+):
+    """Time series of application count and sum grouped by day or week (APP_DATE)."""
+    from sqlalchemy import cast, Date as SADate
+    with Session(engine) as db:
+        if period == 'day':
+            date_expr = Payment.app_date
+        else:
+            date_expr = func.date_trunc('week', cast(Payment.app_date, SADate))
+
+        from sqlalchemy import case as sa_case
+        q = build_filter(
+            db.query(
+                date_expr.label('period'),
+                func.count(distinct(Payment.sicid)).label('people'),
+                func.sum(Payment.dec_pay_sum).label('total_dec'),
+                func.sum(Payment.max_pay_sum).label('total_max'),
+                func.sum(
+                    sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)
+                ).label('total_deliv'),
+            ).filter(Payment.app_date.isnot(None)),
+            region_id, raion_id, sdu_filter, gender_filter, age_group,
+        )
+        rows = q.group_by(date_expr).order_by(date_expr).all()
+        return [
+            {
+                'period':      r.period.strftime('%Y-%m-%d') if hasattr(r.period, 'strftime') else str(r.period)[:10],
+                'people':      r.people or 0,
+                'total_dec':   float(r.total_dec   or 0),
+                'total_max':   float(r.total_max   or 0),
+                'total_deliv': float(r.total_deliv or 0),
+            }
+            for r in rows if r.period is not None
+        ]
+
+
+@app.get("/api/ranking-oblasts")
+def ranking_oblasts(region_id: int = Query(None)):
+    """Regions (or raions of a region) ranked by actual paid sum and recipient count."""
+    from sqlalchemy import case as sa_case
+    with Session(engine) as db:
+        if region_id is not None:
+            rows = (
+                db.query(
+                    Payment.kato_raion.label('geo_id'),
+                    Payment.kato_rainame.label('geo_name'),
+                    func.count(distinct(Payment.sicid)).label('recipients'),
+                    func.sum(
+                        sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)
+                    ).label('total_deliv'),
+                )
+                .filter(Payment.kato_region == region_id)
+                .group_by(Payment.kato_raion, Payment.kato_rainame)
+                .all()
+            )
+            result = []
+            for r in rows:
+                if r.geo_id is None:
+                    continue
+                result.append({
+                    'id': r.geo_id,
+                    'name': r.geo_name or f'Район {r.geo_id}',
+                    'recipients': r.recipients or 0,
+                    'total_deliv': float(r.total_deliv or 0),
+                })
+        else:
+            rows = (
+                db.query(
+                    Payment.kato_region.label('geo_id'),
+                    Payment.kato_regname.label('geo_name'),
+                    func.count(distinct(Payment.sicid)).label('recipients'),
+                    func.sum(
+                        sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)
+                    ).label('total_deliv'),
+                )
+                .group_by(Payment.kato_region, Payment.kato_regname)
+                .all()
+            )
+            result = []
+            for r in rows:
+                if r.geo_id is None:
+                    continue
+                name = r.geo_name or REGION_NAMES.get(str(r.geo_id), str(r.geo_id))
+                result.append({
+                    'id': r.geo_id,
+                    'name': name,
+                    'recipients': r.recipients or 0,
+                    'total_deliv': float(r.total_deliv or 0),
+                })
+        return result
 
 
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static"), html=True), name="static")
