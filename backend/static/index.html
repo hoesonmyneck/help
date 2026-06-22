@@ -137,10 +137,10 @@
   <div class="tabs-section anomaly-tabs-section">
     <div class="tabs-bar">
       <button class="tab-btn antab-btn active" data-antab="cks">Уровень благосостояния</button>
-      <button class="tab-btn antab-btn" data-antab="utilization">% Выплаты по регионам</button>
-      <button class="tab-btn antab-btn" data-antab="utilraion">% Выплаты по районам</button>
+      <button class="tab-btn antab-btn" data-antab="utilization">% Выплаты</button>
       <button class="tab-btn antab-btn" data-antab="unique">Уникальные виды</button>
-      <button class="tab-btn antab-btn" data-antab="demo">Демография</button>
+      <button class="tab-btn antab-btn" data-antab="data">Данные</button>
+      <button type="button" id="an-util-back" style="display:none" onclick="anUtilBack()">← Все регионы</button>
       <button type="button" class="expand-btn" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
     </div>
 
@@ -161,10 +161,6 @@
     </div>
 
     <div class="tab-pane antab-pane" id="antab-utilization">
-      <div class="an-util-bar">
-        <button id="an-util-back" style="display:none" onclick="anUtilGoBack()">← Все регионы</button>
-        <span id="an-util-title"></span>
-      </div>
       <div class="table-wrap">
         <table>
           <thead><tr>
@@ -175,26 +171,6 @@
             <th class="col-right sortable" data-antab="utilization" data-ancol="pct" onclick="anToggleSort(this)">% Выплаты <span class="an-sort-icon"></span></th>
           </tr></thead>
           <tbody id="antab-utilization-body"><tr><td colspan="5" class="loading">Загрузка...</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="tab-pane antab-pane" id="antab-utilraion">
-      <div class="an-util-bar">
-        <button id="an-utilraion-back" style="display:none" onclick="anUtilRaionGoBack()">← Все районы</button>
-        <span id="an-utilraion-title"></span>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr>
-            <th id="an-utilraion-geo-col">Район</th>
-            <th id="an-utilraion-reg-th">Регион</th>
-            <th class="col-center sortable" data-antab="utilraion" data-ancol="count" onclick="anToggleSort(this)">Заявок <span class="an-sort-icon"></span></th>
-            <th class="col-right sortable" data-antab="utilraion" data-ancol="total_max" onclick="anToggleSort(this)">Макс. сумма <span class="an-sort-icon"></span></th>
-            <th class="col-right sortable" data-antab="utilraion" data-ancol="total_dec" onclick="anToggleSort(this)">Факт выплата <span class="an-sort-icon"></span></th>
-            <th class="col-right sortable" data-antab="utilraion" data-ancol="pct" onclick="anToggleSort(this)">% Выплаты <span class="an-sort-icon"></span></th>
-          </tr></thead>
-          <tbody id="antab-utilraion-body"><tr><td colspan="6" class="loading">Загрузка...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -212,21 +188,21 @@
       </div>
     </div>
 
-    <div class="tab-pane antab-pane" id="antab-demo">
-      <div class="table-wrap">
+    <div class="tab-pane antab-pane" id="antab-data">
+      <div class="an-data-bar"><span class="table-info" id="table-info"></span></div>
+      <div class="table-wrap data-table-wrap">
         <table>
-          <thead><tr>
-            <th>Вид помощи</th>
-            <th class="col-center sortable" data-antab="demo" data-ancol="total" onclick="anToggleSort(this)">Всего <span class="an-sort-icon"></span></th>
-            <th class="col-center sortable" data-antab="demo" data-ancol="pct_male" onclick="anToggleSort(this)">% мужчин <span class="an-sort-icon"></span></th>
-            <th class="col-center sortable" data-antab="demo" data-ancol="pct_female" onclick="anToggleSort(this)">% женщин <span class="an-sort-icon"></span></th>
-            <th class="col-right sortable" data-antab="demo" data-ancol="avg_age" onclick="anToggleSort(this)">Ср. возраст <span class="an-sort-icon"></span></th>
-            <th>Аномалия</th>
-          </tr></thead>
-          <tbody id="antab-demo-body"><tr><td colspan="6" class="loading">Загрузка...</td></tr></tbody>
+          <thead id="table-head"></thead>
+          <tbody id="table-body"><tr><td colspan="16" class="loading">Загрузка...</td></tr></tbody>
         </table>
       </div>
+      <div class="pagination">
+        <button id="btn-prev" disabled>‹ Пред.</button>
+        <span class="page-info" id="page-info">1 / 1</span>
+        <button id="btn-next">След. ›</button>
+      </div>
     </div>
+
   </div>
 </div>
 

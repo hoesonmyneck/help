@@ -690,6 +690,13 @@ body.fs-open .table-section:not(.is-fullscreen) { display: none; }
   height: auto !important;
   max-height: none;
 }
+/* Anomaly section wraps panes in an extra .tabs-section — make it fill in fullscreen */
+.table-section.is-fullscreen .tabs-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
 .table-section.is-fullscreen .tab-pane.active {
   display: flex;
   flex-direction: column;
@@ -701,6 +708,12 @@ body.fs-open .table-section:not(.is-fullscreen) { display: none; }
   min-height: 0;
   height: auto !important;
   max-height: none;
+}
+/* Gap tab uses a bare accordion (not .table-wrap) — make it scroll in fullscreen */
+.table-section.is-fullscreen .tab-pane.active .gap-accordion {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .table-wrap {
@@ -1224,6 +1237,8 @@ th.sort-active { color: var(--ac-blue); }
 .prs-total-row .prs-geo-cell { color: var(--ac-teal); }
 .prs-total-row:hover { background: rgba(78,205,196,0.14); }
 #coverage-body td:first-child { text-transform: uppercase; }
+/* Наименования регионов/районов — всегда капсом во всех таблицах */
+.geo-name, .prs-geo-cell, #raion-detail-title { text-transform: uppercase; }
 
 /* Total row (Республика Казахстан) in coverage-groups */
 .grp-total-row { background: rgba(78,205,196,0.10); font-weight: 700; }
@@ -2684,3 +2699,35 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 :root[data-theme="light"] .admin-form-row button[type="submit"] { background: #1a73e8; }
 :root[data-theme="light"] .admin-del-btn { border-color: #dadce0; color: #c5221f; }
 :root[data-theme="light"] .admin-form { border-bottom: 1px solid #e8eaed; }
+
+/* "← Все регионы" в строке вкладок аномалий — те же стили, что у #coverage-btn-back */
+#an-util-back {
+  background: var(--bg-deep);
+  border: 1px solid var(--bd-hi);
+  color: var(--tx-sub);
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  font-family: inherit;
+  align-self: center;
+  transition: background 0.2s, box-shadow 0.2s, color 0.2s;
+}
+#an-util-back:hover {
+  background: var(--bd-hi);
+  box-shadow: 0 0 14px rgba(91,138,248,0.3);
+  color: #fff;
+}
+:root[data-theme="light"] #an-util-back {
+  background: #e8f0fe;
+  border: 1px solid transparent;
+  color: #1a73e8;
+  border-radius: 999px;
+  font-weight: 500;
+}
+:root[data-theme="light"] #an-util-back:hover {
+  background: #d2e3fc !important;
+  border-color: transparent;
+  color: #174ea6 !important;
+  box-shadow: none !important;
+}

@@ -1290,18 +1290,21 @@ def anomalies_demographic(sdu_filter: str = Query(None), gender_filter: str = Qu
 
 
 @app.get("/api/anomalies/utilization-raion")
-def anomalies_utilization_raion(raion_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
+def anomalies_utilization_raion(raion_id: int = Query(None), region_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
     with Session(engine) as db:
         def af(q): return apply_extra_filters(q, sdu_filter, gender_filter, age_group)
         if raion_id is None:
-            rows = af(db.query(
+            q = db.query(
                 Payment.kato_raion,
                 Payment.kato_rainame,
                 Payment.kato_regname,
                 func.count(Payment.id).label("cnt"),
                 func.sum(Payment.max_pay_sum).label("total_max"),
                 func.sum(Payment.dec_pay_sum).label("total_dec"),
-            ).filter(Payment.kato_raion.isnot(None))).group_by(
+            ).filter(Payment.kato_raion.isnot(None))
+            if region_id is not None:
+                q = q.filter(Payment.kato_region == region_id)
+            rows = af(q).group_by(
                 Payment.kato_raion, Payment.kato_rainame, Payment.kato_regname
             ).all()
 

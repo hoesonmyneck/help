@@ -881,7 +881,6 @@ function clearSduFilter() {
 function _invalidateAnomCaches() {
   Object.keys(_anTabCache).forEach(k => delete _anTabCache[k]);
   Object.keys(_anUtilCache).forEach(k => delete _anUtilCache[k]);
-  Object.keys(_anRaionCache).forEach(k => delete _anRaionCache[k]);
 }
 
 async function refreshMapStats() {
@@ -1221,7 +1220,7 @@ function renderGroups() {
     : groupsRows;
 
   const totalHtml = groupsTotal ? `<tr class="grp-total-row">
-      <td>${groupsTotal.name}</td>
+      <td class="geo-name">${groupsTotal.name}</td>
       ${groupsTotal.groups.map(g => renderGroupCell(g)).join('')}
     </tr>` : '';
 
@@ -1229,7 +1228,7 @@ function renderGroups() {
     const clickAttr = !currentRegion
       ? `onclick="drillRegionFromRanking(${r.id})" style="cursor:pointer"` : '';
     return `<tr ${clickAttr} class="${!currentRegion ? 'coverage-row' : ''}">
-      <td>${r.name || '—'}</td>
+      <td class="geo-name">${r.name || '—'}</td>
       ${r.groups.map(g => renderGroupCell(g)).join('')}
     </tr>`;
   }).join('');
@@ -1488,12 +1487,12 @@ function setText(id, val) {
 // ── Anomaly section ──────────────────────────────────────────────
 
 const _anTabCache = {};
+// Объединённая таблица "% Выплаты": регионы → районы региона → виды помощи района
 let _anUtilRegionId = null;
 let _anUtilRegionName = '';
+let _anUtilRaionId = null;
+let _anUtilRaionName = '';
 const _anUtilCache = {};
-let _anRaionDrillId = null;
-let _anRaionDrillName = '';
-const _anRaionCache = {};
 const _anSort = {};
 
 /* ── Pay-gap accordion ─────────────────────────────────────── */
@@ -1607,7 +1606,7 @@ function renderGapChart(idx) {
   const tickColor = isLight ? '#202124' : '#ffffff';
   const gridColor = isLight ? 'rgba(60,64,67,0.12)' : 'rgba(128,128,128,0.12)';
 
-  const labels = districts.map(d => `${d.raion} (${(d.region || '').replace(/\s+ОБЛАСТЬ$/i, '')})`);
+  const labels = districts.map(d => `${(d.raion || '').toUpperCase()} (${(d.region || '').replace(/\s+ОБЛАСТЬ$/i, '').toUpperCase()})`);
   const colors = values.map(v => {
     const t = maxVal > 0 ? v / maxVal : 0;
     return v >= median
@@ -1678,23 +1677,14 @@ function renderGapChart(idx) {
 
 function anToggleSort(th) {
   const tab = th.dataset.antab, col = th.dataset.ancol;
-  let sortKey = tab;
-  if (tab === 'utilization') sortKey = _anUtilRegionId != null ? 'utilization-drill' : 'utilization';
-  if (tab === 'utilraion')   sortKey = _anRaionDrillId != null ? 'utilraion-drill'   : 'utilraion';
+  const sortKey = tab;
   const s = _anSort[sortKey] || { col: null, dir: 'asc' };
   _anSort[sortKey] = { col, dir: s.col === col && s.dir === 'asc' ? 'desc' : 'asc' };
   document.querySelectorAll(`[data-antab="${tab}"][data-ancol]`).forEach(t => {
     const icon = t.querySelector('.an-sort-icon');
     if (icon) icon.textContent = t.dataset.ancol === col ? (_anSort[sortKey].dir === 'asc' ? ' ▲' : ' ▼') : '';
   });
-  if (tab === 'utilization') {
-    const ck = _anUtilRegionId != null ? String(_anUtilRegionId) : 'all';
-    if (_anUtilCache[ck]) renderAnUtil(_anUtilCache[ck]); return;
-  }
-  if (tab === 'utilraion') {
-    const ck = _anRaionDrillId != null ? `r${_anRaionDrillId}` : 'all';
-    if (_anRaionCache[ck]) renderAnUtilRaion(_anRaionCache[ck]); return;
-  }
+  if (tab === 'utilization') { loadAnUtil(); return; }
   const data = _anTabCache[tab];
   if (data) renderAnomalyTab(tab, data);
 }
@@ -1720,55 +1710,69 @@ async function loadAnomalyKpi() {
 
 async function loadAnUtil() {
   const fp = buildFilterParams('none');
-  const cacheKey = (_anUtilRegionId != null ? String(_anUtilRegionId) : 'all') + fp;
-  if (_anUtilCache[cacheKey]) { renderAnUtil(_anUtilCache[cacheKey]); return; }
-  if (_anUtilRegionId != null) fp.set('region_id', _anUtilRegionId);
-  const url = `/api/anomalies/utilization?${fp}`;
+  let url, ck;
+  if (_anUtilRaionId != null) {
+    // уровень 3 — виды помощи района
+    ck = `raion:${_anUtilRaionId}` + fp;
+    fp.set('raion_id', _anUtilRaionId);
+    url = `/api/anomalies/utilization-raion?${fp}`;
+  } else if (_anUtilRegionId != null) {
+    // уровень 2 — районы региона
+    ck = `region:${_anUtilRegionId}` + fp;
+    fp.set('region_id', _anUtilRegionId);
+    url = `/api/anomalies/utilization-raion?${fp}`;
+  } else {
+    // уровень 1 — регионы
+    ck = 'all' + fp;
+    url = `/api/anomalies/utilization?${fp}`;
+  }
+  if (_anUtilCache[ck]) { renderAnUtil(_anUtilCache[ck]); return; }
   try {
     const data = await fetch(url).then(r => r.json());
-    _anUtilCache[cacheKey] = data;
+    _anUtilCache[ck] = data;
     renderAnUtil(data);
   } catch(e) { console.error('anomalies/utilization', e); }
 }
 
-function anUtilGoBack() {
-  _anUtilRegionId = null;
-  _anUtilRegionName = '';
+function anUtilResetToRegions() {
+  _anUtilRegionId = null; _anUtilRegionName = '';
+  _anUtilRaionId = null; _anUtilRaionName = '';
+}
+
+function anUtilBack() {
+  if (_anUtilRaionId != null) { _anUtilRaionId = null; _anUtilRaionName = ''; }
+  else { _anUtilRegionId = null; _anUtilRegionName = ''; }
   loadAnUtil();
 }
 
-function anUtilDrill(regionId, regionName) {
-  _anUtilRegionId = regionId;
-  _anUtilRegionName = regionName;
+function anUtilDrillRegion(regionId, regionName) {
+  if (regionId == null) return;
+  _anUtilRegionId = regionId; _anUtilRegionName = regionName;
+  _anUtilRaionId = null; _anUtilRaionName = '';
   loadAnUtil();
 }
 
-async function loadAnUtilRaion() {
-  const fp = buildFilterParams('none');
-  const cacheKey = (_anRaionDrillId != null ? `r${_anRaionDrillId}` : 'all') + fp;
-  if (_anRaionCache[cacheKey]) { renderAnUtilRaion(_anRaionCache[cacheKey]); return; }
-  if (_anRaionDrillId != null) fp.set('raion_id', _anRaionDrillId);
-  const url = `/api/anomalies/utilization-raion?${fp}`;
-  try {
-    const data = await fetch(url).then(r => r.json());
-    _anRaionCache[cacheKey] = data;
-    renderAnUtilRaion(data);
-  } catch(e) { console.error('utilization-raion', e); }
+function anUtilDrillRaion(raionId, raionName) {
+  if (raionId == null) return;
+  _anUtilRaionId = raionId; _anUtilRaionName = raionName;
+  loadAnUtil();
 }
 
-function anUtilRaionGoBack() { _anRaionDrillId = null; _anRaionDrillName = ''; loadAnUtilRaion(); }
-function anUtilRaionDrill(raionId, raionName) { _anRaionDrillId = raionId; _anRaionDrillName = raionName; loadAnUtilRaion(); }
+let _dataTableInit = false;
+function ensureDataTable() {
+  if (!_dataTableInit) { initTableHead(); _dataTableInit = true; }
+  loadTable(1);
+}
 
 async function loadAnomalyTab(tab) {
   if (tab === 'utilization') { await loadAnUtil(); return; }
-  if (tab === 'utilraion')   { await loadAnUtilRaion(); return; }
+  if (tab === 'data') { ensureDataTable(); return; }
   const fp = buildFilterParams('none');
   const cacheKey = tab + fp;
   if (_anTabCache[cacheKey]) { renderAnomalyTab(tab, _anTabCache[cacheKey]); return; }
   const baseUrlMap = {
     cks:    '/api/anomalies/cks-ab',
     unique: '/api/anomalies/unique-help',
-    demo:   '/api/anomalies/demographic',
   };
   if (!baseUrlMap[tab]) return;
   const tabUrl = tab === 'unique' ? baseUrlMap[tab] : `${baseUrlMap[tab]}?${fp}`;
@@ -1780,7 +1784,7 @@ async function loadAnomalyTab(tab) {
 }
 
 function renderAnomalyTab(tab, data) {
-  ({ cks: renderAnCks, unique: renderAnUnique, demo: renderAnDemo })[tab]?.(data);
+  ({ cks: renderAnCks, unique: renderAnUnique })[tab]?.(data);
 }
 
 function _anEmpty(tbody, cols) {
@@ -1794,7 +1798,7 @@ function renderAnCks(rows) {
   const sorted = anSorted(rows, 'cks');
   if (!sorted.length) { _anEmpty(tbody, 6); return; }
   tbody.innerHTML = sorted.map(r => `<tr>
-    <td>${r.region}</td>
+    <td class="geo-name">${r.region}</td>
     <td class="col-center"><span class="an-cks-badge">${r.cks}</span></td>
     <td>${_shortPayType(r.pay_type)}</td>
     <td class="col-center an-alarm-cell">${formatInt(r.count)}</td>
@@ -1807,93 +1811,47 @@ function renderAnUtil(rows) {
   const tbody   = document.getElementById('antab-utilization-body');
   const backBtn = document.getElementById('an-util-back');
   const geoCol  = document.getElementById('an-util-geo-col');
-  const titleEl = document.getElementById('an-util-title');
-  const bar     = backBtn ? backBtn.closest('.an-util-bar') : null;
+  const sorted  = anSorted(rows, 'utilization');
 
-  if (_anUtilRegionId != null) {
-    if (bar)      bar.style.display = 'flex';
-    if (backBtn)  backBtn.style.display = 'inline-block';
-    if (geoCol)   geoCol.textContent = 'Вид помощи';
-    if (titleEl)  titleEl.textContent = _anUtilRegionName;
-    const sorted = anSorted(rows, 'utilization-drill');
-    if (!sorted.length) { _anEmpty(tbody, 5); return; }
-    tbody.innerHTML = sorted.map(r => {
-      const cls = r.pct < 50 ? 'an-alarm-cell' : r.pct < 80 ? 'an-warn-cell' : '';
-      return `<tr>
-        <td>${r.pay_type}</td>
-        <td class="col-center">${formatInt(r.count)}</td>
+  const valCols = r => {
+    const cls = r.pct < 50 ? 'an-alarm-cell' : r.pct < 80 ? 'an-warn-cell' : '';
+    return `<td class="col-center">${formatInt(r.count)}</td>
         <td class="col-right">${formatNum(r.total_max)} ₸</td>
         <td class="col-right">${formatNum(r.total_dec)} ₸</td>
-        <td class="col-right ${cls}">${r.pct}%</td>
-      </tr>`;
-    }).join('');
+        <td class="col-right ${cls}">${r.pct}%</td>`;
+  };
+
+  if (_anUtilRaionId != null) {
+    // Уровень 3 — виды помощи района (контекст в заголовке колонки, как в матрице)
+    if (backBtn) { backBtn.style.display = 'inline-block'; backBtn.textContent = '← Районы'; }
+    if (geoCol)  geoCol.textContent = `Вид помощи (${(_anUtilRaionName || '').toUpperCase()})`;
+    if (!sorted.length) { _anEmpty(tbody, 5); return; }
+    tbody.innerHTML = sorted.map(r => `<tr>
+        <td>${_shortPayType(r.pay_type)}</td>
+        ${valCols(r)}
+      </tr>`).join('');
+  } else if (_anUtilRegionId != null) {
+    // Уровень 2 — районы региона
+    if (backBtn) { backBtn.style.display = 'inline-block'; backBtn.textContent = '← Все регионы'; }
+    if (geoCol)  geoCol.textContent = `Район (${(_anUtilRegionName || '').toUpperCase()})`;
+    if (!sorted.length) { _anEmpty(tbody, 5); return; }
+    tbody.innerHTML = sorted.map(r => `<tr class="coverage-row" style="cursor:pointer"
+        onclick="anUtilDrillRaion(${r.raion_id}, '${(r.raion || '').replace(/'/g, "\\'")}')">
+        <td class="geo-name">${r.raion}</td>
+        ${valCols(r)}
+      </tr>`).join('');
   } else {
-    if (bar)      bar.style.display = 'none';
-    if (backBtn)  backBtn.style.display = 'none';
-    if (geoCol)   geoCol.textContent = 'Регион';
-    if (titleEl)  titleEl.textContent = '';
-    const sorted = anSorted(rows, 'utilization');
+    // Уровень 1 — регионы
+    if (backBtn) backBtn.style.display = 'none';
+    if (geoCol)  geoCol.textContent = 'Регион';
     if (!sorted.length) { _anEmpty(tbody, 5); return; }
     tbody.innerHTML = sorted.map(r => {
-      const cls = r.pct < 50 ? 'an-alarm-cell' : r.pct < 80 ? 'an-warn-cell' : '';
       const rowCls    = r.clickable ? 'coverage-row' : '';
       const clickAttr = r.clickable
-        ? `onclick="anUtilDrill(${r.id}, '${(r.name || '').replace(/'/g, "\\'")}')" style="cursor:pointer"` : '';
+        ? `onclick="anUtilDrillRegion(${r.id}, '${(r.name || '').replace(/'/g, "\\'")}')" style="cursor:pointer"` : '';
       return `<tr class="${rowCls}" ${clickAttr}>
-        <td>${r.name}</td>
-        <td class="col-center">${formatInt(r.count)}</td>
-        <td class="col-right">${formatNum(r.total_max)} ₸</td>
-        <td class="col-right">${formatNum(r.total_dec)} ₸</td>
-        <td class="col-right ${cls}">${r.pct}%</td>
-      </tr>`;
-    }).join('');
-  }
-}
-
-function renderAnUtilRaion(rows) {
-  const tbody   = document.getElementById('antab-utilraion-body');
-  const backBtn = document.getElementById('an-utilraion-back');
-  const geoCol  = document.getElementById('an-utilraion-geo-col');
-  const regTh   = document.getElementById('an-utilraion-reg-th');
-  const titleEl = document.getElementById('an-utilraion-title');
-  const bar     = backBtn ? backBtn.closest('.an-util-bar') : null;
-
-  if (_anRaionDrillId != null) {
-    if (bar)      bar.style.display = 'flex';
-    if (backBtn)  backBtn.style.display = 'inline-block';
-    if (geoCol)   geoCol.textContent = 'Вид помощи';
-    if (regTh)    regTh.style.display = 'none';
-    if (titleEl)  titleEl.textContent = _anRaionDrillName;
-    const sorted = anSorted(rows, 'utilraion-drill');
-    if (!sorted.length) { _anEmpty(tbody, 5); return; }
-    tbody.innerHTML = sorted.map(r => {
-      const cls = r.pct < 50 ? 'an-alarm-cell' : r.pct < 80 ? 'an-warn-cell' : '';
-      return `<tr>
-        <td>${_shortPayType(r.pay_type)}</td>
-        <td style="display:none"></td>
-        <td class="col-center">${formatInt(r.count)}</td>
-        <td class="col-right">${formatNum(r.total_max)} ₸</td>
-        <td class="col-right">${formatNum(r.total_dec)} ₸</td>
-        <td class="col-right ${cls}">${r.pct}%</td>
-      </tr>`;
-    }).join('');
-  } else {
-    if (bar)      bar.style.display = 'none';
-    if (backBtn)  backBtn.style.display = 'none';
-    if (geoCol)   geoCol.textContent = 'Район';
-    if (regTh)    regTh.style.display = '';
-    if (titleEl)  titleEl.textContent = '';
-    const sorted = anSorted(rows, 'utilraion');
-    if (!sorted.length) { _anEmpty(tbody, 6); return; }
-    tbody.innerHTML = sorted.map(r => {
-      const cls = r.pct < 50 ? 'an-alarm-cell' : r.pct < 80 ? 'an-warn-cell' : '';
-      return `<tr class="coverage-row" style="cursor:pointer" onclick="anUtilRaionDrill(${r.raion_id}, '${(r.raion||'').replace(/'/g,"\\'")}')">
-        <td>${r.raion}</td>
-        <td>${r.region}</td>
-        <td class="col-center">${formatInt(r.count)}</td>
-        <td class="col-right">${formatNum(r.total_max)} ₸</td>
-        <td class="col-right">${formatNum(r.total_dec)} ₸</td>
-        <td class="col-right ${cls}">${r.pct}%</td>
+        <td class="geo-name">${r.name}</td>
+        ${valCols(r)}
       </tr>`;
     }).join('');
   }
@@ -1906,29 +1864,8 @@ function renderAnUnique(rows) {
   tbody.innerHTML = sorted.map(r => `<tr>
     <td>${r.pay_type}</td>
     <td class="col-center an-warn-cell">${r.reg_count}</td>
-    <td>${(r.regions || []).join(', ')}</td>
+    <td class="geo-name">${(r.regions || []).join(', ')}</td>
   </tr>`).join('');
-}
-
-function renderAnDemo(rows) {
-  const tbody = document.getElementById('antab-demo-body');
-  const sorted = anSorted(rows, 'demo');
-  if (!sorted.length) { _anEmpty(tbody, 6); return; }
-  tbody.innerHTML = sorted.map(r => {
-    const flagsHtml = r.flags.length
-      ? r.flags.map(f => `<span class="an-flag-badge">${f}</span>`).join(' ')
-      : r.low_data
-        ? '<span class="an-ok-badge">норма (мало данных)</span>'
-        : '<span class="an-ok-badge">норма</span>';
-    return `<tr class="${r.flags.length ? 'an-row-flag' : ''}">
-      <td>${_shortPayType(r.pay_type)}</td>
-      <td class="col-center">${formatInt(r.total)}</td>
-      <td class="col-center">${r.pct_male}%</td>
-      <td class="col-center">${r.pct_female}%</td>
-      <td class="col-right">${r.avg_age != null ? r.avg_age : '—'}</td>
-      <td>${flagsHtml}</td>
-    </tr>`;
-  }).join('');
 }
 
 window.addEventListener('load', () => { if (map) map.invalidateSize(); });
@@ -2012,13 +1949,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       btn.classList.add('active');
       const pane = document.getElementById('antab-' + btn.dataset.antab);
       if (pane) pane.classList.add('active');
-      if (btn.dataset.antab === 'utilization') { _anUtilRegionId = null; _anUtilRegionName = ''; }
-      if (btn.dataset.antab === 'utilraion')   { _anRaionDrillId = null; _anRaionDrillName = ''; }
+      if (btn.dataset.antab === 'utilization') anUtilResetToRegions();
+      else { const bb = document.getElementById('an-util-back'); if (bb) bb.style.display = 'none'; }
       loadAnomalyTab(btn.dataset.antab);
     });
   });
   loadAnomalyKpi();
   loadAnomalyTab('cks');
+
+  // Пагинация таблицы "Данные"
+  document.getElementById('btn-prev')?.addEventListener('click', () => { if (currentPage > 1) loadTable(currentPage - 1); });
+  document.getElementById('btn-next')?.addEventListener('click', () => loadTable(currentPage + 1));
 
   // KPI chart tabs (Благосостояние / Пол-Возраст)
   document.querySelectorAll('.kpi-tab-btn').forEach(btn => {
