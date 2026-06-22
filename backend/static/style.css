@@ -1577,6 +1577,16 @@ th.sort-active { color: #8ab4ff !important; }
 }
 ::-webkit-scrollbar-thumb:hover { background: #7aa8ff; }
 
+/* Шире вертикальный скролл во всех таблицах */
+.table-wrap::-webkit-scrollbar,
+.data-table-wrap::-webkit-scrollbar,
+.rdm-body::-webkit-scrollbar,
+.gap-accordion::-webkit-scrollbar { width: 12px; height: 12px; }
+.table-wrap::-webkit-scrollbar-thumb,
+.data-table-wrap::-webkit-scrollbar-thumb,
+.rdm-body::-webkit-scrollbar-thumb,
+.gap-accordion::-webkit-scrollbar-thumb { border-radius: 6px; }
+
 /* ── KPI labels ── */
 .kpi-card .label, .gender-item .label {
   font-size: 0.65rem;
