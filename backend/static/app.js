@@ -389,7 +389,7 @@ const TABLE_COLS = [
   { key: 'sicid',        label: 'SICID' },
   { key: 'kato_regname', label: 'Регион',            filterable: true },
   { key: 'kato_rainame', label: 'Район',             filterable: true },
-  { key: 'pay_type',     label: 'Тип выплаты',       filterable: true },
+  { key: 'pay_type',     label: 'Вид помощи',       filterable: true },
   { key: 'cat_type',     label: 'Категория',         filterable: true },
   { key: 'period',       label: 'Период',            filterable: true },
   { key: 'max_pay_sum',  label: 'MAX выплата',       sortable: true },
