@@ -236,21 +236,36 @@ def load_excel():
 
 
 def load_budget():
-    """Load help_types.xlsx into budget_items table (idempotent)."""
+    """Load help_types.xlsx into budget_items table (idempotent).
+
+    KATO_REG and KATO_DIS in help_types.xlsx use the same short codes as
+    Payment.kato_region / Payment.kato_raion, so store them as-is (no division).
+    Auto-migrates old rows where the division bug set kato_region=0.
+    """
     Base.metadata.create_all(bind=engine)
+
+    path = os.path.join(os.path.dirname(__file__), "data", "help_types.xlsx")
+    if not os.path.exists(path):
+        return
 
     with engine.connect() as conn:
         count = conn.execute(text("SELECT COUNT(*) FROM budget_items")).scalar()
         if count > 0:
-            return
+            max_reg = conn.execute(text(
+                "SELECT MAX(kato_region) FROM budget_items WHERE kato_region IS NOT NULL"
+            )).scalar() or 0
+            if max_reg != 0:
+                return  # data already correct
+            # kato_region is all-zero (old division bug) — delete and reload
+            conn.execute(text("DELETE FROM budget_items"))
+            conn.commit()
 
-    path = os.path.join(os.path.dirname(__file__), "data", "help_types.xlsx")
     wb = load_workbook(path, read_only=True, data_only=True)
     ws = wb.active
 
     rows_data = []
     for row in ws.iter_rows(min_row=2, values_only=True):
-        # cols: 0=OBLNAME, 1=ID, 2=RNAME, 3=KATO_REG(9-digit), 4=KATO_DIS(9-digit), 5=PLANSUM
+        # cols: 0=OBLNAME, 1=ID, 2=RNAME, 3=KATO_REG, 4=KATO_DIS, 5=PLANSUM
         kato_reg_raw = parse_num(row[3], int)
         kato_dis_raw = parse_num(row[4], int)
         plansum = parse_num(row[5])
@@ -258,8 +273,8 @@ def load_budget():
             continue
         rows_data.append(BudgetItem(
             pay_type_id=parse_num(row[1], int),
-            kato_region=kato_reg_raw // 10_000_000,
-            kato_raion=kato_dis_raw // 100_000 if kato_dis_raw else None,
+            kato_region=kato_reg_raw,
+            kato_raion=kato_dis_raw,
             plansum=plansum,
         ))
 

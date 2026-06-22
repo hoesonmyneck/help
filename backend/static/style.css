@@ -489,7 +489,7 @@ header h1 {
 .ranking-loading { font-size: 0.8rem; color: var(--tx-muted); padding: 8px 0; }
 .ranking-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 6px 6px;
   border-bottom: 1px solid var(--bd-main);
@@ -506,25 +506,38 @@ header h1 {
   width: 20px;
   text-align: right;
   flex-shrink: 0;
+  padding-top: 2px;
 }
 .ranking-rank.rank-1 { color: #f7c948; }
 .ranking-rank.rank-2 { color: #b0b0b0; }
 .ranking-rank.rank-3 { color: #cd7f32; }
-.ranking-name {
+.ranking-body {
   flex: 1;
+  min-width: 0;
+}
+.ranking-name {
   font-size: 0.72rem;
   color: var(--tx-main);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ranking-value {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--ac-teal);
-  white-space: nowrap;
-  flex-shrink: 0;
+.ranking-metrics {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 3px;
 }
+.ranking-metric {
+  font-size: 0.63rem;
+  white-space: nowrap;
+}
+.rm-lbl { color: var(--tx-muted); }
+.rm-val { font-weight: 700; color: var(--tx-main); margin-left: 2px; }
+.rm-deliv { color: var(--ac-teal); }
+.ranking-name-row { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
+.ranking-name-row .ranking-name { flex: 1; }
+.ranking-recip { font-size: 0.68rem; font-weight: 700; color: var(--ac-main, #5b8af8); white-space: nowrap; flex-shrink: 0; margin-left: auto; }
 
 /* Dynamics tab */
 .dyn-tab-bar {
@@ -634,7 +647,7 @@ header h1 {
   border: 1px solid var(--bd-hi);
   border-radius: 8px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.45);
-  width: 660px;
+  width: 740px;
   max-height: 72vh;
   overflow-y: auto;
   padding: 10px 12px;
@@ -642,7 +655,7 @@ header h1 {
 .gp-title { font-weight: 700; color: var(--tx-head); margin-bottom: 4px; font-size: 0.9rem; }
 .gp-hdr-row, .gp-row {
   display: grid;
-  grid-template-columns: 1fr 70px 130px 120px;
+  grid-template-columns: 1fr 60px 115px 115px 100px;
   gap: 6px;
   padding: 3px 4px;
   border-bottom: 1px solid var(--bd-main);
@@ -700,6 +713,7 @@ header h1 {
   border-bottom-color: #c8d4e8;
 }
 :root[data-theme="light"] .leaflet-bar a:hover { background-color: #e8eef8; }
+.lc-home-btn { font-size: 16px !important; font-style: normal !important; display: block !important; }
 
 /* Table */
 .table-section {
@@ -953,7 +967,9 @@ tbody tr:last-child td { border-bottom: none; }
 .ranking-row:hover { background: var(--bg-hover); cursor: pointer; }
 
 #ranking-btn-back,
-#coverage-btn-back {
+#coverage-btn-back,
+#an-util-back,
+#an-cks-back {
   background: var(--bg-deep);
   border: 1px solid var(--bd-hi);
   color: var(--tx-sub);
@@ -968,7 +984,9 @@ tbody tr:last-child td { border-bottom: none; }
 }
 #ranking-btn-back { margin-left: auto; }
 #ranking-btn-back:hover,
-#coverage-btn-back:hover { background: var(--bd-hi); }
+#coverage-btn-back:hover,
+#an-util-back:hover,
+#an-cks-back:hover { background: var(--bd-hi); }
 
 /* Data table sort & filter */
 th.tbl-sortable { cursor: pointer; user-select: none; }
@@ -1287,6 +1305,15 @@ th.sort-active { color: var(--ac-blue); }
   color: rgba(243,156,18,0.7);
 }
 
+/* Pay-type stats tab */
+#paytypes-table { width: 100%; }
+#paytypes-table th { background: var(--bg-card); white-space: nowrap; padding: 8px 12px; border-bottom: 2px solid var(--bd-main); font-size: 0.78rem; color: var(--tx-sub); }
+#paytypes-table td { padding: 7px 12px; border-bottom: 1px solid var(--bd-main); font-size: 0.8rem; }
+#paytypes-table tr:hover td { background: var(--bg-hover); }
+.pt-name-col { width: 40%; }
+.ptab-name { color: var(--tx-main); }
+.ptab-deliv { color: var(--ac-teal); font-weight: 600; }
+
 /* Help-presence tab */
 #presence-table { table-layout: fixed; }
 #presence-table th, #presence-table td { text-align: center; }
@@ -1296,10 +1323,14 @@ th.sort-active { color: var(--ac-blue); }
   font-size: 0.72rem;
 }
 .prs-mini { color: var(--tx-cell); font-weight: 600; }
-.prs-mini-sum, th.prs-mini-sum { width: 130px; white-space: nowrap; }
-.prs-mini-sum { color: var(--ac-teal); }
-/* Border to separate the mini-table block from the pay-type columns */
-.prs-mini-sum { border-right: 2px solid var(--bd-mid); }
+.prs-mini-sum, th.prs-mini-sum { width: 120px; white-space: nowrap; }
+.prs-mini-sum { color: var(--ac-blue, #4ecdc4); }
+/* Факт выплачено — last mini column; border separates it from pay-type columns */
+.prs-mini-deliv, th.prs-mini-deliv { width: 140px; white-space: nowrap; }
+.prs-mini-deliv { color: var(--ac-teal); border-right: 2px solid var(--bd-mid); }
+/* Бюджет */
+.prs-mini-budget, th.prs-mini-budget { width: 130px; white-space: nowrap; }
+.prs-mini-budget { color: #5b8af8; }
 .prs-total-row { background: rgba(78,205,196,0.10); font-weight: 700; }
 .prs-total-row .prs-geo-cell { color: var(--ac-teal); }
 .prs-total-row:hover { background: rgba(78,205,196,0.14); }
@@ -1316,6 +1347,7 @@ th.sort-active { color: var(--ac-blue); }
   border-left: 1px solid var(--bd-main);
   font-size: 0.72rem;
   vertical-align: top;
+  overflow: hidden;
 }
 .prs-hdr-txt {
   display: -webkit-box;
@@ -1524,10 +1556,11 @@ tbody tr:hover td:first-child {
 }
 
 /* ── Back buttons ── */
-#btn-back, #ranking-btn-back, #coverage-btn-back {
+#btn-back, #ranking-btn-back, #coverage-btn-back, #an-util-back, #an-cks-back {
   transition: background 0.2s, box-shadow 0.2s, color 0.2s;
 }
-#btn-back:hover, #ranking-btn-back:hover, #coverage-btn-back:hover {
+#btn-back:hover, #ranking-btn-back:hover, #coverage-btn-back:hover,
+#an-util-back:hover, #an-cks-back:hover {
   box-shadow: 0 0 14px rgba(91,138,248,0.3);
   color: #8ab4ff;
 }
@@ -1771,24 +1804,26 @@ th.sort-active { color: #8ab4ff !important; }
 }
 
 /* ── Sticky left columns: Матрица видов помощи ── */
-/* Col widths: geo=220, vidy=92, lyudei=92, summa=130 */
+/* Col widths: geo=220, vidy=92, lyudei=92, budget=130, summa=120, deliv=140 */
 #presence-table th:nth-child(1), #presence-table td:nth-child(1) { position: sticky; left: 0;     z-index: 2; }
 #presence-table th:nth-child(2), #presence-table td:nth-child(2) { position: sticky; left: 220px; z-index: 2; }
 #presence-table th:nth-child(3), #presence-table td:nth-child(3) { position: sticky; left: 312px; z-index: 2; }
 #presence-table th:nth-child(4), #presence-table td:nth-child(4) { position: sticky; left: 404px; z-index: 2; }
+#presence-table th:nth-child(5), #presence-table td:nth-child(5) { position: sticky; left: 534px; z-index: 2; }
+#presence-table th:nth-child(6), #presence-table td:nth-child(6) { position: sticky; left: 654px; z-index: 2; }
 /* Header corner cells: stick top+left simultaneously → highest z-index */
-#presence-table thead th:nth-child(-n+4) { z-index: 4; }
+#presence-table thead th:nth-child(-n+6) { z-index: 4; }
 /* Body sticky cells need explicit bg so scrolled content is hidden */
-#presence-table tbody td:nth-child(-n+4) { background: var(--bg-card); }
-#presence-table tbody tr:hover td:nth-child(-n+4) {
+#presence-table tbody td:nth-child(-n+6) { background: var(--bg-card); }
+#presence-table tbody tr:hover td:nth-child(-n+6) {
   background-color: var(--bg-card) !important;
   background-image: linear-gradient(rgba(91,138,248,0.08), rgba(91,138,248,0.08)) !important;
 }
-#presence-table tbody tr.prs-total-row td:nth-child(-n+4) {
+#presence-table tbody tr.prs-total-row td:nth-child(-n+6) {
   background-color: var(--bg-card);
   background-image: linear-gradient(rgba(78,205,196,0.10), rgba(78,205,196,0.10));
 }
-#presence-table tbody tr.prs-total-row:hover td:nth-child(-n+4) {
+#presence-table tbody tr.prs-total-row:hover td:nth-child(-n+6) {
   background-color: var(--bg-card) !important;
   background-image: linear-gradient(rgba(78,205,196,0.14), rgba(78,205,196,0.14)) !important;
 }
@@ -1811,7 +1846,7 @@ th.sort-active { color: #8ab4ff !important; }
 }
 
 /* Light theme body bg for sticky cells */
-:root[data-theme="light"] #presence-table tbody tr:hover td:nth-child(-n+4),
+:root[data-theme="light"] #presence-table tbody tr:hover td:nth-child(-n+6),
 :root[data-theme="light"] #tab-groups table tbody tr:hover td:nth-child(1) {
   background-color: var(--bg-card) !important;
   background-image: linear-gradient(rgba(80,90,110,0.08), rgba(80,90,110,0.08)) !important;
@@ -2115,7 +2150,7 @@ header h1,
 .gp-side-title          { color: #fff !important; }
 .prs-total-row .prs-geo-cell { color: #fff !important; }
 .grp-total-row > td:first-child { color: #fff !important; }
-.prs-mini-sum           { color: #fff !important; }
+.prs-mini-sum, .prs-mini-deliv, .prs-mini-budget { color: #fff !important; }
 .cr-cat:hover           { color: #fff !important; }
 .cr-reg, .cr-reg:hover  { color: #fff !important; }
 .mid-chart-title        { color: #fff !important; }
@@ -2131,7 +2166,9 @@ th.sort-active          { color: #fff !important; }
 .pagination button:not(:disabled):hover { color: #fff !important; }
 #btn-back:hover,
 #ranking-btn-back:hover,
-#coverage-btn-back:hover { color: #fff !important; }
+#coverage-btn-back:hover,
+#an-util-back:hover,
+#an-cks-back:hover { color: #fff !important; }
 
 /* ── SDU filter ── */
 .sdu-legend-item { cursor: pointer; border-radius: 5px; transition: background 0.15s, outline 0.15s; }
@@ -2597,7 +2634,9 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 :root[data-theme="light"] .prs-cell-sum { color: #5f6368; }
 :root[data-theme="light"] .prs-total-row .prs-geo-cell,
 :root[data-theme="light"] .grp-total-row > td:first-child,
-:root[data-theme="light"] .prs-mini-sum { color: #202124 !important; }
+:root[data-theme="light"] .prs-mini-sum,
+:root[data-theme="light"] .prs-mini-deliv,
+:root[data-theme="light"] .prs-mini-budget { color: #202124 !important; }
 :root[data-theme="light"] .grp-green  { background: rgba(46,204,113,0.16); color: #137333 !important; }
 :root[data-theme="light"] .grp-orange { background: rgba(227,116,0,0.14);  color: #b06000 !important; }
 :root[data-theme="light"] .grp-red    { background: rgba(231,76,60,0.14);  color: #c5221f !important; }

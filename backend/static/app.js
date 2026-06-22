@@ -407,6 +407,26 @@ let tableFilters = {};
 
 async function init() {
   map = L.map('map', { zoomControl: true, attributionControl: false }).setView([48, 68], 4);
+
+  // Home button — resets view smoothly via flyTo
+  new (L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd(m) {
+      const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+      const a = L.DomUtil.create('a', 'lc-home-btn', div);
+      a.href = '#';
+      a.title = 'Сбросить вид карты';
+      a.setAttribute('role', 'button');
+      a.innerHTML = '⌂';
+      L.DomEvent.on(a, 'click', e => {
+        L.DomEvent.stopPropagation(e);
+        L.DomEvent.preventDefault(e);
+        m.flyTo([48, 68], 4, { duration: 0.7 });
+      });
+      return div;
+    }
+  }))().addTo(map);
+
   const isLight = document.documentElement.dataset.theme === 'light';
   tileLayer = L.tileLayer(
     isLight
@@ -598,6 +618,7 @@ async function drillRegionFromRanking(regionId) {
   await Promise.all([loadSummary(), loadHelpPresence(), loadGapAnalysis()]);
   loadRankingPanel();
   loadDynamics();
+  loadPayTypes();
   _syncAnomalyGeo();
 }
 
@@ -644,6 +665,7 @@ async function drillRegion(regionId) {
   await Promise.all([loadSummary(), loadHelpPresence(), loadGapAnalysis()]);
   loadRankingPanel();
   loadDynamics();
+  loadPayTypes();
   _syncAnomalyGeo();
 }
 
@@ -655,6 +677,7 @@ async function selectRaion(raionId) {
   updateBreadcrumb(regionName, raionName);
   await refreshKPI();
   loadDynamics();
+  loadPayTypes();
   _syncAnomalyGeo();
 }
 
@@ -692,6 +715,7 @@ function goBack() {
   loadHelpPresence();
   loadRankingPanel();
   loadDynamics();
+  loadPayTypes();
   _syncAnomalyGeo();
 }
 
@@ -937,14 +961,20 @@ function _renderRankingTab(tab) {
   el.innerHTML = sorted.map((row, i) => {
     const rank = i + 1;
     const rankClass = rank <= 3 ? ` rank-${rank}` : '';
-    const val = tab === 'sum'
-      ? formatNum(row.total_deliv) + ' ₸'
-      : formatInt(row.recipients);
     const shortName = (row.name || '').replace(/\s*ОБЛАСТЬ$/i, '').replace(/^ГОРОД\s*/i, 'г.');
+    const nameRow = tab === 'recipients'
+      ? `<div class="ranking-name-row"><div class="ranking-name" title="${row.name || ''}">${shortName}</div><span class="ranking-recip">${formatInt(row.recipients || 0)} чел.</span></div>`
+      : `<div class="ranking-name" title="${row.name || ''}">${shortName}</div>`;
     return `<div class="ranking-item" onclick="_rankingItemClick(${row.id})">
       <span class="ranking-rank${rankClass}">${rank}</span>
-      <span class="ranking-name" title="${row.name || ''}">${shortName}</span>
-      <span class="ranking-value">${val}</span>
+      <div class="ranking-body">
+        ${nameRow}
+        <div class="ranking-metrics">
+          <span class="ranking-metric"><span class="rm-lbl">Бюджет</span> <span class="rm-val">${formatNum(row.budget || 0)} ₸</span></span>
+          <span class="ranking-metric"><span class="rm-lbl">Заявки</span> <span class="rm-val">${formatNum(row.total_dec || 0)} ₸</span></span>
+          <span class="ranking-metric"><span class="rm-lbl">Факт</span> <span class="rm-val rm-deliv">${formatNum(row.total_deliv || 0)} ₸</span></span>
+        </div>
+      </div>
     </div>`;
   }).join('');
 }
@@ -982,13 +1012,34 @@ function renderDynamics(rows) {
   const values = rows.map(r => {
     if (_dynMetric === 'count') return r.people;
     if (_dynMetric === 'deliv') return r.total_deliv;
-    if (_dynMetric === 'dec')   return r.total_dec;
-    return r.total_max;
+    return r.total_dec;
   });
+
+  const dynDatalabels = {
+    id: 'dynDatalabels',
+    afterDatasetsDraw(chart) {
+      if (rows.length > 30) return;
+      const { ctx } = chart;
+      const meta = chart.getDatasetMeta(0);
+      ctx.save();
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillStyle = isDark ? '#9aa0b4' : '#5f6368';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      meta.data.forEach((point, i) => {
+        const val = values[i];
+        if (val == null) return;
+        const label = _dynMetric === 'count' ? formatInt(val) : fmtCompact(val);
+        ctx.fillText(label, point.x, point.y - 5);
+      });
+      ctx.restore();
+    }
+  };
 
   if (_dynChart) { _dynChart.destroy(); _dynChart = null; }
   _dynChart = new Chart(canvas.getContext('2d'), {
     type: 'line',
+    plugins: [dynDatalabels],
     data: {
       labels,
       datasets: [{
@@ -1065,6 +1116,7 @@ function _refreshAfterFilterChange() {
   loadGapAnalysis();
   loadRankingPanel();
   loadDynamics();
+  loadPayTypes();
 
   const activeAntab = document.querySelector('.antab-btn.active');
   if (activeAntab) loadAnomalyTab(activeAntab.dataset.antab);
@@ -1187,12 +1239,14 @@ function _buildGeoPanelHtml(provided, stats) {
   if (!provided.length) return '<div class="gp-empty">Нет данных</div>';
   return provided.map(({ c }) => {
     const s = stats && stats[c.id];
-    const recip  = s ? formatInt(s.recipients)              : '0';
+    const recip  = s ? formatInt(s.recipients) : '0';
+    const dec    = s && s.total_dec > 0 ? formatNum(s.total_dec) : '0';
     const deliv  = s && s.total_deliv > 0 ? formatNum(s.total_deliv) : '0';
-    const budget = s && s.budget > 0 ? formatNum(s.budget)  : '—';
+    const budget = s && s.budget > 0 ? formatNum(s.budget) : '—';
     return `<div class="gp-row gp-yes">
       <span class="gp-pay">${stripHelpPrefix(c.name)}</span>
       <span class="gp-stat">${recip}</span>
+      <span class="gp-stat">${dec} ₸</span>
       <span class="gp-stat">${deliv} ₸</span>
       <span class="gp-stat gp-budget">${budget} ₸</span>
     </div>`;
@@ -1219,6 +1273,7 @@ async function showGeoPanel(id, name, ev) {
          ${provided.length ? `<div class="gp-hdr-row">
            <span class="gp-pay gp-hdr">Вид помощи</span>
            <span class="gp-stat gp-hdr">Услугопол.</span>
+           <span class="gp-stat gp-hdr">Сумма заявок</span>
            <span class="gp-stat gp-hdr">Факт выплачено</span>
            <span class="gp-stat gp-hdr">Бюджет</span>
          </div>` : ''}
@@ -1248,7 +1303,7 @@ function positionGeoPanel(ev) {
   if (ev) geoPanelLastEv = { clientX: ev.clientX, clientY: ev.clientY };
   const e = geoPanelLastEv || { clientX: 120, clientY: 120 };
   const x = e.clientX, y = e.clientY;
-  const pw = panel.offsetWidth || 420, ph = panel.offsetHeight || 240;
+  const pw = panel.offsetWidth || 740, ph = panel.offsetHeight || 240;
   const gap = 3;
   // always to the LEFT of the cursor — right edge of the panel hugs the cursor
   let left = x - gap - pw;
@@ -1321,7 +1376,9 @@ function renderHelpPresence() {
        <th class="prs-geo-hdr">${geoLabel}</th>
        ${miniHdr('vidy', 'Виды помощи', '', 'Виды помощи, которые должны оказываться')}
        ${miniHdr('lyudei', 'Людей', '', 'Количество людей, которым оказывается услуга')}
-       ${miniHdr('summa', 'Сумма', 'prs-mini-sum', 'Фактически выплачено')}
+       ${miniHdr('budget', 'Бюджет', 'prs-mini-budget', 'Плановый бюджет')}
+       ${miniHdr('summa', 'Сумма заявок', 'prs-mini-sum', 'Сумма заявок (dec_pay_sum)')}
+       ${miniHdr('deliv', 'Факт выплачено', 'prs-mini-deliv', 'Фактически выплачено')}
        ${cols}
      </tr>`;
 
@@ -1331,8 +1388,8 @@ function renderHelpPresence() {
   if (presenceSortCol) {
     const key = presenceSortCol;
     body = [...body].sort((a, b) => {
-      const av = key === 'summa' ? (a.mini?.summa_val ?? 0) : (a.mini?.[key] ?? 0);
-      const bv = key === 'summa' ? (b.mini?.summa_val ?? 0) : (b.mini?.[key] ?? 0);
+      const _mv = (r, k) => k === 'summa' ? (r.mini?.summa_val ?? 0) : k === 'deliv' ? (r.mini?.deliv_val ?? 0) : k === 'budget' ? (r.mini?.budget_val ?? 0) : (r.mini?.[k] ?? 0);
+      const av = _mv(a, key), bv = _mv(b, key);
       return presenceSortDir === 'desc' ? bv - av : av - bv;
     });
   }
@@ -1357,7 +1414,9 @@ function renderHelpPresence() {
       <td class="prs-geo-cell">${r.name || '—'}</td>
       <td class="col-center prs-mini">${m.vidy ?? 0}</td>
       <td class="col-center prs-mini">${formatInt(m.lyudei ?? 0)}</td>
+      <td class="col-right prs-mini prs-mini-budget">${m.budget ?? '0'} ₸</td>
       <td class="col-right prs-mini prs-mini-sum">${m.summa ?? '0'} ₸</td>
+      <td class="col-right prs-mini prs-mini-deliv">${m.deliv ?? '0'} ₸</td>
       ${cells}
     </tr>`;
   }).join('');
@@ -1470,6 +1529,7 @@ function coverageRowHtml(r, clickable) {
   return `<tr ${clickAttr} class="${cls}">
     <td>${r.name || '—'}</td>
     <td class="col-center">${r.help_types}</td>
+    <td class="col-right">${formatNum(r.budget || 0)} ₸</td>
     <td class="col-right">${formatNum(r.max_sum)} ₸</td>
     <td class="col-right">${formatNum(r.total_sum)} ₸</td>
     <td class="col-right">${(r.pct ?? 0)}%</td>
@@ -1582,6 +1642,12 @@ function initTableHead() {
       const col = sel.dataset.col;
       if (sel.value) tableFilters[col] = sel.value;
       else delete tableFilters[col];
+      if (col === 'kato_regname') {
+        delete tableFilters['kato_rainame'];
+        const raionSel = document.getElementById('tfilter-kato_rainame');
+        if (raionSel) raionSel.value = '';
+        _loadDistinctFiltered('kato_rainame', sel.value || null);
+      }
       loadTable(1);
     });
   });
@@ -1596,6 +1662,17 @@ async function loadDistinct(col) {
   const current = sel.value;
   sel.innerHTML = '<option value="">Все</option>' +
     vals.map(v => `<option value="${v}"${v === current ? ' selected' : ''}>${v}</option>`).join('');
+}
+
+async function _loadDistinctFiltered(col, regionName) {
+  const params = new URLSearchParams({ col });
+  if (currentRegion) params.set('region_id', currentRegion);
+  else if (regionName) params.set('region_name', regionName);
+  const vals = await fetch(`/api/distinct?${params}`).then(r => r.json());
+  const sel = document.getElementById(`tfilter-${col}`);
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Все</option>' +
+    vals.map(v => `<option value="${v}">${v}</option>`).join('');
 }
 
 function updateTableSortIcons() {
@@ -1671,6 +1748,49 @@ function formatInt(n) {
 function setText(id, val) {
   const el = document.getElementById(id);
   if (el) el.textContent = val;
+}
+
+// ── Pay-type stats table ─────────────────────────────────────────
+let _ptData = null;
+let _ptSortCol = 'total_deliv';
+let _ptSortDir = 'desc';
+
+async function loadPayTypes() {
+  const fp = buildFilterParams('full');
+  document.getElementById('paytypes-body').innerHTML =
+    '<tr><td colspan="5" class="loading">Загрузка...</td></tr>';
+  try {
+    const r = await fetch(`/api/pay-type-stats?${fp}`, { credentials: 'include' });
+    _ptData = r.ok ? await r.json() : [];
+  } catch { _ptData = []; }
+  renderPayTypes();
+}
+
+function renderPayTypes() {
+  if (!_ptData) return;
+  const sorted = [..._ptData].sort((a, b) => {
+    const av = a[_ptSortCol] ?? 0, bv = b[_ptSortCol] ?? 0;
+    if (typeof av === 'string') return _ptSortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return _ptSortDir === 'desc' ? bv - av : av - bv;
+  });
+  document.querySelectorAll('#paytypes-table .pt-sort').forEach(th => {
+    const icon = th.querySelector('.sort-icon');
+    const active = th.dataset.ptcol === _ptSortCol;
+    icon.textContent = active ? (_ptSortDir === 'desc' ? ' ▼' : ' ▲') : '';
+    th.classList.toggle('sort-active', active);
+  });
+  const tbody = document.getElementById('paytypes-body');
+  if (!sorted.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="no-data">Нет данных</td></tr>';
+    return;
+  }
+  tbody.innerHTML = sorted.map(r => `<tr>
+    <td class="ptab-name">${_shortPayType(r.pay_type)}</td>
+    <td class="col-center">${formatInt(r.count)}</td>
+    <td class="col-right">${r.budget > 0 ? formatNum(r.budget) + ' ₸' : '—'}</td>
+    <td class="col-right">${r.total_dec > 0 ? formatNum(r.total_dec) + ' ₸' : '—'}</td>
+    <td class="col-right ptab-deliv">${r.total_deliv > 0 ? formatNum(r.total_deliv) + ' ₸' : '—'}</td>
+  </tr>`).join('');
 }
 
 // ── Anomaly section ──────────────────────────────────────────────
@@ -1955,6 +2075,7 @@ function ensureDataTable() {
 
 async function loadAnomalyTab(tab) {
   if (tab === 'utilization') { await loadAnUtil(); return; }
+  if (tab === 'cks') { await loadAnCks(); return; }
   if (tab === 'data') { ensureDataTable(); return; }
   const fp = buildFilterParams('full');
   const cacheKey = tab + fp;
@@ -1973,6 +2094,7 @@ async function loadAnomalyTab(tab) {
 
 function _syncAnomalyGeo() {
   _invalidateAnomCaches();
+  _anCksRegionId = null; _anCksRegionName = '';
   if (currentRaion != null) {
     _anUtilRegionId   = currentRegion;
     _anUtilRegionName = regionStats[currentRegion]?.name || '';
@@ -1992,7 +2114,14 @@ function _syncAnomalyGeo() {
 }
 
 function renderAnomalyTab(tab, data) {
-  ({ cks: renderAnCks, unique: renderAnUnique })[tab]?.(data);
+  if (tab === 'cks') {
+    const effId   = _anCksRegionId ?? currentRegion ?? null;
+    const effName = _anCksRegionId != null ? _anCksRegionName
+      : (currentRegion != null ? (regionStats[currentRegion]?.name || '') : '');
+    renderAnCks(data, effId, effName);
+  } else {
+    ({ unique: renderAnUnique })[tab]?.(data);
+  }
 }
 
 function _anEmpty(tbody, cols) {
@@ -2001,18 +2130,60 @@ function _anEmpty(tbody, cols) {
 
 function _shortPayType(s) { return (s || '').replace(/^СОЦИАЛЬНАЯ ПОМОЩЬ\s+/i, ''); }
 
-function renderAnCks(rows) {
+let _anCksRegionId = null, _anCksRegionName = '';
+
+async function loadAnCks() {
+  const fp = buildFilterParams('full');
+  if (_anCksRegionId != null) fp.set('region_id', _anCksRegionId);
+  const effId   = _anCksRegionId ?? currentRegion ?? null;
+  const effName = _anCksRegionId != null ? _anCksRegionName
+    : (currentRegion != null ? (regionStats[currentRegion]?.name || '') : '');
+  const data = await fetch(`/api/anomalies/cks-ab?${fp}`).then(r => r.json()).catch(() => []);
+  renderAnCks(data, effId, effName);
+}
+
+function anCksDrillRegion(id) {
+  drillRegion(id);
+}
+
+function anCksBack() {
+  _anCksRegionId = null; _anCksRegionName = '';
+  goBack();
+}
+
+function renderAnCks(rows, effRegionId, effRegionName) {
   const tbody = document.getElementById('antab-cks-body');
-  const sorted = anSorted(rows, 'cks');
-  if (!sorted.length) { _anEmpty(tbody, 6); return; }
-  tbody.innerHTML = sorted.map(r => `<tr>
-    <td class="geo-name">${r.region}</td>
-    <td class="col-center"><span class="an-cks-badge">${r.cks}</span></td>
-    <td>${_shortPayType(r.pay_type)}</td>
-    <td class="col-center an-alarm-cell">${formatInt(r.count)}</td>
-    <td class="col-center">${formatInt(r.recipients)}</td>
-    <td class="col-right">${formatNum(r.total_dec)} ₸</td>
-  </tr>`).join('');
+  const backBtn = document.getElementById('an-cks-back');
+  const geoCol  = document.getElementById('an-cks-geo-col');
+  const sorted  = anSorted(rows, 'cks');
+
+  if (effRegionId != null) {
+    // show back button only when user explicitly drilled in, not just because map region is selected
+    if (backBtn) backBtn.style.display = _anCksRegionId != null ? 'inline-block' : 'none';
+    if (geoCol)  geoCol.textContent = `Район (${(effRegionName || '').toUpperCase()})`;
+    if (!sorted.length) { _anEmpty(tbody, 6); return; }
+    tbody.innerHTML = sorted.map(r => `<tr>
+      <td class="geo-name">${r.raion || '—'}</td>
+      <td class="col-center"><span class="an-cks-badge">${r.cks}</span></td>
+      <td>${_shortPayType(r.pay_type)}</td>
+      <td class="col-center an-alarm-cell">${formatInt(r.count)}</td>
+      <td class="col-center">${formatInt(r.recipients)}</td>
+      <td class="col-right">${formatNum(r.total_dec)} ₸</td>
+    </tr>`).join('');
+  } else {
+    if (backBtn) backBtn.style.display = 'none';
+    if (geoCol)  geoCol.textContent = 'Регион';
+    if (!sorted.length) { _anEmpty(tbody, 6); return; }
+    tbody.innerHTML = sorted.map(r => `<tr class="coverage-row" style="cursor:pointer"
+        onclick="anCksDrillRegion(${r.region_id}, '${(r.region || '').replace(/'/g, "\\'")}')">
+      <td class="geo-name">${r.region || '—'}</td>
+      <td class="col-center"><span class="an-cks-badge">${r.cks}</span></td>
+      <td>${_shortPayType(r.pay_type)}</td>
+      <td class="col-center an-alarm-cell">${formatInt(r.count)}</td>
+      <td class="col-center">${formatInt(r.recipients)}</td>
+      <td class="col-right">${formatNum(r.total_dec)} ₸</td>
+    </tr>`).join('');
+  }
 }
 
 function renderAnUtil(rows) {
@@ -2129,6 +2300,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
+  document.querySelectorAll('#paytypes-table .pt-sort').forEach(th => {
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', () => {
+      const col = th.dataset.ptcol;
+      _ptSortDir = _ptSortCol === col && _ptSortDir === 'desc' ? 'asc' : 'desc';
+      _ptSortCol = col;
+      renderPayTypes();
+    });
+  });
+
   document.getElementById('presence-thead')?.addEventListener('click', e => {
     const th = e.target.closest('[data-prs-sort]');
     if (!th) return;
@@ -2147,6 +2328,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (pane) pane.classList.add('active');
       if (btn.dataset.tab === 'gap') loadGapAnalysis();
       if (btn.dataset.tab === 'dynamics') loadDynamics();
+      if (btn.dataset.tab === 'paytypes') loadPayTypes();
     });
   });
 

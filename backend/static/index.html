@@ -40,12 +40,12 @@
       </div>
       <div class="kpi-card kpi-wide">
         <div class="kpi-wide-row">
-          <div class="label">Сумма</div>
-          <div class="value accent" id="kpi-dec">—</div>
-        </div>
-        <div class="kpi-wide-row">
           <div class="label">Бюджет</div>
           <div class="value accent" id="kpi-budget">—</div>
+        </div>
+        <div class="kpi-wide-row">
+          <div class="label">Сумма заявок</div>
+          <div class="value accent" id="kpi-dec">—</div>
         </div>
         <div class="kpi-wide-row">
           <div class="label">Фактически выплачено</div>
@@ -74,14 +74,14 @@
   <div class="ranking-panel" id="ranking-panel">
     <div class="kpi-card ranking-card">
       <div class="ranking-tabs-bar">
-        <button class="ranking-tab-btn active" data-rtab="sum">По сумме</button>
-        <button class="ranking-tab-btn" data-rtab="recipients">По получателям</button>
+        <button class="ranking-tab-btn active" data-rtab="recipients">По получателям</button>
+        <button class="ranking-tab-btn" data-rtab="sum">По сумме</button>
       </div>
-      <div class="ranking-tab-pane active" id="rtab-sum">
-        <div class="ranking-list" id="ranking-list-sum"><div class="ranking-loading">Загрузка...</div></div>
+      <div class="ranking-tab-pane active" id="rtab-recipients">
+        <div class="ranking-list" id="ranking-list-recipients"><div class="ranking-loading">Загрузка...</div></div>
       </div>
-      <div class="ranking-tab-pane" id="rtab-recipients">
-        <div class="ranking-list" id="ranking-list-recipients"></div>
+      <div class="ranking-tab-pane" id="rtab-sum">
+        <div class="ranking-list" id="ranking-list-sum"></div>
       </div>
     </div>
   </div>
@@ -101,6 +101,7 @@
     <button class="tab-btn active" data-tab="presence">Матрица видов помощи</button>
     <button class="tab-btn" data-tab="coverage">Охват по видам помощи</button>
     <button class="tab-btn" data-tab="dynamics">Динамика</button>
+    <button class="tab-btn" data-tab="paytypes">Данные по видам помощи</button>
     <button class="tab-btn" data-tab="gap" style="display:none">Разрывы по выплатам</button>
     <button type="button" id="coverage-btn-back" style="display:none" onclick="goBackFromRanking()">← Все регионы</button>
     <button type="button" class="expand-btn" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
@@ -114,8 +115,9 @@
           <tr>
             <th id="coverage-col-name">Регион</th>
             <th class="col-center sortable" data-sort-col="help_types">Всего видов помощи <span class="sort-icon"></span></th>
+            <th class="col-right sortable" data-sort-col="budget">Бюджет <span class="sort-icon"></span></th>
             <th class="col-right sortable" data-sort-col="max_sum">Макс сумма <span class="sort-icon"></span></th>
-            <th class="col-right sortable" data-sort-col="total_sum">Сумма <span class="sort-icon"> ▼</span></th>
+            <th class="col-right sortable" data-sort-col="total_sum">Сумма заявок <span class="sort-icon"> ▼</span></th>
             <th class="col-right sortable" data-sort-col="pct">% Выплаты <span class="sort-icon"></span></th>
           </tr>
         </thead>
@@ -137,13 +139,32 @@
         <div class="dyn-seg" id="dyn-metric-seg">
           <button class="dyn-seg-btn active" data-dmetric="count">Кол-во людей</button>
           <button class="dyn-seg-btn" data-dmetric="deliv">Факт выплачено</button>
-          <button class="dyn-seg-btn" data-dmetric="dec">Сумма решения</button>
-          <button class="dyn-seg-btn" data-dmetric="max">Макс сумма</button>
+          <button class="dyn-seg-btn" data-dmetric="dec">Сумма заявок</button>
         </div>
       </div>
     </div>
     <div class="dyn-chart-wrap">
       <canvas id="dynamics-chart"></canvas>
+    </div>
+  </div>
+
+  <!-- Tab: Pay type stats -->
+  <div class="tab-pane" id="tab-paytypes">
+    <div class="table-wrap">
+      <table id="paytypes-table">
+        <thead>
+          <tr>
+            <th class="pt-name-col sortable pt-sort" data-ptcol="pay_type">Виды помощи <span class="sort-icon"></span></th>
+            <th class="col-center sortable pt-sort" data-ptcol="count">Кол-во заявок <span class="sort-icon"></span></th>
+            <th class="col-right sortable pt-sort" data-ptcol="budget">Бюджет <span class="sort-icon"></span></th>
+            <th class="col-right sortable pt-sort" data-ptcol="total_dec">Сумма заявок <span class="sort-icon"></span></th>
+            <th class="col-right sortable pt-sort" data-ptcol="total_deliv">Фактически выплачено <span class="sort-icon"> ▼</span></th>
+          </tr>
+        </thead>
+        <tbody id="paytypes-body">
+          <tr><td colspan="5" class="loading">Загрузка...</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -177,6 +198,7 @@
       <button class="tab-btn antab-btn" data-antab="utilization">% Выплаты</button>
       <button class="tab-btn antab-btn" data-antab="unique">Уникальные виды</button>
       <button class="tab-btn antab-btn" data-antab="data">Данные</button>
+      <button type="button" id="an-cks-back"  style="display:none" onclick="anCksBack()">← Все регионы</button>
       <button type="button" id="an-util-back" style="display:none" onclick="anUtilBack()">← Все регионы</button>
       <button type="button" class="expand-btn" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
     </div>
@@ -185,7 +207,7 @@
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>Регион</th>
+            <th id="an-cks-geo-col">Регион</th>
             <th class="col-center">ЦКС</th>
             <th>Вид помощи</th>
             <th class="col-center sortable" data-antab="cks" data-ancol="count" onclick="anToggleSort(this)">Заявок <span class="an-sort-icon"></span></th>
