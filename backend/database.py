@@ -56,6 +56,15 @@ class BudgetItem(Base):
     plansum = Column(Numeric(18, 2))
 
 
+class RegionBudget(Base):
+    __tablename__ = "region_budgets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    kato_region = Column(Integer, index=True)
+    region_name = Column(String(300))
+    budget = Column(Numeric(18, 2))
+
+
 class User(Base):
     __tablename__ = "users"
 

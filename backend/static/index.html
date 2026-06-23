@@ -31,29 +31,28 @@
 
     <div class="kpi-numbers-row">
       <div class="kpi-card">
-        <div class="label">Видов помощи</div>
+        <div class="label">Кол-во видов помощи</div>
         <div class="value accent" id="kpi-help-types">—</div>
       </div>
       <div class="kpi-card">
-        <div class="label">Услугополучатели</div>
+        <div class="label">Кол-во услугополучателей</div>
         <div class="value" id="kpi-recipients">—</div>
       </div>
-      <div class="kpi-card kpi-wide">
-        <div class="kpi-wide-row">
-          <div class="label">Бюджет</div>
-          <div class="value accent" id="kpi-budget">—</div>
-        </div>
-        <div class="kpi-wide-row">
-          <div class="label">Сумма заявок</div>
-          <div class="value accent" id="kpi-dec">—</div>
-        </div>
-        <div class="kpi-wide-row">
-          <div class="label">Фактически выплачено</div>
-          <div class="value kpi-deliv" id="kpi-deliv">—</div>
-        </div>
+      <div class="kpi-card">
+        <div class="label">Выделено бюджета</div>
+        <div class="value accent" id="kpi-budget">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">Подано заявок на сумму</div>
+        <div class="value accent" id="kpi-dec">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="label">Факт выплаты</div>
+        <div class="value kpi-deliv" id="kpi-deliv">—</div>
       </div>
     </div>
 
+    <!--
     <div class="kpi-card kpi-charts-tabs">
       <div class="kpi-tabs-bar">
         <button type="button" class="kpi-tab-btn active" data-ktab="sdu">Уровень благосостояния по ЦКС</button>
@@ -68,9 +67,10 @@
         <div id="gender-age-chart" class="ga-chart"></div>
       </div>
     </div>
+    -->
   </div>
 
-  <!-- Ranking Panel -->
+  <!-- Ranking Panel (moved to tabs section below)
   <div class="ranking-panel" id="ranking-panel">
     <div class="kpi-card ranking-card">
       <div class="ranking-tabs-bar">
@@ -86,6 +86,7 @@
       </div>
     </div>
   </div>
+  -->
 
   <!-- Map Panel -->
   <div class="map-panel">
@@ -103,6 +104,8 @@
     <button class="tab-btn" data-tab="coverage">Охват по видам помощи</button>
     <button class="tab-btn" data-tab="dynamics">Динамика</button>
     <button class="tab-btn" data-tab="paytypes">Данные по видам помощи</button>
+    <button class="tab-btn" data-tab="ranking-recipients">По получателям</button>
+    <button class="tab-btn" data-tab="ranking-sum">По сумме</button>
     <button class="tab-btn" data-tab="gap" style="display:none">Разрывы по выплатам</button>
     <button type="button" id="coverage-btn-back" style="display:none" onclick="goBackFromRanking()">← Все регионы</button>
     <button type="button" class="expand-btn" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
@@ -116,7 +119,6 @@
           <tr>
             <th id="coverage-col-name">Регион</th>
             <th class="col-center sortable" data-sort-col="help_types">Всего видов помощи <span class="sort-icon"></span></th>
-            <th class="col-right sortable" data-sort-col="budget">Бюджет <span class="sort-icon"></span></th>
             <th class="col-right sortable" data-sort-col="max_sum">Макс сумма <span class="sort-icon"></span></th>
             <th class="col-right sortable" data-sort-col="total_sum">Сумма заявок <span class="sort-icon"> ▼</span></th>
             <th class="col-right sortable" data-sort-col="pct">% Выплаты <span class="sort-icon"></span></th>
@@ -157,7 +159,6 @@
           <tr>
             <th class="pt-name-col sortable pt-sort" data-ptcol="pay_type">Виды помощи <span class="sort-icon"></span></th>
             <th class="col-center sortable pt-sort" data-ptcol="count">Кол-во заявок <span class="sort-icon"></span></th>
-            <th class="col-right sortable pt-sort" data-ptcol="budget">Бюджет <span class="sort-icon"></span></th>
             <th class="col-right sortable pt-sort" data-ptcol="total_dec">Сумма заявок <span class="sort-icon"></span></th>
             <th class="col-right sortable pt-sort" data-ptcol="total_deliv">Фактически выплачено <span class="sort-icon"> ▼</span></th>
           </tr>
@@ -165,6 +166,37 @@
         <tbody id="paytypes-body">
           <tr><td colspan="5" class="loading">Загрузка...</td></tr>
         </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab: Ranking by recipients -->
+  <div class="tab-pane" id="tab-ranking-recipients">
+    <div class="table-wrap">
+      <table class="ranking-table">
+        <thead><tr>
+          <th class="col-center" style="width:48px">№</th>
+          <th>Регион / Район</th>
+          <th class="col-right">Услугополучатели</th>
+          <th class="col-right">Сумма заявок</th>
+          <th class="col-right">Фактически выплачено</th>
+        </tr></thead>
+        <tbody id="ranking-tbody-recipients"><tr><td colspan="5" class="loading">Загрузка...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab: Ranking by sum -->
+  <div class="tab-pane" id="tab-ranking-sum">
+    <div class="table-wrap">
+      <table class="ranking-table">
+        <thead><tr>
+          <th class="col-center" style="width:48px">№</th>
+          <th>Регион / Район</th>
+          <th class="col-right">Сумма заявок</th>
+          <th class="col-right">Фактически выплачено</th>
+        </tr></thead>
+        <tbody id="ranking-tbody-sum"><tr><td colspan="4" class="loading">Загрузка...</td></tr></tbody>
       </table>
     </div>
   </div>

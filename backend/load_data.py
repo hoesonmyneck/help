@@ -3,7 +3,7 @@ from datetime import datetime, date
 from openpyxl import load_workbook
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from database import engine, Base, Payment, BudgetItem
+from database import engine, Base, Payment, BudgetItem, RegionBudget
 
 region_help_ids: dict[str, set] = {}   # {kato_reg_str: {pay_type_id, ...}} where flag='1'
 raion_help_ids:  dict[str, set] = {}   # {kato_dis_str: {pay_type_id, ...}} where flag='1'
@@ -285,3 +285,41 @@ def load_budget():
         session.commit()
 
     print(f"Loaded {len(rows_data)} budget rows from help_types.xlsx")
+
+
+def load_region_budget():
+    """Load budget.xlsx into region_budgets table (idempotent).
+
+    budget.xlsx structure: col[0]=row#, col[1]=kato_region (2-digit int),
+    col[2]=region name, col[3]=budget float.
+    """
+    Base.metadata.create_all(bind=engine)
+
+    path = os.path.join(os.path.dirname(__file__), "data", "budget.xlsx")
+    if not os.path.exists(path):
+        return
+
+    with engine.connect() as conn:
+        count = conn.execute(text("SELECT COUNT(*) FROM region_budgets")).scalar()
+        if count > 0:
+            return
+
+    wb = load_workbook(path, read_only=True, data_only=True)
+    ws = wb.active
+
+    rows_data = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        kato = parse_num(row[1], int)
+        name = str(row[2]).strip() if row[2] is not None else None
+        budget = parse_num(row[3])
+        if kato is None or budget is None:
+            continue
+        rows_data.append(RegionBudget(kato_region=kato, region_name=name, budget=budget))
+
+    wb.close()
+
+    with Session(engine) as session:
+        session.add_all(rows_data)
+        session.commit()
+
+    print(f"Loaded {len(rows_data)} region budget rows from budget.xlsx")

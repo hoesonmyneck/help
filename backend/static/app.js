@@ -464,6 +464,7 @@ async function init() {
   mapLegend.onAdd = function() {
     const div = L.DomUtil.create('div', 'map-legend');
     div.innerHTML = `
+      <div class="ml-title">Фактически оказанных МГП</div>
       <div class="ml-item"><span class="ml-dot" style="background:#c0392b"></span>0 видов помощи</div>
       <div class="ml-item"><span class="ml-dot" style="background:#e67e22"></span>1–4 вида</div>
       <div class="ml-item"><span class="ml-dot" style="background:#27ae60"></span>5 и более</div>`;
@@ -805,6 +806,7 @@ const SDU_META = {
 };
 
 function renderSduChart(sdu) {
+  if (!document.getElementById('sdu-chart')) return;
   const keys = ['A', 'B', 'C', 'D', 'E'];
   const values = keys.map(k => sdu[k] || 0);
   const total = values.reduce((a, b) => a + b, 0);
@@ -812,7 +814,7 @@ function renderSduChart(sdu) {
   const pcts = values.map(v => total ? Math.round(v / total * 100) : 0);
 
   const legend = document.getElementById('sdu-legend');
-  legend.innerHTML = '';
+  if (legend) legend.innerHTML = '';
 
   // Show/hide clear button
   const clearBtn = document.getElementById('sdu-clear-btn');
@@ -941,30 +943,27 @@ async function loadRankingPanel() {
 
 function _renderRankingTab(tab) {
   if (!_rankingData) return;
-  const el = document.getElementById(`ranking-list-${tab}`);
-  if (!el) return;
+  const tbody = document.getElementById(`ranking-tbody-${tab}`);
+  if (!tbody) return;
   const sorted = [..._rankingData].sort((a, b) =>
     tab === 'sum' ? b.total_deliv - a.total_deliv : b.recipients - a.recipients
   );
-  if (!sorted.length) { el.innerHTML = '<div class="ranking-loading">Нет данных</div>'; return; }
-  el.innerHTML = sorted.map((row, i) => {
+  if (!sorted.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--tx-muted)">Нет данных</td></tr>';
+    return;
+  }
+  tbody.innerHTML = sorted.map((row, i) => {
     const rank = i + 1;
     const rankClass = rank <= 3 ? ` rank-${rank}` : '';
-    const shortName = (row.name || '').replace(/\s*ОБЛАСТЬ$/i, '').replace(/^ГОРОД\s*/i, 'г.');
-    const nameRow = tab === 'recipients'
-      ? `<div class="ranking-name-row"><div class="ranking-name" title="${row.name || ''}">${shortName}</div><span class="ranking-recip">${formatInt(row.recipients || 0)} чел.</span></div>`
-      : `<div class="ranking-name" title="${row.name || ''}">${shortName}</div>`;
-    return `<div class="ranking-item" onclick="_rankingItemClick(${row.id})">
-      <span class="ranking-rank${rankClass}">${rank}</span>
-      <div class="ranking-body">
-        ${nameRow}
-        <div class="ranking-metrics">
-          <span class="ranking-metric"><span class="rm-lbl">Бюджет</span> <span class="rm-val">${formatNum(row.budget || 0)} ₸</span></span>
-          <span class="ranking-metric"><span class="rm-lbl">Заявки</span> <span class="rm-val">${formatNum(row.total_dec || 0)} ₸</span></span>
-          <span class="ranking-metric"><span class="rm-lbl">Факт</span> <span class="rm-val rm-deliv">${formatNum(row.total_deliv || 0)} ₸</span></span>
-        </div>
-      </div>
-    </div>`;
+    const name = (row.name || '—');
+    const recipCell = tab === 'recipients' ? `<td class="col-right">${formatInt(row.recipients || 0)}</td>` : '';
+    return `<tr class="coverage-row" onclick="_rankingItemClick(${row.id})" style="cursor:pointer">
+      <td class="col-center"><span class="ranking-rank${rankClass}">${rank}</span></td>
+      <td>${name}</td>
+      ${recipCell}
+      <td class="col-right">${row.total_dec > 0 ? formatNum(row.total_dec) + ' ₸' : '—'}</td>
+      <td class="col-right rk-deliv">${row.total_deliv > 0 ? formatNum(row.total_deliv) + ' ₸' : '—'}</td>
+    </tr>`;
   }).join('');
 }
 
@@ -1231,13 +1230,12 @@ function _buildGeoPanelHtml(provided, stats) {
     const recip  = s ? formatInt(s.recipients) : '0';
     const dec    = s && s.total_dec > 0 ? formatNum(s.total_dec) : '0';
     const deliv  = s && s.total_deliv > 0 ? formatNum(s.total_deliv) : '0';
-    const budget = s && s.budget > 0 ? formatNum(s.budget) : '—';
     return `<div class="gp-row gp-yes">
       <span class="gp-pay">${stripHelpPrefix(c.name)}</span>
       <span class="gp-stat">${recip}</span>
       <span class="gp-stat">${dec} ₸</span>
       <span class="gp-stat">${deliv} ₸</span>
-      <span class="gp-stat gp-budget">${budget} ₸</span>
+      <span class="gp-stat gp-budget">—</span>
     </div>`;
   }).join('');
 }
@@ -1256,6 +1254,14 @@ async function showGeoPanel(id, name, ev) {
   const geoName = (row && row.name) || name || '—';
 
   const renderPanel = (stats) => {
+    const totalBudget = stats && stats._budget > 0 ? formatNum(stats._budget) + ' ₸' : '—';
+    const budgetSummaryRow = `<div class="gp-row gp-budget-summary">
+      <span class="gp-pay">Бюджет региона</span>
+      <span class="gp-stat"></span>
+      <span class="gp-stat"></span>
+      <span class="gp-stat"></span>
+      <span class="gp-stat gp-budget">${totalBudget}</span>
+    </div>`;
     panel.innerHTML =
       `<div class="gp-main">
          <div class="gp-title">${geoName}</div>
@@ -1266,7 +1272,7 @@ async function showGeoPanel(id, name, ev) {
            <span class="gp-stat gp-hdr">Факт выплачено</span>
            <span class="gp-stat gp-hdr">Бюджет</span>
          </div>` : ''}
-         <div class="gp-list">${_buildGeoPanelHtml(provided, stats)}</div>
+         <div class="gp-list">${budgetSummaryRow}${_buildGeoPanelHtml(provided, stats)}</div>
        </div>`;
     panel.classList.add('visible');
     positionGeoPanel(ev);
@@ -1365,7 +1371,6 @@ function renderHelpPresence() {
        <th class="prs-geo-hdr">${geoLabel}</th>
        ${miniHdr('vidy', 'Виды помощи', '', 'Виды помощи, которые должны оказываться')}
        ${miniHdr('lyudei', 'Людей', '', 'Количество людей, которым оказывается услуга')}
-       ${miniHdr('budget', 'Бюджет', 'prs-mini-budget', 'Плановый бюджет')}
        ${miniHdr('summa', 'Сумма заявок', 'prs-mini-sum', 'Сумма заявок (dec_pay_sum)')}
        ${miniHdr('deliv', 'Факт выплачено', 'prs-mini-deliv', 'Фактически выплачено')}
        ${cols}
@@ -1403,7 +1408,6 @@ function renderHelpPresence() {
       <td class="prs-geo-cell">${r.name || '—'}</td>
       <td class="col-center prs-mini">${m.vidy ?? 0}</td>
       <td class="col-center prs-mini">${formatInt(m.lyudei ?? 0)}</td>
-      <td class="col-right prs-mini prs-mini-budget">${m.budget ?? '0'} ₸</td>
       <td class="col-right prs-mini prs-mini-sum">${m.summa ?? '0'} ₸</td>
       <td class="col-right prs-mini prs-mini-deliv">${m.deliv ?? '0'} ₸</td>
       ${cells}
@@ -1518,7 +1522,6 @@ function coverageRowHtml(r, clickable) {
   return `<tr ${clickAttr} class="${cls}">
     <td>${r.name || '—'}</td>
     <td class="col-center">${r.help_types}</td>
-    <td class="col-right">${formatNum(r.budget || 0)} ₸</td>
     <td class="col-right">${formatNum(r.max_sum)} ₸</td>
     <td class="col-right">${formatNum(r.total_sum)} ₸</td>
     <td class="col-right">${(r.pct ?? 0)}%</td>
@@ -1770,13 +1773,12 @@ function renderPayTypes() {
   });
   const tbody = document.getElementById('paytypes-body');
   if (!sorted.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="no-data">Нет данных</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="no-data">Нет данных</td></tr>';
     return;
   }
   tbody.innerHTML = sorted.map(r => `<tr>
     <td class="ptab-name">${_shortPayType(r.pay_type)}</td>
     <td class="col-center">${formatInt(r.count)}</td>
-    <td class="col-right">${r.budget > 0 ? formatNum(r.budget) + ' ₸' : '—'}</td>
     <td class="col-right">${r.total_dec > 0 ? formatNum(r.total_dec) + ' ₸' : '—'}</td>
     <td class="col-right ptab-deliv">${r.total_deliv > 0 ? formatNum(r.total_deliv) + ' ₸' : '—'}</td>
   </tr>`).join('');
@@ -2320,6 +2322,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (btn.dataset.tab === 'gap') loadGapAnalysis();
       if (btn.dataset.tab === 'dynamics') loadDynamics();
       if (btn.dataset.tab === 'paytypes') loadPayTypes();
+      if (btn.dataset.tab === 'ranking-recipients' || btn.dataset.tab === 'ranking-sum') loadRankingPanel();
     });
   });
 

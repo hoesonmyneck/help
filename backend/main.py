@@ -5,8 +5,8 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import func, distinct
 from sqlalchemy.orm import Session
-from database import engine, Payment, User, BudgetItem
-from load_data import (load_excel, load_budget, load_reference_data,
+from database import engine, Payment, User, BudgetItem, RegionBudget
+from load_data import (load_excel, load_budget, load_region_budget, load_reference_data,
                        region_help_ids, raion_help_ids,
                        all_region_katos, pay_type_names, REGION_NAMES,
                        raion_names_ref, raion_reg_ref, settings_rows, settings_pay_names)
@@ -26,6 +26,7 @@ def _is_excluded(pname: str | None) -> bool:
 async def lifespan(app: FastAPI):
     load_excel()
     load_budget()
+    load_region_budget()
     load_reference_data()
     auth.seed_admin()
     yield
@@ -314,13 +315,14 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
             .scalar() or 0
         )
 
-        # Бюджет: sum of PLANSUM from budget_items filtered by region/raion
-        budget_q = db.query(BudgetItem)
+        # Бюджет: from region_budgets (budget.xlsx); no raion-level breakdown
+        bq = db.query(func.sum(RegionBudget.budget))
         if raion_id is not None:
-            budget_q = budget_q.filter(BudgetItem.kato_raion == raion_id)
+            budget_total = 0.0
         elif region_id is not None:
-            budget_q = budget_q.filter(BudgetItem.kato_region == region_id)
-        budget_total = budget_q.with_entities(func.sum(BudgetItem.plansum)).scalar() or 0
+            budget_total = float(bq.filter(RegionBudget.kato_region == region_id).scalar() or 0)
+        else:
+            budget_total = float(bq.scalar() or 0)
 
         return {
             "total_max_pay_sum": float(total_max),
@@ -523,7 +525,7 @@ def summary(region_id: int = Query(None), sdu_filter: str = Query(None), gender_
             name_map = {str(r.kato_region): r.kato_regname
                         for r in db.query(Payment.kato_region, Payment.kato_regname).distinct().all()}
 
-            bgt_rows = db.query(BudgetItem.kato_region, func.sum(BudgetItem.plansum)).group_by(BudgetItem.kato_region).all()
+            bgt_rows = db.query(RegionBudget.kato_region, RegionBudget.budget).all()
             geo_budget = {str(r[0]): float(r[1] or 0) for r in bgt_rows}
             nat_budget = sum(geo_budget.values())
 
@@ -562,11 +564,8 @@ def summary(region_id: int = Query(None), sdu_filter: str = Query(None), gender_
                 paid_max.label("max_sum"),
             ).filter(Payment.kato_region == region_id)).group_by(Payment.kato_raion, Payment.kato_rainame).all()
 
-            bgt_rows2 = db.query(BudgetItem.kato_raion, func.sum(BudgetItem.plansum)).filter(
-                BudgetItem.kato_region == region_id
-            ).group_by(BudgetItem.kato_raion).all()
-            dis_budget = {str(r[0]): float(r[1] or 0) for r in bgt_rows2}
-            reg_budget = sum(dis_budget.values())
+            dis_budget = {}
+            reg_budget = float(db.query(RegionBudget.budget).filter(RegionBudget.kato_region == region_id).scalar() or 0)
 
             db_dict = {str(r.kato_raion): r for r in rows}
             all_dis = _all_raions_for_region(region_id, set(db_dict.keys()))
@@ -731,8 +730,8 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
             nat_sum = float(af(db.query(func.sum(Payment.dec_pay_sum))).scalar() or 0)
             nat_deliv = float(af(db.query(func.sum(sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)))).scalar() or 0)
 
-            # Budget per region
-            bgt_rows = db.query(BudgetItem.kato_region, func.sum(BudgetItem.plansum)).group_by(BudgetItem.kato_region).all()
+            # Budget per region from budget.xlsx
+            bgt_rows = db.query(RegionBudget.kato_region, RegionBudget.budget).all()
             geo_budget = {str(r[0]): float(r[1] or 0) for r in bgt_rows}
             nat_budget = sum(geo_budget.values())
 
@@ -818,10 +817,9 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
         reg_deliv = float(af(db.query(func.sum(sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)))
                         .filter(Payment.kato_region == region_id)).scalar() or 0)
 
-        # Budget per raion
-        bgt_rows2 = db.query(BudgetItem.kato_raion, func.sum(BudgetItem.plansum)).filter(BudgetItem.kato_region == region_id).group_by(BudgetItem.kato_raion).all()
-        dis_budget = {str(r[0]): float(r[1] or 0) for r in bgt_rows2}
-        reg_budget = sum(dis_budget.values())
+        # Budget from budget.xlsx — region total only, no raion breakdown
+        dis_budget = {}
+        reg_budget = float(db.query(RegionBudget.budget).filter(RegionBudget.kato_region == region_id).scalar() or 0)
 
         reg_pay_all, reg_cat_all = set(), set()
         for s in dis_pay.values(): reg_pay_all |= s
@@ -1550,19 +1548,23 @@ def geo_stats(region_id: int = Query(None), raion_id: int = Query(None)):
                 'budget': 0.0,
             }
 
-        budget_q = db.query(BudgetItem)
-        if raion_id is not None:
-            budget_q = budget_q.filter(BudgetItem.kato_raion == raion_id)
+        # Total regional budget from budget.xlsx (no raion or pay-type breakdown)
+        if region_id is not None:
+            total_budget = float(
+                db.query(RegionBudget.budget)
+                .filter(RegionBudget.kato_region == region_id)
+                .scalar() or 0
+            )
         else:
-            budget_q = budget_q.filter(BudgetItem.kato_region == region_id)
+            # For raion, look up its parent region
+            parent = db.query(Payment.kato_region).filter(Payment.kato_raion == raion_id).first()
+            total_budget = float(
+                db.query(RegionBudget.budget)
+                .filter(RegionBudget.kato_region == (parent[0] if parent else -1))
+                .scalar() or 0
+            ) if parent else 0.0
 
-        for br in budget_q.all():
-            if br.pay_type_id is None:
-                continue
-            if br.pay_type_id not in result:
-                result[br.pay_type_id] = {'recipients': 0, 'total_deliv': 0.0, 'budget': 0.0}
-            result[br.pay_type_id]['budget'] += float(br.plansum or 0)
-
+        result['_budget'] = total_budget
         return result
 
 
@@ -1629,13 +1631,7 @@ def ranking_oblasts(region_id: int = Query(None)):
                 .group_by(Payment.kato_raion, Payment.kato_rainame)
                 .all()
             )
-            bgt_rows = (
-                db.query(BudgetItem.kato_raion, func.sum(BudgetItem.plansum))
-                .filter(BudgetItem.kato_region == region_id)
-                .group_by(BudgetItem.kato_raion)
-                .all()
-            )
-            budget_map = {r[0]: float(r[1] or 0) for r in bgt_rows}
+            budget_map = {}  # no raion-level budget in budget.xlsx
             result = []
             for r in rows:
                 if r.geo_id is None:
@@ -1662,11 +1658,7 @@ def ranking_oblasts(region_id: int = Query(None)):
                 .group_by(Payment.kato_region, Payment.kato_regname)
                 .all()
             )
-            bgt_rows = (
-                db.query(BudgetItem.kato_region, func.sum(BudgetItem.plansum))
-                .group_by(BudgetItem.kato_region)
-                .all()
-            )
+            bgt_rows = db.query(RegionBudget.kato_region, RegionBudget.budget).all()
             budget_map = {r[0]: float(r[1] or 0) for r in bgt_rows}
             result = []
             for r in rows:

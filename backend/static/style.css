@@ -260,7 +260,7 @@ header h1 {
 
 /* KPI panel — fixed width next to the map */
 .kpi-panel {
-  flex: 0 0 380px;
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -271,7 +271,18 @@ header h1 {
 .kpi-numbers-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, 1fr);
   gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+/* Row 2: budget card spans full width */
+.kpi-numbers-row .kpi-card:nth-child(3) { grid-column: 1 / -1; }
+/* Center content vertically inside each card */
+.kpi-numbers-row .kpi-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 /* Wide card: 3 sum rows stacked vertically, each row label+value side by side */
 .kpi-wide { grid-column: 1 / -1; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
@@ -487,6 +498,10 @@ header h1 {
   flex-direction: column;
 }
 .ranking-loading { font-size: 0.8rem; color: var(--tx-muted); padding: 8px 0; }
+
+/* Ranking lists embedded in the main tabs section */
+.ranking-table { width: 100%; }
+.ranking-table .rk-deliv { color: #4caf8e; font-weight: 600; }
 .ranking-item {
   display: flex;
   align-items: flex-start;
@@ -579,8 +594,8 @@ header h1 {
 
 /* Map panel */
 .map-panel {
-  flex: 0 0 40vw;
-  width: 40vw;
+  flex: 0 0 50%;
+  width: 50%;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -660,12 +675,12 @@ header h1 {
   padding: 3px 4px;
   border-bottom: 1px solid var(--bd-main);
 }
+.gp-budget-summary .gp-pay { color: var(--tx-dim); font-style: italic; }
 .gp-hdr-row { border-bottom: 2px solid var(--bd-mid); margin-bottom: 1px; }
 .gp-row:last-child { border-bottom: none; }
 .gp-hdr { font-size: 0.7rem; color: var(--tx-dim); font-weight: 600; }
 .gp-pay { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gp-stat { text-align: right; white-space: nowrap; flex-shrink: 0; }
-.gp-budget { color: var(--ac-teal); }
 .gp-yes .gp-pay { color: #2ecc71; }
 .gp-yes { cursor: pointer; }
 .gp-yes:hover { background: rgba(78,205,196,0.10); }
@@ -1330,7 +1345,7 @@ th.sort-active { color: var(--ac-blue); }
 
 /* Pay-type stats tab */
 #paytypes-table { width: 100%; }
-#paytypes-table th { background: var(--bg-card); white-space: nowrap; padding: 8px 12px; border-bottom: 2px solid var(--bd-main); font-size: 0.78rem; color: var(--tx-sub); }
+#paytypes-table th { background: var(--bg-deep); white-space: nowrap; padding: 10px 12px; border-bottom: 1px solid var(--bd-main); font-size: 0.78rem; color: var(--tx-label); font-weight: 600; }
 #paytypes-table td { padding: 7px 12px; border-bottom: 1px solid var(--bd-main); font-size: 0.8rem; }
 #paytypes-table tr:hover td { background: var(--bg-hover); }
 .pt-name-col { width: 40%; }
@@ -1827,17 +1842,16 @@ th.sort-active { color: #8ab4ff !important; }
 }
 
 /* ── Sticky left columns: Матрица видов помощи ── */
-/* Col widths: geo=220, vidy=92, lyudei=92, budget=130, summa=120, deliv=140 */
+/* Col widths: geo=220, vidy=92, lyudei=92, summa=120, deliv=140 */
 #presence-table th:nth-child(1), #presence-table td:nth-child(1) { position: sticky; left: 0;     z-index: 2; }
 #presence-table th:nth-child(2), #presence-table td:nth-child(2) { position: sticky; left: 220px; z-index: 2; }
 #presence-table th:nth-child(3), #presence-table td:nth-child(3) { position: sticky; left: 312px; z-index: 2; }
 #presence-table th:nth-child(4), #presence-table td:nth-child(4) { position: sticky; left: 404px; z-index: 2; }
-#presence-table th:nth-child(5), #presence-table td:nth-child(5) { position: sticky; left: 534px; z-index: 2; }
-#presence-table th:nth-child(6), #presence-table td:nth-child(6) { position: sticky; left: 654px; z-index: 2; }
+#presence-table th:nth-child(5), #presence-table td:nth-child(5) { position: sticky; left: 524px; z-index: 2; }
 /* Header corner cells: stick top+left simultaneously → highest z-index */
-#presence-table thead th:nth-child(-n+6) { z-index: 4; }
+#presence-table thead th:nth-child(-n+5) { z-index: 4; }
 /* Body sticky cells need explicit bg so scrolled content is hidden */
-#presence-table tbody td:nth-child(-n+6) { background: var(--bg-card); }
+#presence-table tbody td:nth-child(-n+5) { background: var(--bg-card); }
 #presence-table tbody tr:hover td:nth-child(-n+6) {
   background-color: var(--bg-card) !important;
   background-image: linear-gradient(rgba(91,138,248,0.08), rgba(91,138,248,0.08)) !important;
@@ -2384,6 +2398,7 @@ th.sort-active          { color: #fff !important; }
   color: var(--tx-main);
   line-height: 1.6;
 }
+.ml-title { font-size: 0.72rem; font-weight: 700; color: var(--tx-dim); margin-bottom: 5px; white-space: nowrap; }
 .ml-item { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
 .ml-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
 
