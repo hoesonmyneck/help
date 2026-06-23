@@ -413,19 +413,22 @@ header h1 {
   background: var(--bg-card);
   border: 1px solid var(--bd-main);
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 14px 18px;
 }
 
 .kpi-card .label {
-  font-size: 0.75rem;
+  font-size: 0.82rem;
   color: var(--tx-dim);
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .kpi-card .value {
-  font-size: 1.25rem;
+  font-size: 2.6rem;
   font-weight: 700;
   color: var(--tx-main);
+  line-height: 1.1;
 }
 
 .kpi-card .value.accent { color: var(--ac-teal); }
@@ -1493,7 +1496,6 @@ header h1 {
   50%       { filter: drop-shadow(0 0 18px rgba(78,205,196,0.85)); }
 }
 .value.accent {
-  font-size: 1.42rem;
   background: linear-gradient(130deg, #4ecdc4 0%, #7af8ee 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -1811,8 +1813,6 @@ th.sort-active { color: #8ab4ff !important; }
 }
 .sdu-legend-item:hover { background: rgba(91,138,248,0.08); }
 
-/* ── Larger recipient count ── */
-#kpi-recipients { font-size: 1.55rem; }
 
 /* ── Table info text ── */
 .table-info { font-variant-numeric: tabular-nums; }

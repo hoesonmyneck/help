@@ -750,9 +750,9 @@ async function refreshKPI(sduSeq) {
   const data = await fetch(`/api/kpi?${params}`).then(r => r.json());
   if (sduSeq < _sduSeq) return; // stale — a newer sdu change superseded this call
 
-  animateCounter('kpi-dec',         data.total_dec_pay_sum,   v => formatNum(v));
-  animateCounter('kpi-deliv',       data.total_deliv_sum || 0, v => formatNum(v));
-  animateCounter('kpi-budget',      data.budget_total || 0,    v => formatNum(v));
+  animateCounter('kpi-dec',         data.total_dec_pay_sum,   v => formatInt(v));
+  animateCounter('kpi-deliv',       data.total_deliv_sum || 0, v => formatInt(v));
+  animateCounter('kpi-budget',      data.budget_total || 0,    v => formatInt(v));
   animateCounter('kpi-recipients',  data.unique_recipients,   v => formatInt(v));
   animateCounter('kpi-help-types',  data.help_type_count || 0, v => formatInt(v));
   renderGenderAgeBar(data.male_count || 0, data.female_count || 0, data.age || {});
@@ -1734,7 +1734,7 @@ function formatNum(n) {
 }
 
 function formatInt(n) {
-  return new Intl.NumberFormat('ru-KZ').format(n || 0);
+  return new Intl.NumberFormat('ru-KZ', { maximumFractionDigits: 0 }).format(Math.round(n) || 0);
 }
 
 function setText(id, val) {
@@ -2001,10 +2001,11 @@ function anSorted(data, sortKey) {
 async function loadAnomalyKpi() {
   try {
     const d = await fetch('/api/anomalies/kpi').then(r => r.json());
-    document.getElementById('an-kpi-pending').textContent = formatInt(d.pending);
-    document.getElementById('an-kpi-cks').textContent     = formatInt(d.cks_ab);
-    document.getElementById('an-kpi-empty').textContent   = formatInt(d.empty_declared);
-    document.getElementById('an-kpi-unique').textContent  = formatInt(d.geo_unique);
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('an-kpi-pending', formatInt(d.pending));
+    set('an-kpi-cks',     formatInt(d.cks_ab));
+    set('an-kpi-empty',   formatInt(d.empty_declared));
+    set('an-kpi-unique',  formatInt(d.geo_unique));
   } catch(e) { console.error('anomalies/kpi', e); }
 }
 
