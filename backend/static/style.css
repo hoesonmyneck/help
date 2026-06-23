@@ -417,11 +417,8 @@ header h1 {
 }
 
 .kpi-card .label {
-  font-size: 0.82rem;
   color: var(--tx-dim);
   margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .kpi-card .value {
@@ -1729,10 +1726,10 @@ th.sort-active { color: #8ab4ff !important; }
 
 /* ── KPI labels ── */
 .kpi-card .label, .gender-item .label {
-  font-size: 0.65rem;
+  font-size: 0.80rem;
   text-transform: uppercase;
   letter-spacing: 1.8px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* ── KPI values — tabular nums ── */
