@@ -284,6 +284,12 @@ header h1 {
   flex-direction: column;
   justify-content: center;
 }
+/* Horizontally center first two cards (Виды / Услугополучатели) */
+.kpi-numbers-row .kpi-card:nth-child(1),
+.kpi-numbers-row .kpi-card:nth-child(2) {
+  align-items: center;
+  text-align: center;
+}
 /* Wide card: 3 sum rows stacked vertically, each row label+value side by side */
 .kpi-wide { grid-column: 1 / -1; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 .kpi-wide-row {

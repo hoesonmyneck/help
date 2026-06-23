@@ -752,7 +752,7 @@ async function refreshKPI(sduSeq) {
 
   animateCounter('kpi-dec',         data.total_dec_pay_sum,   v => formatInt(v));
   animateCounter('kpi-deliv',       data.total_deliv_sum || 0, v => formatInt(v));
-  animateCounter('kpi-budget',      data.budget_total || 0,    v => formatInt(v));
+  animateCounter('kpi-budget',      data.budget_total || 0,    v => formatCompact(v));
   animateCounter('kpi-recipients',  data.unique_recipients,   v => formatInt(v));
   animateCounter('kpi-help-types',  data.help_type_count || 0, v => formatInt(v));
   renderGenderAgeBar(data.male_count || 0, data.female_count || 0, data.age || {});
@@ -1731,6 +1731,15 @@ function animateCounter(id, end, formatter) {
 function formatNum(n) {
   if (!n && n !== 0) return '—';
   return new Intl.NumberFormat('ru-KZ', { maximumFractionDigits: 2 }).format(n);
+}
+
+function formatCompact(n) {
+  if (!n && n !== 0) return '—';
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return new Intl.NumberFormat('ru-KZ', { maximumFractionDigits: 1 }).format(n / 1e12) + ' трлн';
+  if (abs >= 1e9)  return new Intl.NumberFormat('ru-KZ', { maximumFractionDigits: 1 }).format(n / 1e9)  + ' млрд';
+  if (abs >= 1e6)  return new Intl.NumberFormat('ru-KZ', { maximumFractionDigits: 1 }).format(n / 1e6)  + ' млн';
+  return formatInt(n);
 }
 
 function formatInt(n) {
