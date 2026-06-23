@@ -1860,15 +1860,15 @@ th.sort-active { color: #8ab4ff !important; }
 #presence-table thead th:nth-child(-n+5) { z-index: 4; }
 /* Body sticky cells need explicit bg so scrolled content is hidden */
 #presence-table tbody td:nth-child(-n+5) { background: var(--bg-card); }
-#presence-table tbody tr:hover td:nth-child(-n+6) {
+#presence-table tbody tr:hover td:nth-child(-n+5) {
   background-color: var(--bg-card) !important;
   background-image: linear-gradient(rgba(91,138,248,0.08), rgba(91,138,248,0.08)) !important;
 }
-#presence-table tbody tr.prs-total-row td:nth-child(-n+6) {
+#presence-table tbody tr.prs-total-row td:nth-child(-n+5) {
   background-color: var(--bg-card);
   background-image: linear-gradient(rgba(78,205,196,0.10), rgba(78,205,196,0.10));
 }
-#presence-table tbody tr.prs-total-row:hover td:nth-child(-n+6) {
+#presence-table tbody tr.prs-total-row:hover td:nth-child(-n+5) {
   background-color: var(--bg-card) !important;
   background-image: linear-gradient(rgba(78,205,196,0.14), rgba(78,205,196,0.14)) !important;
 }
