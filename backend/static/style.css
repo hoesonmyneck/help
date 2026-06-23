@@ -797,6 +797,29 @@ body.fs-open .table-section:not(.is-fullscreen) { display: none; }
   overflow-y: auto;
 }
 
+.ranking-panel.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  margin: 0;
+  padding: 14px 22px 20px;
+  box-sizing: border-box;
+  background: var(--bg-body);
+  overflow: hidden;
+}
+.ranking-panel.is-fullscreen .ranking-card {
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+.ranking-panel.is-fullscreen .ranking-tab-pane.active {
+  flex: 1;
+  min-height: 0;
+  display: block;
+  overflow-y: auto;
+}
+
 .table-wrap {
   overflow-x: auto;
   background: var(--bg-card);

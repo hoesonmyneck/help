@@ -357,7 +357,7 @@ async function adminDeleteUser(id) {
 }
 
 function toggleFullscreen(btn) {
-  const section = btn.closest('.table-section, .map-panel');
+  const section = btn.closest('.table-section, .map-panel, .ranking-panel');
   if (!section) return;
   const fs = section.classList.toggle('is-fullscreen');
   document.body.classList.toggle('fs-open', fs);
@@ -811,19 +811,8 @@ function renderSduChart(sdu) {
 
   const pcts = values.map(v => total ? Math.round(v / total * 100) : 0);
 
-  // Legend — clickable for filtering (percentages now drawn above the bars)
   const legend = document.getElementById('sdu-legend');
-  legend.innerHTML = keys.map(k => {
-    const count = sdu[k] || 0;
-    const pct = total ? Math.round(count / total * 100) : 0;
-    const isActive = currentSdu === k;
-    return `<div class="sdu-legend-item${isActive ? ' sdu-active' : ''}"
-      onclick="setSduFilter('${k}')"
-      title="${SDU_META[k].label}: ${formatInt(count)} (${pct}%)">
-      <span class="sdu-dot" style="background:${SDU_META[k].color}"></span>
-      <span class="sdu-leg-label">${SDU_META[k].label}</span>
-    </div>`;
-  }).join('');
+  legend.innerHTML = '';
 
   // Show/hide clear button
   const clearBtn = document.getElementById('sdu-clear-btn');
@@ -2256,7 +2245,9 @@ function initPayTooltip() {
   document.getElementById('tab-presence')?.addEventListener('mouseover', e => {
     const th = e.target.closest('[data-pay-desc]');
     if (!th) { if (active) { tip.style.display = 'none'; active = false; } return; }
-    tip.innerHTML = `<div class="pt-title">${th.dataset.payName}</div><div class="pt-desc">${th.dataset.payDesc}</div>`;
+    const rawDesc = th.dataset.payDesc.replace(/^МИО предоставляют?\s*/i, '');
+    const desc = rawDesc.charAt(0).toUpperCase() + rawDesc.slice(1);
+    tip.innerHTML = `<div class="pt-title">${th.dataset.payName}</div><div class="pt-desc">${desc}</div>`;
     tip.style.display = 'block';
     active = true;
   });
