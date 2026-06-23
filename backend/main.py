@@ -163,6 +163,59 @@ def api_sso(request: Request,
     return resp
 
 
+class SsoBody(BaseModel):
+    iin: str | None = None
+    bin: str | None = None
+    canSign: bool = False
+    isOrganizationHead: bool = False
+    fio: str | None = None
+
+
+def _sso_token_from_request(request: Request, query_token: str | None = None) -> str | None:
+    """Достаём SSO-токен из Authorization: Bearer, X-SSO-Token или query."""
+    authz = request.headers.get("Authorization") or ""
+    if authz.lower().startswith("bearer "):
+        return authz[7:].strip()
+    return request.headers.get("X-SSO-Token") or query_token
+
+
+@app.post("/api/auth/sso")
+def api_sso_post(body: SsoBody, request: Request):
+    """Доверенный вход с портала enbek.kz по POST.
+
+    Портал авторизовал человека (ЭЦП) и серверным запросом сообщает личность:
+    ИИН ФЛ и/или БИН организации. Токен — в заголовке Authorization: Bearer <token>.
+    Возвращает JSON с access-токеном и ссылкой для перехода в кабинет.
+    """
+    if not auth.SSO_TOKEN:
+        raise HTTPException(status_code=503, detail="SSO не настроен")
+    tok = _sso_token_from_request(request)
+    if not auth.sso_token_valid(tok):
+        raise HTTPException(status_code=403, detail="Недействительный токен")
+
+    bin_ = (body.bin or "").strip()
+    iin_ = (body.iin or "").strip()
+    # Глава/подписант организации → вход от имени ЮЛ (БИН), иначе как ФЛ (ИИН)
+    if (body.isOrganizationHead or body.canSign) and bin_:
+        identifier = bin_
+    else:
+        identifier = iin_ or bin_
+
+    if not (identifier.isdigit() and len(identifier) == 12):
+        raise HTTPException(status_code=400, detail="Не передан корректный ИИН/БИН (12 цифр)")
+
+    user = auth.find_or_create_portal_user(identifier, (body.fio or None))
+    access = auth.create_access_token(user)
+    resp = JSONResponse({
+        "ok": True,
+        "user": _user_out(user),
+        "accessToken": access,
+        "redirectUrl": "/",
+    })
+    auth.set_auth_cookie(resp, access)
+    return resp
+
+
 @app.get("/api/auth/me")
 def api_me(user: User = Depends(auth.current_user)):
     return _user_out(user)
