@@ -276,8 +276,8 @@ header h1 {
   flex: 1;
   min-height: 0;
 }
-/* Row 2: budget card spans full width */
-.kpi-numbers-row .kpi-card:nth-child(3) { grid-column: 1 / -1; }
+/* SDU/GA chart spans rows 2–3 */
+.kpi-numbers-row .kpi-charts-tabs { grid-row: span 2; }
 /* Center content vertically inside each card */
 .kpi-numbers-row .kpi-card {
   display: flex;
@@ -321,11 +321,13 @@ header h1 {
   border-bottom: 2px solid transparent;
   color: var(--tx-dim);
   font-family: inherit;
-  font-size: 0.78rem;
-  padding: 5px 8px;
+  font-size: 0.68rem;
+  padding: 4px 6px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.2;
+  text-align: left;
 }
 .kpi-tab-btn:hover { color: var(--tx-sub); }
 .kpi-tab-btn.active { color: var(--ac-teal); border-bottom-color: var(--ac-teal); font-weight: 600; }
@@ -422,10 +424,13 @@ header h1 {
 }
 
 .kpi-card .value {
-  font-size: 2.6rem;
+  font-size: clamp(1.3rem, 2.2vw, 2.4rem);
   font-weight: 700;
   color: var(--tx-main);
   line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .kpi-card .value.accent { color: var(--ac-teal); }
@@ -1726,7 +1731,7 @@ th.sort-active { color: #8ab4ff !important; }
 
 /* ── KPI labels ── */
 .kpi-card .label, .gender-item .label {
-  font-size: 0.80rem;
+  font-size: 0.95rem;
   text-transform: uppercase;
   letter-spacing: 1.8px;
   font-weight: 700;

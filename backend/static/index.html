@@ -42,32 +42,28 @@
         <div class="label">Утвержденный бюджет</div>
         <div class="value accent" id="kpi-budget">—</div>
       </div>
+      <div class="kpi-card kpi-charts-tabs" style="grid-row: span 2">
+        <div class="kpi-tabs-bar">
+          <button type="button" class="kpi-tab-btn active" data-ktab="sdu">Уровень благосостояния по ЦКС</button>
+          <button type="button" class="kpi-tab-btn" data-ktab="ga">Пол / Возраст</button>
+          <button type="button" class="sdu-clear-btn" id="sdu-clear-btn" onclick="clearSduFilter()" title="Сбросить фильтр" style="display:none">✕</button>
+        </div>
+        <div class="kpi-tab-pane active" id="ktab-sdu">
+          <div class="kpi-chart-area"><div class="sdu-chart-wrap"><canvas id="sdu-chart"></canvas></div></div>
+          <div class="sdu-legend" id="sdu-legend"></div>
+        </div>
+        <div class="kpi-tab-pane" id="ktab-ga">
+          <div id="gender-age-chart" class="ga-chart"></div>
+        </div>
+      </div>
       <div class="kpi-card">
         <div class="label">Подано заявок на сумму</div>
         <div class="value accent" id="kpi-dec">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="label">Факт выплаты</div>
+        <div class="label" style="margin-top:14px">Факт выплаты</div>
         <div class="value kpi-deliv" id="kpi-deliv">—</div>
       </div>
     </div>
 
-    <!--
-    <div class="kpi-card kpi-charts-tabs">
-      <div class="kpi-tabs-bar">
-        <button type="button" class="kpi-tab-btn active" data-ktab="sdu">Уровень благосостояния по ЦКС</button>
-        <button type="button" class="kpi-tab-btn" data-ktab="ga">Пол / Возраст</button>
-        <button type="button" class="sdu-clear-btn" id="sdu-clear-btn" onclick="clearSduFilter()" title="Сбросить фильтр" style="display:none">✕</button>
-      </div>
-      <div class="kpi-tab-pane active" id="ktab-sdu">
-        <div class="kpi-chart-area"><div class="sdu-chart-wrap"><canvas id="sdu-chart"></canvas></div></div>
-        <div class="sdu-legend" id="sdu-legend"></div>
-      </div>
-      <div class="kpi-tab-pane" id="ktab-ga">
-        <div id="gender-age-chart" class="ga-chart"></div>
-      </div>
-    </div>
-    -->
   </div>
 
   <!-- Ranking Panel (moved to tabs section below)
