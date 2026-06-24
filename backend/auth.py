@@ -73,6 +73,29 @@ def clear_auth_cookie(response):
     response.delete_cookie(COOKIE_NAME, path="/")
 
 
+SSO_TICKET_TTL_MINUTES = 2
+
+
+def create_login_ticket(user: User) -> str:
+    """Одноразовый короткоживущий тикет для безопасного перевода браузера в кабинет."""
+    payload = {
+        "sub": "sso_ticket",
+        "uid": user.id,
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=SSO_TICKET_TTL_MINUTES),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def decode_login_ticket(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Тикет недействителен или истёк")
+    if payload.get("sub") != "sso_ticket":
+        raise HTTPException(status_code=401, detail="Тикет недействителен")
+    return payload
+
+
 def _decode_access(token: str) -> dict:
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])

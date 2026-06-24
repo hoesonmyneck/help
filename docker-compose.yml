@@ -28,6 +28,8 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-crtr2026}
       # Постоянный токен для перехода с портала ecosystem.enbek.kz:
       SSO_TOKEN: ${SSO_TOKEN:-}
+      # Внешний адрес сервиса для абсолютной ссылки redirectUrl в SSO-ответе:
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://interaction.enbek.kz:8443}
     volumes:
       - ./backend/static:/app/static
 

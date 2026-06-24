@@ -13,6 +13,10 @@ from load_data import (load_excel, load_budget, load_region_budget, load_referen
 import auth
 import os
 
+# Внешний базовый URL сервиса (как его видит браузер пользователя через портал).
+# Используется для абсолютной ссылки redirectUrl в SSO-ответе.
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://interaction.enbek.kz:8443").rstrip("/")
+
 EXCLUDED_PAY_SUBSTRINGS = {'АБОНЕНТСКУЮ ПЛАТУ ЗА ТЕЛЕФОН'}
 
 def _is_excluded(pname: str | None) -> bool:
@@ -35,7 +39,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 # Public API paths that must work without a session (login flow itself)
-_PUBLIC_API = {"/api/auth/login", "/api/auth/login-2fa", "/api/auth/sso"}
+_PUBLIC_API = {"/api/auth/login", "/api/auth/login-2fa", "/api/auth/sso",
+               "/api/auth/sso/consume"}
 
 
 @app.middleware("http")
@@ -179,19 +184,29 @@ def _sso_token_from_request(request: Request, query_token: str | None = None) ->
     return request.headers.get("X-SSO-Token") or query_token
 
 
+def _sso_fail(status: int, message: str) -> JSONResponse:
+    """Ответ в формате контракта портала enbek.kz для ошибок."""
+    return JSONResponse(
+        {"success": False, "message": message, "redirectUrl": ""},
+        status_code=status,
+    )
+
+
 @app.post("/api/auth/sso")
 def api_sso_post(body: SsoBody, request: Request):
     """Доверенный вход с портала enbek.kz по POST.
 
     Портал авторизовал человека (ЭЦП) и серверным запросом сообщает личность:
     ИИН ФЛ и/или БИН организации. Токен — в заголовке Authorization: Bearer <token>.
-    Возвращает JSON с access-токеном и ссылкой для перехода в кабинет.
+    Ответ в формате контракта портала: {success, message, redirectUrl}.
+    redirectUrl содержит одноразовую ссылку, по которой браузер пользователя
+    входит в кабинет (ставится сессия), действует 2 минуты.
     """
     if not auth.SSO_TOKEN:
-        raise HTTPException(status_code=503, detail="SSO не настроен")
+        return _sso_fail(503, "SSO не настроен")
     tok = _sso_token_from_request(request)
     if not auth.sso_token_valid(tok):
-        raise HTTPException(status_code=403, detail="Недействительный токен")
+        return _sso_fail(403, "Недействительный токен")
 
     bin_ = (body.bin or "").strip()
     iin_ = (body.iin or "").strip()
@@ -202,16 +217,27 @@ def api_sso_post(body: SsoBody, request: Request):
         identifier = iin_ or bin_
 
     if not (identifier.isdigit() and len(identifier) == 12):
-        raise HTTPException(status_code=400, detail="Не передан корректный ИИН/БИН (12 цифр)")
+        return _sso_fail(400, "Не передан корректный ИИН/БИН (12 цифр)")
 
     user = auth.find_or_create_portal_user(identifier, (body.fio or None))
-    access = auth.create_access_token(user)
-    resp = JSONResponse({
-        "ok": True,
-        "user": _user_out(user),
-        "accessToken": access,
-        "redirectUrl": "/",
+    ticket = auth.create_login_ticket(user)
+    return JSONResponse({
+        "success": True,
+        "message": "OK",
+        "redirectUrl": f"{PUBLIC_BASE_URL}/api/auth/sso/consume?ticket={ticket}",
     })
+
+
+@app.get("/api/auth/sso/consume")
+def api_sso_consume(ticket: str = Query(...)):
+    """Браузер пользователя приходит по одноразовому тикету → ставим сессию и в кабинет."""
+    payload = auth.decode_login_ticket(ticket)
+    with Session(engine) as db:
+        user = db.get(User, payload.get("uid"))
+        if not user:
+            raise HTTPException(status_code=401, detail="Пользователь не найден")
+        access = auth.create_access_token(user)
+    resp = RedirectResponse(url="/", status_code=303)
     auth.set_auth_cookie(resp, access)
     return resp
 
