@@ -181,49 +181,49 @@ def load_excel():
         if count > 0:
             return
 
-    # newN.xlsx has a leading row-number column at index 0; data starts at index 1
-    path = os.path.join(os.path.dirname(__file__), "data", "new11.xlsx")
+    # new12.xlsx has no leading row-number column; data starts at index 0
+    path = os.path.join(os.path.dirname(__file__), "data", "new12.xlsx")
     wb = load_workbook(path, read_only=True, data_only=True)
     ws = wb.active
 
     rows_data = []
     for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True)):
-        # columns (0-indexed): 0=row_num(skip), 1=APP_ID, 2=APP_DATE, 3=APP_DATE_CLOSE,
-        # 4=APP_STATUS, 5=IIN, 6=KATO_REG, 7=REG(name), 8=KATO_DIS, 9=DIS(name),
-        # 10=PAY_TYPE_ID, 11=PAY_TYPE, 12=CAT_TYPE_ID, 13=CAT_TYPE, 14=PERIOD,
-        # 15=UNIT_ID, 16=MAX_PAY_SUM, 17=DECISION, 18=DEC_PAY_SUM, 19=DELIV_DATE,
-        # 20=DELIV_SUM, 21=MRP, 22=SYS_DATE, 23=SICID, 24=GENDER_ID(int),
-        # 25=VOZRAST, 26=SDU_TZHS, 27=KATO_REGION, 28=KATO_RAION,
-        # 29=KATO_REGNAME, 30=KATO_RAINAME
+        # columns (0-indexed): 0=APP_ID, 1=APP_DATE, 2=APP_DATE_CLOSE,
+        # 3=APP_STATUS, 4=IIN, 5=KATO_REG, 6=REG(name), 7=KATO_DIS, 8=DIS(name),
+        # 9=PAY_TYPE_ID, 10=PAY_TYPE, 11=CAT_TYPE_ID, 12=CAT_TYPE, 13=PERIOD,
+        # 14=UNIT_ID, 15=MAX_PAY_SUM, 16=DECISION, 17=DEC_PAY_SUM, 18=DELIV_DATE,
+        # 19=DELIV_SUM, 20=MRP, 21=SYS_DATE, 22=SICID, 23=GENDER_ID(int),
+        # 24=VOZRAST, 25=SDU_TZHS, 26=KATO_REGION, 27=KATO_RAION,
+        # 28=KATO_REGNAME, 29=KATO_RAINAME
         rows_data.append(Payment(
-            app_id=parse_num(row[1], int),
-            app_date=parse_date(row[2]),
-            app_date_close=parse_date(row[3]),
-            app_status=str(row[4]).strip() if row[4] else None,
-            iin=str(row[5]).strip() if row[5] else None,
-            kato_reg=parse_num(row[6], int),
-            kato_dis=parse_num(row[8], int),
-            pay_type_id=parse_num(row[10], int),
-            pay_type=str(row[11]).strip() if row[11] else None,
-            cat_type_id=parse_num(row[12], int),
-            cat_type=str(row[13]).strip() if row[13] else None,
-            period=str(row[14]).strip() if row[14] else None,
-            unit_id=parse_num(row[15], int),
-            max_pay_sum=parse_num(row[16]),
-            decision=str(row[17]).strip() if row[17] else None,
-            dec_pay_sum=parse_num(row[18]),
-            deliv_date=parse_date(row[19]),
-            deliv_sum=parse_num(row[20]),
-            mrp=parse_num(row[21]),
-            sys_date=parse_datetime(row[22]),
-            sicid=parse_num(row[23], int),
-            gender_id=parse_num(row[24], int),
-            vozrast=parse_num(row[25], int),
-            sdu_tzhs=str(row[26]).strip() if row[26] else None,
-            kato_region=parse_num(row[27], int),
-            kato_raion=parse_num(row[28], int),
-            kato_regname=str(row[29]).strip() if row[29] else None,
-            kato_rainame=str(row[30]).strip() if row[30] else None,
+            app_id=parse_num(row[0], int),
+            app_date=parse_date(row[1]),
+            app_date_close=parse_date(row[2]),
+            app_status=str(row[3]).strip() if row[3] else None,
+            iin=str(row[4]).strip() if row[4] else None,
+            kato_reg=parse_num(row[5], int),
+            kato_dis=parse_num(row[7], int),
+            pay_type_id=parse_num(row[9], int),
+            pay_type=str(row[10]).strip() if row[10] else None,
+            cat_type_id=parse_num(row[11], int),
+            cat_type=str(row[12]).strip() if row[12] else None,
+            period=str(row[13]).strip() if row[13] else None,
+            unit_id=parse_num(row[14], int),
+            max_pay_sum=parse_num(row[15]),
+            decision=str(row[16]).strip() if row[16] else None,
+            dec_pay_sum=parse_num(row[17]),
+            deliv_date=parse_date(row[18]),
+            deliv_sum=parse_num(row[19]),
+            mrp=parse_num(row[20]),
+            sys_date=parse_datetime(row[21]),
+            sicid=parse_num(row[22], int),
+            gender_id=parse_num(row[23], int),
+            vozrast=parse_num(row[24], int),
+            sdu_tzhs=str(row[25]).strip() if row[25] else None,
+            kato_region=parse_num(row[26], int),
+            kato_raion=parse_num(row[27], int),
+            kato_regname=str(row[28]).strip() if row[28] else None,
+            kato_rainame=str(row[29]).strip() if row[29] else None,
         ))
 
     wb.close()
