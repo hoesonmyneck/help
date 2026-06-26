@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Единая цифровая платформа "Анализ по мерам государственной поддержке МИО"</title>
+  <title>ЕЦП "Анализ по мерам государственной поддержке МИО"</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="/style.css">
 </head>
@@ -26,68 +26,47 @@
 
 <div class="main-layout">
 
-  <!-- KPI Panel -->
-  <div class="kpi-panel">
-
-    <div class="kpi-numbers-row">
-      <div class="kpi-card">
-        <div class="label">Колличество видов помощи</div>
-        <div class="value accent" id="kpi-help-types">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="label">Колличество услугополучателей</div>
-        <div class="value" id="kpi-recipients">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="label">Утвержденный бюджет</div>
-        <div class="value accent" id="kpi-budget">—</div>
-      </div>
-      <div class="kpi-card kpi-charts-tabs" style="grid-row: span 2">
-        <div class="kpi-tabs-bar">
-          <button type="button" class="kpi-tab-btn active" data-ktab="sdu">Уровень благосостояния по ЦКС</button>
-          <button type="button" class="kpi-tab-btn" data-ktab="ga">Пол / Возраст</button>
-          <button type="button" class="sdu-clear-btn" id="sdu-clear-btn" onclick="clearSduFilter()" title="Сбросить фильтр" style="display:none">✕</button>
-        </div>
-        <div class="kpi-tab-pane active" id="ktab-sdu">
-          <div class="kpi-chart-area"><div class="sdu-chart-wrap"><canvas id="sdu-chart"></canvas></div></div>
-          <div class="sdu-legend" id="sdu-legend"></div>
-        </div>
-        <div class="kpi-tab-pane" id="ktab-ga">
-          <div id="gender-age-chart" class="ga-chart"></div>
-        </div>
-      </div>
-      <div class="kpi-card">
-        <div class="label">Подано заявок на сумму</div>
-        <div class="value accent" id="kpi-dec">—</div>
-        <div class="label" style="margin-top:14px">Факт выплаты</div>
-        <div class="value kpi-deliv" id="kpi-deliv">—</div>
-      </div>
+  <!-- Left KPI column (3) -->
+  <div class="kpi-col kpi-col-left">
+    <div class="kpi-card">
+      <div class="label">Кол-во видов помощи</div>
+      <div class="value accent" id="kpi-help-types">—</div>
     </div>
-
-  </div>
-
-  <!-- Ranking Panel (moved to tabs section below)
-  <div class="ranking-panel" id="ranking-panel">
-    <div class="kpi-card ranking-card">
-      <div class="ranking-tabs-bar">
-        <button class="ranking-tab-btn active" data-rtab="recipients">По получателям</button>
-        <button class="ranking-tab-btn" data-rtab="sum">По сумме</button>
-        <button type="button" class="expand-btn" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
+    <div class="kpi-card">
+      <div class="label">Утвержденный бюджет</div>
+      <div class="value accent" id="kpi-budget">—</div>
+    </div>
+    <div class="kpi-card kpi-multi">
+      <div class="label">Подано заявок</div>
+      <div class="value accent" id="kpi-app-count">—</div>
+      <div class="kpi-sum-row">
+        <span class="label">на сумму</span>
+        <span class="value accent kpi-sum-val"><span id="kpi-dec">—</span> ₸</span>
       </div>
-      <div class="ranking-tab-pane active" id="rtab-recipients">
-        <div class="ranking-list" id="ranking-list-recipients"><div class="ranking-loading">Загрузка...</div></div>
-      </div>
-      <div class="ranking-tab-pane" id="rtab-sum">
-        <div class="ranking-list" id="ranking-list-sum"></div>
-      </div>
+      <div class="kpi-sub"><b id="kpi-dec-pct">—</b> от бюджета</div>
     </div>
   </div>
-  -->
 
-  <!-- Map Panel -->
+  <!-- Map Panel (center) -->
   <div class="map-panel">
+    <button type="button" class="expand-btn map-info" onclick="showCountryPanel(event)" title="Сводка по Казахстану">Казахстан</button>
     <button type="button" class="expand-btn map-expand" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
     <div id="map"></div>
+  </div>
+
+  <!-- Right KPI column (2) -->
+  <div class="kpi-col kpi-col-right">
+    <div class="kpi-card">
+      <div class="label">Кол-во фактических видов помощи</div>
+      <div class="value accent" id="kpi-fact-help-types">—</div>
+    </div>
+    <div class="kpi-card kpi-multi">
+      <div class="label">Фактических услугополучателей</div>
+      <div class="value" id="kpi-recipients">—</div>
+      <div class="label" style="margin-top:14px">Факт выплачено</div>
+      <div class="value kpi-deliv" id="kpi-deliv">—</div>
+      <div class="kpi-sub"><b id="kpi-deliv-pct">—</b> от суммы заявок</div>
+    </div>
   </div>
 
 </div>
@@ -103,6 +82,7 @@
     <button class="tab-btn" data-tab="ranking-recipients">По получателям</button>
     <button class="tab-btn" data-tab="ranking-sum">По сумме</button>
     <button class="tab-btn" data-tab="gap" style="display:none">Разрывы по выплатам</button>
+    <button class="tab-btn pie3d-tab-btn" data-tab="pie3d" style="display:none">🥧 3D-пирог</button>
     <button type="button" id="coverage-btn-back" style="display:none" onclick="goBackFromRanking()">← Все регионы</button>
     <button type="button" class="expand-btn" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
   </div>
@@ -211,6 +191,23 @@
           <tr><td colspan="2" class="loading">Загрузка...</td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- Tab: 3D Pie (только в полноэкранном режиме) -->
+  <div class="tab-pane" id="tab-pie3d">
+    <div id="pie3d-wrap" class="pie3d-wrap">
+      <div id="pie3d-tip" class="cube3d-tip" style="display:none"></div>
+      <div id="pie3d-empty" class="pie3d-empty" style="display:none">Нет данных по видам помощи</div>
+      <div id="pie3d-detail" class="pie3d-detail" style="display:none">
+        <div class="pie3d-detail-head">
+          <span id="pie3d-detail-title"></span>
+          <button type="button" id="pie3d-detail-back" class="pie3d-detail-back" style="display:none">← Области</button>
+          <button type="button" id="pie3d-detail-close" class="expand-btn" title="Закрыть" aria-label="Закрыть">✕</button>
+        </div>
+        <div class="pie3d-detail-sub">Сумма заявок по областям</div>
+        <div class="pie3d-detail-body"><canvas id="pie3d-detail-chart"></canvas></div>
+      </div>
     </div>
   </div>
 
@@ -324,5 +321,17 @@
 <div id="pay-tooltip" class="pay-tooltip" style="display:none"></div>
 
 <script src="/app.js"></script>
+<script src="/kpifx.js"></script>
+
+<!-- Three.js (для 3D-пирога видов помощи) -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="/pie3d.js"></script>
 </body>
 </html>

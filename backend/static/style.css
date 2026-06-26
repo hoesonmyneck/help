@@ -192,6 +192,14 @@ header h1 {
   letter-spacing: 0.5px;
 }
 
+header h0 {
+  display: inline-block;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--tx-head);
+  letter-spacing: 0.3px;
+}
+
 .header-title-block {
   display: flex;
   flex-direction: column;
@@ -265,7 +273,7 @@ header h1 {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .kpi-numbers-row {
@@ -279,14 +287,14 @@ header h1 {
 /* SDU/GA chart spans rows 2–3 */
 .kpi-numbers-row .kpi-charts-tabs { grid-row: span 2; }
 /* Center content vertically inside each card */
-.kpi-numbers-row .kpi-card {
+.kpi-col .kpi-card {
   display: flex;
   flex-direction: column;
   justify-content: center;
 }
 /* Horizontally center first two cards (Виды / Услугополучатели) */
-.kpi-numbers-row .kpi-card:nth-child(1),
-.kpi-numbers-row .kpi-card:nth-child(2) {
+.kpi-col .kpi-card:nth-child(1),
+.kpi-col .kpi-card:nth-child(2) {
   align-items: center;
   text-align: center;
 }
@@ -605,14 +613,31 @@ header h1 {
 
 /* Map panel */
 .map-panel {
-  flex: 0 0 50%;
-  width: 50%;
+  flex: 1.7 1 0;
+  width: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-width: 0;
   position: relative;
 }
+
+/* KPI-колонки слева и справа от карты */
+.kpi-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.kpi-col .kpi-card {
+  flex: 1 1 0;
+  min-height: 0;
+  align-items: center;
+  text-align: center;
+}
+.kpi-sub { font-size: 0.95rem; color: var(--tx-dim); margin-top: 4px; line-height: 1.3; }
+.kpi-sub b { color: var(--tx-main); font-weight: 700; }
 
 .map-expand {
   position: absolute;
@@ -673,11 +698,29 @@ header h1 {
   border: 1px solid var(--bd-hi);
   border-radius: 8px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.45);
-  width: 740px;
+  width: 960px;
   max-height: 72vh;
   overflow-y: auto;
   padding: 10px 12px;
+  display: flex;
+  flex-direction: row;
+  gap: 14px;
 }
+.gp-body { flex: 1 1 auto; min-width: 0; }
+.gp-gauge {
+  flex: 0 0 188px;
+  align-self: center;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  border-left: 1px solid var(--bd-main);
+  padding-left: 14px;
+}
+.gp-gauge-title { font-size: 0.72rem; color: var(--tx-dim); font-weight: 700; text-transform: uppercase; text-align: center; }
+.gp-gauge-svg { width: 174px; height: 104px; }
+.gp-gauge-pct { fill: var(--tx-head); font-size: 26px; font-weight: 800; }
+.gp-gauge-nums { font-size: 0.8rem; text-align: center; width: 100%; }
+.gp-gauge-nums > div { margin-top: 5px; }
+.gp-gauge-lbl { display: block; color: var(--tx-dim); font-size: 0.68rem; }
+.gp-gauge-nums b { color: var(--tx-main); font-weight: 700; }
 .gp-title { font-weight: 700; color: var(--tx-head); margin-bottom: 4px; font-size: 0.9rem; }
 .gp-hdr-row, .gp-row {
   display: grid;
@@ -2912,3 +2955,298 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
   color: #174ea6 !important;
   box-shadow: none !important;
 }
+
+/* ─────────────── 3D Cube Experiment ─────────────── */
+.cube3d-section { margin-top: 18px; }
+.cube3d-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.cube3d-title { margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--tx-main); }
+.cube3d-sub {
+  margin: 4px 0 0; font-size: 0.82rem; color: var(--tx-dim);
+  opacity: 0.75; max-width: 640px;
+}
+.cube3d-controls { display: flex; gap: 8px; }
+.cube3d-btn {
+  background: var(--bg-deep); color: var(--tx-dim);
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;
+  padding: 7px 14px; font-size: 0.8rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.cube3d-btn:hover { background: var(--bg-hover); color: var(--tx-main); }
+.cube3d-btn.active {
+  background: rgba(91,138,248,0.18); border-color: var(--ac-blue); color: var(--ac-blue);
+}
+.cube3d-canvas-wrap {
+  position: relative; width: 100%; height: 480px;
+  border-radius: 14px; overflow: hidden;
+  background: radial-gradient(circle at 50% 20%, #1c2342 0%, #141831 70%);
+  border: 1px solid rgba(255,255,255,0.06); cursor: grab;
+}
+.cube3d-canvas-wrap canvas { display: block; }
+.cube3d-canvas-wrap:active { cursor: grabbing; }
+.cube3d-tip {
+  position: absolute; pointer-events: none; z-index: 5;
+  background: rgba(20,24,49,0.92); border: 1px solid var(--ac-blue);
+  border-radius: 8px; padding: 7px 11px; font-size: 0.8rem;
+  line-height: 1.45; color: #fff;
+  box-shadow: 0 6px 22px rgba(0,0,0,0.45); white-space: nowrap;
+}
+.cube3d-tip b { color: var(--ac-teal); }
+.cube3d-tip-dim { color: var(--tx-dim); opacity: 0.7; font-size: 0.72rem; }
+
+/* Легенда внутри 3D-сцены */
+.viz-legend {
+  position: absolute;
+  left: 14px; bottom: 14px;
+  display: flex; flex-direction: column; gap: 5px;
+  background: rgba(20,24,49,0.78);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 9px; padding: 9px 12px;
+  font-size: 0.74rem; color: #fff; pointer-events: none;
+}
+.viz-legend span { display: flex; align-items: center; gap: 7px; }
+.viz-legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+/* Счётчик кубиков в физической сцене */
+.viz-count {
+  position: absolute;
+  left: 14px; top: 14px;
+  background: rgba(20,24,49,0.78);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px; padding: 6px 12px;
+  font-size: 0.8rem; font-weight: 600; color: #fff;
+  pointer-events: none; z-index: 4;
+}
+
+/* ════════════════ KPI «WOW» — 3D / неон / анимации ════════════════ */
+@property --kpi-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+
+.kpi-col { perspective: 1300px; }
+
+.kpi-col .kpi-card {
+  position: relative;
+  overflow: visible;                 /* нужно для 3D-глубины (preserve-3d) */
+  border-radius: 14px;
+  transform-style: preserve-3d;
+  transition: transform 0.28s cubic-bezier(.2,.7,.2,1), box-shadow 0.28s ease;
+  background:
+    radial-gradient(130% 130% at 0% 0%, rgba(91,138,248,0.16), transparent 55%),
+    radial-gradient(130% 130% at 100% 100%, rgba(78,205,196,0.13), transparent 55%),
+    var(--bg-card);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.05);
+  will-change: transform;
+}
+
+/* вращающаяся неоновая рамка */
+.kpi-col .kpi-card::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  padding: 1.6px;
+  background: conic-gradient(from var(--kpi-angle), #4ecdc4, #5b8af8, #f875c3, #ffb454, #4ecdc4);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  opacity: 0.75;
+  animation: kpi-rotate 6s linear infinite;
+  pointer-events: none; z-index: 1;
+}
+@keyframes kpi-rotate { to { --kpi-angle: 360deg; } }
+
+/* бегущий блик (клипуем по карточке, чтобы не вылезал) */
+.kpi-col .kpi-card:not(.kpi-charts-tabs)::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(115deg, transparent 36%, rgba(255,255,255,0.16) 50%, transparent 64%);
+  clip-path: inset(0 round 14px);
+  transform: translateX(-130%);
+  animation: kpi-shimmer 6.5s ease-in-out infinite;
+  pointer-events: none; z-index: 2;
+}
+@keyframes kpi-shimmer { 0%,14% { transform: translateX(-130%);} 30%,100% { transform: translateX(130%);} }
+
+/* подсветка от курсора */
+.kpi-glare {
+  position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 2;
+  opacity: 0; transition: opacity .25s ease;
+  background: radial-gradient(240px circle at var(--mx,50%) var(--my,50%), rgba(255,255,255,0.20), transparent 60%);
+  clip-path: inset(0 round 14px);
+}
+.kpi-col .kpi-card:hover .kpi-glare { opacity: 1; }
+
+/* hover: усиление свечения + ускоряем рамку */
+.kpi-col .kpi-card:hover {
+  box-shadow: 0 22px 55px rgba(0,0,0,0.55), 0 0 34px rgba(91,138,248,0.30), inset 0 1px 0 rgba(255,255,255,0.09);
+}
+.kpi-col .kpi-card:hover::before { opacity: 1; animation-duration: 2.4s; }
+
+/* глубина контента (parallax в 3D) — без свечения/фона на цифрах */
+.kpi-col .kpi-card .label { position: relative; z-index: 3; transform: translateZ(20px); }
+.kpi-col .kpi-card .value { position: relative; z-index: 3; transform: translateZ(46px); text-shadow: none; }
+
+/* ════════ 3D-пирог видов помощи (вкладка в фуллскрине) ════════ */
+.pie3d-wrap {
+  position: relative; width: 100%; height: 480px;
+  border-radius: 12px; overflow: hidden;
+  background: radial-gradient(circle at 50% 22%, #1c2342 0%, #141831 72%);
+  cursor: grab;
+}
+.pie3d-wrap:active { cursor: grabbing; }
+.table-section.is-fullscreen .pie3d-wrap { flex: 1; min-height: 0; height: auto; }
+.pie3d-empty {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: var(--tx-dim); font-size: 0.95rem;
+}
+
+/* ── 3D-пирог: HTML-подписи и выноски ── */
+.pie3d-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 3; }
+.pie3d-leaders { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.pie3d-leader { fill: none; stroke-width: 1.4; opacity: 0; }
+.pie3d-lab {
+  position: absolute;
+  max-width: 230px;
+  transform: translateY(-50%);
+  background: rgba(20, 24, 49, 0.88);
+  border: 1px solid var(--clr, #5b8af8);
+  border-radius: 8px;
+  padding: 4px 9px;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  color: #fff;
+  white-space: nowrap;
+  opacity: 0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+.pie3d-lab b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; max-width: 212px; }
+.pie3d-lab span { color: #4ecdc4; font-weight: 600; }
+
+.pie3d-wrap .cube3d-tip { z-index: 6; }
+
+.pie3d-wrap canvas { display: block; width: 100% !important; height: 100% !important; }
+
+/* ── 3D-пирог: панель деталей (столбчатый график по областям) ── */
+.pie3d-detail {
+  position: absolute; top: 12px; right: 12px; bottom: 12px;
+  width: min(560px, 47%);
+  background: rgba(16, 20, 40, 0.95);
+  border: 1px solid rgba(91, 138, 248, 0.45);
+  border-radius: 12px;
+  display: flex; flex-direction: column;
+  padding: 12px 14px 14px;
+  z-index: 7;
+  box-shadow: 0 12px 44px rgba(0, 0, 0, 0.55);
+}
+.pie3d-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pie3d-detail-head span { font-weight: 700; color: #fff; font-size: 0.95rem; line-height: 1.2; }
+.pie3d-detail-close {
+  background: none; border: none; color: var(--tx-dim); font-size: 1.1rem;
+  cursor: pointer; padding: 2px 8px; border-radius: 6px; flex-shrink: 0;
+}
+.pie3d-detail-close:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.pie3d-detail-sub { color: #4ecdc4; font-size: 0.78rem; margin: 3px 0 10px; }
+.pie3d-detail-body { flex: 1; min-height: 0; position: relative; }
+
+.pie3d-detail-back {
+  background: rgba(91,138,248,0.18); border: 1px solid rgba(91,138,248,0.5);
+  color: #cfe0ff; border-radius: 6px; padding: 3px 10px; font-size: 0.74rem;
+  cursor: pointer; flex-shrink: 0; margin-right: auto;
+}
+.pie3d-detail-back:hover { background: rgba(91,138,248,0.3); color: #fff; }
+
+/* ── переопределения шапки панели деталей пирога ── */
+.pie3d-detail-head { justify-content: flex-start; }
+#pie3d-detail-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pie3d-detail-back { margin: 0; }                 /* сразу после названия вида помощи */
+.pie3d-detail-close {
+  margin-left: auto;                              /* крестик — в правый угол */
+  width: 28px; height: 28px; padding: 0; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%;
+  background: rgba(255,255,255,0.08);
+  color: #c2c9d6; font-size: 18px; font-weight: 400; line-height: 1;
+  cursor: pointer;
+  transition: background .15s, color .15s, transform .15s;
+}
+.pie3d-detail-close:hover {
+  background: #f85b5b; color: #fff; transform: scale(1.1);
+}
+
+/* ── Графики в тултипе карты (ЦКС + Пол/Возраст, рядом) ── */
+.gp-charts {
+  display: flex;
+  gap: 18px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--bd-main);
+}
+.gp-chart-box { flex: 1 1 0; min-width: 0; }
+.gp-chart-title {
+  font-size: 0.72rem; color: var(--tx-dim); font-weight: 700;
+  margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.03em;
+}
+.gp-sdu-wrap { position: relative; height: 165px; }
+
+/* ── Кнопка «Сводка по КЗ» на карте ── */
+.map-info { position: absolute; top: 10px; right: 56px; z-index: 1000; margin: 0; white-space: nowrap; }
+
+/* ── Кликабельный режим тултипа (сводка по стране) ── */
+.geo-panel.country-mode { pointer-events: auto; }
+.gp-main { position: relative; }
+.gp-close {
+  position: absolute; top: 8px; right: 10px; z-index: 2;
+  width: 22px; height: 22px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%; cursor: pointer;
+  background: rgba(255,255,255,0.08); color: var(--tx-dim);
+  font-size: 13px; line-height: 1;
+  transition: background .15s, color .15s;
+}
+.gp-close:hover { background: #f85b5b; color: #fff; }
+
+/* Карточки KPI с двумя значениями (заявки/сумма, услугополучатели/факт) */
+.kpi-multi .value { font-size: clamp(1.15rem, 1.9vw, 2.0rem); line-height: 1.06; }
+.kpi-multi .kpi-sum-val { font-size: clamp(1.05rem, 1.7vw, 1.75rem); }
+.kpi-multi .label { margin-bottom: 2px; }
+
+/* «на сумму» и значение — в одну строку */
+.kpi-sum-row {
+  display: flex; align-items: baseline; justify-content: center;
+  gap: 8px; flex-wrap: wrap; margin-top: 6px;
+}
+.kpi-sum-row .label { margin: 0; }
+.kpi-sum-row .kpi-sum-val { display: inline-block; }
+
+/* ── 3D-пирог: светлая тема ── */
+:root[data-theme="light"] .pie3d-wrap {
+  background: radial-gradient(circle at 50% 20%, #ffffff 0%, #eef1f6 72%);
+}
+:root[data-theme="light"] .pie3d-lab {
+  background: rgba(255,255,255,0.94);
+  border-color: rgba(91,138,248,0.5);
+  color: #202124;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+}
+:root[data-theme="light"] .pie3d-lab span { color: #0a8080; }
+
+/* ── Светлая тема: тултип пирога и панель деталей (Google-стиль) ── */
+:root[data-theme="light"] .cube3d-tip {
+  background: #ffffff;
+  border-color: #dadce0;
+  color: #202124;
+  box-shadow: 0 2px 12px rgba(60,64,67,0.22);
+}
+:root[data-theme="light"] .cube3d-tip b { color: #0a8080; }
+:root[data-theme="light"] .cube3d-tip-dim { color: #5f6368; opacity: 1; }
+
+:root[data-theme="light"] .pie3d-detail {
+  background: #ffffff;
+  border-color: #dadce0;
+  box-shadow: 0 8px 30px rgba(60,64,67,0.25);
+}
+:root[data-theme="light"] .pie3d-detail-head span { color: #202124; }
+:root[data-theme="light"] .pie3d-detail-sub { color: #0a8080; }
+:root[data-theme="light"] .pie3d-detail-close { background: #f1f3f4; color: #5f6368; }
+:root[data-theme="light"] .pie3d-detail-close:hover { background: #f85b5b; color: #fff; }
+:root[data-theme="light"] .pie3d-detail-back {
+  background: rgba(26,115,232,0.12); border-color: rgba(26,115,232,0.5); color: #1a73e8;
+}
+:root[data-theme="light"] .pie3d-detail-back:hover { background: rgba(26,115,232,0.22); color: #1a73e8; }

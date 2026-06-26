@@ -351,6 +351,13 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
 
         total_max = base.with_entities(func.sum(Payment.max_pay_sum)).scalar() or 0
         total_dec = base.with_entities(func.sum(Payment.dec_pay_sum)).scalar() or 0
+        app_count = base.with_entities(func.count(Payment.id)).scalar() or 0
+        # Фактически оказываемые виды помощи — уникальные pay_type_id с реальной выплатой
+        fact_help_type_count = (
+            base.filter(Payment.dec_pay_sum > 0)
+            .with_entities(func.count(distinct(Payment.pay_type_id)))
+            .scalar() or 0
+        )
         unique_recipients = base.with_entities(func.count(distinct(Payment.sicid))).scalar() or 0
         male_count = base.filter(Payment.gender_id == 1).with_entities(func.count(distinct(Payment.sicid))).scalar() or 0
         female_count = base.filter(Payment.gender_id == 2).with_entities(func.count(distinct(Payment.sicid))).scalar() or 0
@@ -408,6 +415,8 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
             "total_dec_pay_sum": float(total_dec),
             "total_deliv_sum": float(deliv_total),
             "budget_total": float(budget_total),
+            "app_count": app_count,
+            "fact_help_type_count": fact_help_type_count,
             "unique_recipients": unique_recipients,
             "male_count": male_count,
             "female_count": female_count,
@@ -1592,15 +1601,15 @@ def anomalies_pay_gap(sdu_filter: str = Query(None), gender_filter: str = Query(
 
 @app.get("/api/geo-stats")
 def geo_stats(region_id: int = Query(None), raion_id: int = Query(None)):
-    """Per-help-type stats for a geo unit: recipients, total_dec, budget."""
-    if region_id is None and raion_id is None:
-        return {}
+    """Per-help-type stats for a geo unit: recipients, total_dec, budget.
+    Без параметров — сводка по всей стране."""
     with Session(engine) as db:
         base = db.query(Payment)
         if raion_id is not None:
             base = base.filter(Payment.kato_raion == raion_id)
-        else:
+        elif region_id is not None:
             base = base.filter(Payment.kato_region == region_id)
+        # иначе — без фильтра (вся страна)
 
         from sqlalchemy import case as sa_case
         pay_rows = (
@@ -1627,21 +1636,23 @@ def geo_stats(region_id: int = Query(None), raion_id: int = Query(None)):
                 'budget': 0.0,
             }
 
-        # Total regional budget from budget.xlsx (no raion or pay-type breakdown)
+        # Бюджет из budget.xlsx
         if region_id is not None:
             total_budget = float(
                 db.query(RegionBudget.budget)
                 .filter(RegionBudget.kato_region == region_id)
                 .scalar() or 0
             )
-        else:
-            # For raion, look up its parent region
+        elif raion_id is not None:
             parent = db.query(Payment.kato_region).filter(Payment.kato_raion == raion_id).first()
             total_budget = float(
                 db.query(RegionBudget.budget)
                 .filter(RegionBudget.kato_region == (parent[0] if parent else -1))
                 .scalar() or 0
             ) if parent else 0.0
+        else:
+            # вся страна — сумма по всем регионам
+            total_budget = float(db.query(func.sum(RegionBudget.budget)).scalar() or 0)
 
         result['_budget'] = total_budget
         return result
@@ -1804,6 +1815,28 @@ def pay_type_stats(
             })
 
         result.sort(key=lambda x: x['total_dec'], reverse=True)
+        return result
+
+
+@app.get("/api/paytype-geo")
+def paytype_geo(pay_type_id: int = Query(...), region_id: int = Query(None)):
+    """Сумма заявок (dec_pay_sum) по регионам (или районам региона) для одного вида помощи."""
+    with Session(engine) as db:
+        if region_id is not None:
+            rows = db.query(
+                Payment.kato_raion, Payment.kato_rainame,
+                func.sum(Payment.dec_pay_sum),
+            ).filter(Payment.pay_type_id == pay_type_id, Payment.kato_region == region_id)\
+             .group_by(Payment.kato_raion, Payment.kato_rainame).all()
+        else:
+            rows = db.query(
+                Payment.kato_region, Payment.kato_regname,
+                func.sum(Payment.dec_pay_sum),
+            ).filter(Payment.pay_type_id == pay_type_id)\
+             .group_by(Payment.kato_region, Payment.kato_regname).all()
+        result = [{"id": r[0], "name": r[1] or '—', "total_dec": float(r[2] or 0)}
+                  for r in rows if (r[2] or 0) > 0]
+        result.sort(key=lambda x: x["total_dec"], reverse=True)
         return result
 
 
