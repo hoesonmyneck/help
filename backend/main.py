@@ -352,10 +352,15 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
         total_max = base.with_entities(func.sum(Payment.max_pay_sum)).scalar() or 0
         total_dec = base.with_entities(func.sum(Payment.dec_pay_sum)).scalar() or 0
         app_count = base.with_entities(func.count(Payment.id)).scalar() or 0
-        # Фактически оказываемые виды помощи — уникальные pay_type_id с реальной выплатой
+        # «Фактические» метрики — только по реально выполненным выплатам (статус 'Выполнено')
         fact_help_type_count = (
-            base.filter(Payment.dec_pay_sum > 0)
+            base.filter(Payment.app_status == 'Выполнено')
             .with_entities(func.count(distinct(Payment.pay_type_id)))
+            .scalar() or 0
+        )
+        fact_recipients = (
+            base.filter(Payment.app_status == 'Выполнено')
+            .with_entities(func.count(distinct(Payment.sicid)))
             .scalar() or 0
         )
         unique_recipients = base.with_entities(func.count(distinct(Payment.sicid))).scalar() or 0
@@ -417,6 +422,7 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
             "budget_total": float(budget_total),
             "app_count": app_count,
             "fact_help_type_count": fact_help_type_count,
+            "fact_recipients": fact_recipients,
             "unique_recipients": unique_recipients,
             "male_count": male_count,
             "female_count": female_count,

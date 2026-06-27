@@ -772,7 +772,7 @@ async function refreshKPI(sduSeq) {
   animateCounter('kpi-dec',         data.total_dec_pay_sum,   v => formatCompact(v));
   animateCounter('kpi-deliv',       data.total_deliv_sum || 0, v => formatCompact(v));
   animateCounter('kpi-budget',      data.budget_total || 0,    v => formatCompact(v));
-  animateCounter('kpi-recipients',  data.unique_recipients,   v => formatInt(v));
+  animateCounter('kpi-recipients',  data.fact_recipients || 0, v => formatInt(v));
   animateCounter('kpi-help-types',  data.help_type_count || 0, v => formatInt(v));
   animateCounter('kpi-app-count',   data.app_count || 0,      v => formatInt(v));
   animateCounter('kpi-fact-help-types', data.fact_help_type_count || 0, v => formatInt(v));
