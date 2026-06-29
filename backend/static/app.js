@@ -403,8 +403,23 @@ function toggleFullscreen(btn) {
   if (section.classList.contains('map-panel') && map) {
     setTimeout(() => map.invalidateSize(), 60);
     setTimeout(() => map.invalidateSize(), 360);
+    applyFsZoom(fs);
   }
   _syncPie3DTab(section, fs);
+}
+
+// В полноэкранном режиме приближаем карту на 1 уровень, но только если открыта
+// вся страна (не вошли в регион/район). При выходе — возвращаем обратно.
+let _fsZoomBoost = false;
+function applyFsZoom(fs) {
+  if (!map) return;
+  if (fs && !_fsZoomBoost && currentRegion == null && currentRaion == null) {
+    _fsZoomBoost = true;
+    setTimeout(() => { try { map.setZoom(map.getZoom() + 1); } catch (_) {} }, 120);
+  } else if (!fs && _fsZoomBoost) {
+    _fsZoomBoost = false;
+    setTimeout(() => { try { map.setZoom(map.getZoom() - 1); } catch (_) {} }, 120);
+  }
 }
 
 // Вкладка «3D-пирог» доступна только в полноэкранном режиме первой группы таблиц
@@ -428,7 +443,7 @@ document.addEventListener('keydown', e => {
       _syncPie3DTab(s, false);
     });
     document.body.classList.remove('fs-open');
-    if (hadMap && map) setTimeout(() => map.invalidateSize(), 60);
+    if (hadMap && map) { setTimeout(() => map.invalidateSize(), 60); applyFsZoom(false); }
   }
 });
 
@@ -521,6 +536,7 @@ async function init() {
     return div;
   };
   mapLegend.addTo(map);
+  updateMapLegend();
 
   renderRegions();
   await refreshKPI();
@@ -533,15 +549,33 @@ function getColor(vidy) {
   return '#27ae60';
 }
 
+// Покраска по проценту «факт выплачено / сумма заявок»
+function getColorPct(pct) {
+  if (pct < 10)  return '#c0392b';
+  if (pct < 20)  return '#e67e22';
+  return '#27ae60';
+}
+
 let maxEntitledVidy = 1;
+let mapColorMode = 'vidy';   // 'vidy' — по видам помощи, 'pct' — по % выплат
 
 function geoVidy(id) {
   return presenceById[Math.round(id)]?.mini?.vidy || 0;
 }
 
+function geoPct(id) {
+  const m = presenceById[Math.round(id)]?.mini;
+  if (!m || !m.summa_val) return 0;
+  return m.deliv_val / m.summa_val * 100;
+}
+
+function geoFill(id) {
+  return mapColorMode === 'pct' ? getColorPct(geoPct(id)) : getColor(geoVidy(id));
+}
+
 function regionStyle(feature) {
   return {
-    fillColor: getColor(geoVidy(feature.properties.id_reg)),
+    fillColor: geoFill(feature.properties.id_reg),
     weight: 1,
     color: '#3a5090',
     fillOpacity: 0.75,
@@ -550,11 +584,40 @@ function regionStyle(feature) {
 
 function raionStyle(feature) {
   return {
-    fillColor: getColor(geoVidy(feature.properties.id_rai)),
+    fillColor: geoFill(feature.properties.id_rai),
     weight: 1,
     color: '#3a5090',
     fillOpacity: 0.75,
   };
+}
+
+// Переключение режима покраски карты
+function setMapColorMode(mode) {
+  if (mode === mapColorMode) return;
+  mapColorMode = mode;
+  document.querySelectorAll('.map-color-modes .mcm-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === mode));
+  if (currentRegion) raionsLayer?.setStyle(raionStyle);
+  else regionsLayer?.setStyle(regionStyle);
+  updateMapLegend();
+}
+
+function updateMapLegend() {
+  const div = document.querySelector('.map-legend');
+  if (!div) return;
+  if (mapColorMode === 'pct') {
+    div.innerHTML = `
+      <div class="ml-title">Факт выплачено / сумма заявок</div>
+      <div class="ml-item"><span class="ml-dot" style="background:#c0392b"></span>менее 10%</div>
+      <div class="ml-item"><span class="ml-dot" style="background:#e67e22"></span>10–20%</div>
+      <div class="ml-item"><span class="ml-dot" style="background:#27ae60"></span>20% и более</div>`;
+  } else {
+    div.innerHTML = `
+      <div class="ml-title">Фактически оказанных МГП</div>
+      <div class="ml-item"><span class="ml-dot" style="background:#c0392b"></span>0 видов помощи</div>
+      <div class="ml-item"><span class="ml-dot" style="background:#e67e22"></span>1–4 вида</div>
+      <div class="ml-item"><span class="ml-dot" style="background:#27ae60"></span>5 и более</div>`;
+  }
 }
 
 function clearLabels() {
@@ -1305,8 +1368,8 @@ function _buildGeoPanelHtml(provided, stats) {
     return `<div class="gp-row gp-yes">
       <span class="gp-pay">${stripHelpPrefix(c.name)}</span>
       <span class="gp-stat">${recip}</span>
-      <span class="gp-stat">${fact}</span>
       <span class="gp-stat">${dec} ₸</span>
+      <span class="gp-stat">${fact}</span>
       <span class="gp-stat">${deliv} ₸</span>
       <span class="gp-stat gp-budget">—</span>
     </div>`;
@@ -1371,8 +1434,8 @@ function _buildGeoTotalRow(stats, kpi) {
   return `<div class="gp-row gp-budget-summary">
       <span class="gp-pay">Итого</span>
       <span class="gp-stat">${recip}</span>
-      <span class="gp-stat">${fact}</span>
       <span class="gp-stat">${dec}</span>
+      <span class="gp-stat">${fact}</span>
       <span class="gp-stat">${deliv}</span>
       <span class="gp-stat gp-budget">${budget}</span>
     </div>`;
@@ -1408,8 +1471,8 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp') {
   const hdr = provided.length ? `<div class="gp-hdr-row">
         <span class="gp-pay gp-hdr">Вид помощи</span>
         <span class="gp-stat gp-hdr">Услугопол.</span>
-        <span class="gp-stat gp-hdr">Факт ус-пол.</span>
         <span class="gp-stat gp-hdr">Сумма заявок</span>
+        <span class="gp-stat gp-hdr">Факт ус-пол.</span>
         <span class="gp-stat gp-hdr">Факт выплачено</span>
         <span class="gp-stat gp-hdr">Бюджет</span>
       </div>` : '';
@@ -1596,8 +1659,8 @@ function _buildRegionRow(r, clickable) {
   return `<div class="${cls}"${onclick}>
       <span class="gp-pay">${r.name || '—'}</span>
       <span class="gp-stat">${recip}</span>
-      <span class="gp-stat">${fact}</span>
       <span class="gp-stat">${dec}</span>
+      <span class="gp-stat">${fact}</span>
       <span class="gp-stat">${deliv}</span>
       <span class="gp-stat gp-budget">${budget}</span>
     </div>`;
@@ -1609,8 +1672,8 @@ function _buildRegionAnalyticsHtml(titleHtml, rows, stats, kpi, isRaion) {
   const hdr = `<div class="gp-hdr-row">
         <span class="gp-pay gp-hdr">${colName}</span>
         <span class="gp-stat gp-hdr">Услугопол.</span>
-        <span class="gp-stat gp-hdr">Факт ус-пол.</span>
         <span class="gp-stat gp-hdr">Сумма заявок</span>
+        <span class="gp-stat gp-hdr">Факт ус-пол.</span>
         <span class="gp-stat gp-hdr">Факт выплачено</span>
         <span class="gp-stat gp-hdr">Бюджет</span>
       </div>`;

@@ -731,7 +731,7 @@ header h0 {
 .ra-back:hover { background: var(--bd-mid); }
 .gp-hdr-row, .gp-row {
   display: grid;
-  grid-template-columns: 1fr 64px 70px 110px 110px 92px;
+  grid-template-columns: 1fr 64px 110px 70px 110px 92px;
   gap: 6px;
   padding: 3px 4px;
   border-bottom: 1px solid var(--bd-main);
@@ -3193,7 +3193,23 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 .gp-sdu-wrap { position: relative; height: 165px; }
 
 /* ── Кнопка «Сводка по КЗ» на карте ── */
-.map-info { position: absolute; top: 10px; right: 56px; z-index: 1000; margin: 0; white-space: nowrap; }
+.map-info { position: absolute; top: 10px; right: 12px; z-index: 1000; margin: 0; white-space: nowrap; }
+
+/* ── Переключатель режима покраски карты ── */
+.map-color-modes {
+  position: absolute; top: 10px; left: 58px; z-index: 1000;
+  display: flex; background: var(--bg-card);
+  border: 1px solid var(--bd-hi); border-radius: 8px; overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+}
+.mcm-btn {
+  background: none; border: none; font-family: inherit; font-size: 0.76rem;
+  color: var(--tx-dim); padding: 6px 11px; cursor: pointer; white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.mcm-btn + .mcm-btn { border-left: 1px solid var(--bd-main); }
+.mcm-btn:hover { color: var(--tx-sub); }
+.mcm-btn.active { background: var(--ac-teal); color: #fff; font-weight: 600; }
 
 /* ── Кликабельный режим тултипа (сводка по стране) ── */
 .geo-panel.country-mode { pointer-events: auto; }
