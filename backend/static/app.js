@@ -241,6 +241,15 @@ function setupAdminPanel() {
           <button type="button" class="rdm-close" onclick="closeAdminPanel()">✕</button>
         </div>
         <div class="rdm-body">
+          <div class="admin-upload">
+            <div class="admin-upload-title">Обновление данных</div>
+            <div class="admin-upload-hint"></div>
+            <div class="admin-upload-row">
+              <input type="file" id="admin-data-file" accept=".xlsx,.xlsm">
+              <button type="button" id="admin-data-upload-btn" onclick="adminUploadData()">Загрузить и обновить</button>
+            </div>
+            <div class="admin-upload-status" id="admin-upload-status"></div>
+          </div>
           <form id="admin-create-form" class="admin-form">
             <div class="admin-form-row">
               <input type="text" id="admin-new-login" placeholder="Логин (или ИИН для ЭЦП)" autocomplete="off">
@@ -325,6 +334,34 @@ async function adminCreateUser(e) {
     loadAdminUsers();
   } catch {
     errEl.textContent = 'Сеть недоступна';
+  }
+}
+
+async function adminUploadData() {
+  const input = document.getElementById('admin-data-file');
+  const statusEl = document.getElementById('admin-upload-status');
+  const btn = document.getElementById('admin-data-upload-btn');
+  const file = input.files && input.files[0];
+  if (!file) { statusEl.className = 'admin-upload-status err'; statusEl.textContent = 'Выберите файл .xlsx'; return; }
+  if (!confirm(`Заменить все данные выплат данными из «${file.name}»?`)) return;
+
+  btn.disabled = true;
+  statusEl.className = 'admin-upload-status';
+  statusEl.textContent = 'Загрузка и обработка файла…';
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await fetch('/api/admin/upload-data', { method: 'POST', credentials: 'include', body: fd });
+    const data = await r.json();
+    if (!r.ok) { statusEl.className = 'admin-upload-status err'; statusEl.textContent = data.detail || 'Ошибка загрузки'; return; }
+    statusEl.className = 'admin-upload-status ok';
+    statusEl.textContent = `Готово: загружено ${formatInt(data.rows)} строк. Обновляю страницу…`;
+    setTimeout(() => location.reload(), 1200);
+  } catch {
+    statusEl.className = 'admin-upload-status err';
+    statusEl.textContent = 'Сеть недоступна';
+  } finally {
+    btn.disabled = false;
   }
 }
 

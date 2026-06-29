@@ -3250,3 +3250,26 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
   background: rgba(26,115,232,0.12); border-color: rgba(26,115,232,0.5); color: #1a73e8;
 }
 :root[data-theme="light"] .pie3d-detail-back:hover { background: rgba(26,115,232,0.22); color: #1a73e8; }
+
+/* ── Админ: загрузка данных ── */
+.admin-upload {
+  border: 1px solid var(--bd-main);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  background: var(--bg-deep);
+}
+.admin-upload-title { font-weight: 700; color: var(--tx-head); font-size: 0.92rem; margin-bottom: 4px; }
+.admin-upload-hint { font-size: 0.78rem; color: var(--tx-dim); margin-bottom: 10px; }
+.admin-upload-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.admin-upload-row input[type=file] { color: var(--tx-main); font-size: 0.82rem; flex: 1; min-width: 0; }
+#admin-data-upload-btn {
+  background: #1a73e8; color: #fff; border: none; border-radius: 8px;
+  padding: 9px 16px; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+  font-family: inherit; transition: background .15s;
+}
+#admin-data-upload-btn:hover { background: #1967d2; }
+#admin-data-upload-btn:disabled { opacity: 0.6; cursor: default; }
+.admin-upload-status { font-size: 0.8rem; margin-top: 8px; min-height: 1em; color: var(--tx-dim); }
+.admin-upload-status.ok { color: #2ecc71; }
+.admin-upload-status.err { color: #e74c3c; }

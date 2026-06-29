@@ -173,6 +173,75 @@ def parse_gender(val):
     return parse_num(val, int)
 
 
+def _detect_app_id_offset(ws) -> int:
+    """Найти индекс колонки APP_ID в строке заголовков.
+    Файлы бывают с ведущим столбцом-счётчиком (offset=1) и без него (offset=0)."""
+    header = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ())
+    for idx, val in enumerate(header):
+        if val is not None and str(val).strip().upper() == 'APP_ID':
+            return idx
+    # запасной вариант: 31 колонка => есть ведущий счётчик
+    return 1 if len(header) >= 31 else 0
+
+
+def parse_payment_rows(ws) -> list:
+    """Распарсить лист в список Payment. Колонки идут фиксированным порядком от APP_ID."""
+    b = _detect_app_id_offset(ws)
+    rows_data = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if row[b] is None:
+            continue
+        rows_data.append(Payment(
+            app_id=parse_num(row[b + 0], int),
+            app_date=parse_date(row[b + 1]),
+            app_date_close=parse_date(row[b + 2]),
+            app_status=str(row[b + 3]).strip() if row[b + 3] else None,
+            iin=str(row[b + 4]).strip() if row[b + 4] else None,
+            kato_reg=parse_num(row[b + 5], int),
+            kato_dis=parse_num(row[b + 7], int),
+            pay_type_id=parse_num(row[b + 9], int),
+            pay_type=str(row[b + 10]).strip() if row[b + 10] else None,
+            cat_type_id=parse_num(row[b + 11], int),
+            cat_type=str(row[b + 12]).strip() if row[b + 12] else None,
+            period=str(row[b + 13]).strip() if row[b + 13] else None,
+            unit_id=parse_num(row[b + 14], int),
+            max_pay_sum=parse_num(row[b + 15]),
+            decision=str(row[b + 16]).strip() if row[b + 16] else None,
+            dec_pay_sum=parse_num(row[b + 17]),
+            deliv_date=parse_date(row[b + 18]),
+            deliv_sum=parse_num(row[b + 19]),
+            mrp=parse_num(row[b + 20]),
+            sys_date=parse_datetime(row[b + 21]),
+            sicid=parse_num(row[b + 22], int),
+            gender_id=parse_num(row[b + 23], int),
+            vozrast=parse_num(row[b + 24], int),
+            sdu_tzhs=str(row[b + 25]).strip() if row[b + 25] else None,
+            kato_region=parse_num(row[b + 26], int),
+            kato_raion=parse_num(row[b + 27], int),
+            kato_regname=str(row[b + 28]).strip() if row[b + 28] else None,
+            kato_rainame=str(row[b + 29]).strip() if row[b + 29] else None,
+        ))
+    return rows_data
+
+
+def replace_payments_from_file(file_obj) -> int:
+    """Загрузить выплаты из переданного xlsx (файл/поток): очистить и залить заново.
+    Возвращает число загруженных строк. Используется админ-загрузкой."""
+    Base.metadata.create_all(bind=engine)
+    wb = load_workbook(file_obj, read_only=True, data_only=True)
+    ws = wb.active
+    rows_data = parse_payment_rows(ws)
+    wb.close()
+    if not rows_data:
+        raise ValueError("В файле не найдено ни одной строки данных (нет колонки APP_ID?)")
+    with Session(engine) as session:
+        session.execute(text("TRUNCATE TABLE payments"))
+        session.add_all(rows_data)
+        session.commit()
+    print(f"Admin upload: replaced payments with {len(rows_data)} rows")
+    return len(rows_data)
+
+
 def load_excel():
     Base.metadata.create_all(bind=engine)
 
@@ -181,51 +250,10 @@ def load_excel():
         if count > 0:
             return
 
-    # new14.xlsx has a leading row-number column at index 0; data starts at index 1
     path = os.path.join(os.path.dirname(__file__), "data", "new14.xlsx")
     wb = load_workbook(path, read_only=True, data_only=True)
     ws = wb.active
-
-    rows_data = []
-    for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True)):
-        # columns (0-indexed): 0=row_num(skip), 1=APP_ID, 2=APP_DATE, 3=APP_DATE_CLOSE,
-        # 4=APP_STATUS, 5=IIN, 6=KATO_REG, 7=REG(name), 8=KATO_DIS, 9=DIS(name),
-        # 10=PAY_TYPE_ID, 11=PAY_TYPE, 12=CAT_TYPE_ID, 13=CAT_TYPE, 14=PERIOD,
-        # 15=UNIT_ID, 16=MAX_PAY_SUM, 17=DECISION, 18=DEC_PAY_SUM, 19=DELIV_DATE,
-        # 20=DELIV_SUM, 21=MRP, 22=SYS_DATE, 23=SICID, 24=GENDER_ID(int),
-        # 25=VOZRAST, 26=SDU_TZHS, 27=KATO_REGION, 28=KATO_RAION,
-        # 29=KATO_REGNAME, 30=KATO_RAINAME
-        rows_data.append(Payment(
-            app_id=parse_num(row[1], int),
-            app_date=parse_date(row[2]),
-            app_date_close=parse_date(row[3]),
-            app_status=str(row[4]).strip() if row[4] else None,
-            iin=str(row[5]).strip() if row[5] else None,
-            kato_reg=parse_num(row[6], int),
-            kato_dis=parse_num(row[8], int),
-            pay_type_id=parse_num(row[10], int),
-            pay_type=str(row[11]).strip() if row[11] else None,
-            cat_type_id=parse_num(row[12], int),
-            cat_type=str(row[13]).strip() if row[13] else None,
-            period=str(row[14]).strip() if row[14] else None,
-            unit_id=parse_num(row[15], int),
-            max_pay_sum=parse_num(row[16]),
-            decision=str(row[17]).strip() if row[17] else None,
-            dec_pay_sum=parse_num(row[18]),
-            deliv_date=parse_date(row[19]),
-            deliv_sum=parse_num(row[20]),
-            mrp=parse_num(row[21]),
-            sys_date=parse_datetime(row[22]),
-            sicid=parse_num(row[23], int),
-            gender_id=parse_num(row[24], int),
-            vozrast=parse_num(row[25], int),
-            sdu_tzhs=str(row[26]).strip() if row[26] else None,
-            kato_region=parse_num(row[27], int),
-            kato_raion=parse_num(row[28], int),
-            kato_regname=str(row[29]).strip() if row[29] else None,
-            kato_rainame=str(row[30]).strip() if row[30] else None,
-        ))
-
+    rows_data = parse_payment_rows(ws)
     wb.close()
 
     with Session(engine) as session:

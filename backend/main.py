@@ -1,5 +1,6 @@
+import io
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Query, Request, Depends, HTTPException
+from fastapi import FastAPI, Query, Request, Depends, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
@@ -7,6 +8,7 @@ from sqlalchemy import func, distinct
 from sqlalchemy.orm import Session
 from database import engine, Payment, User, BudgetItem, RegionBudget
 from load_data import (load_excel, load_budget, load_region_budget, load_reference_data,
+                       replace_payments_from_file,
                        region_help_ids, raion_help_ids,
                        all_region_katos, pay_type_names, REGION_NAMES,
                        raion_names_ref, raion_reg_ref, settings_rows, settings_pay_names)
@@ -296,6 +298,22 @@ def api_admin_set_password(user_id: int, body: PasswordBody, admin: User = Depen
         user.password_hash = auth.hash_password(body.password)
         db.commit()
         return {"ok": True}
+
+
+@app.post("/api/admin/upload-data")
+async def api_admin_upload_data(file: UploadFile = File(...), admin: User = Depends(auth.require_admin)):
+    """Загрузить новый Excel с выплатами: очистить таблицу и залить заново (только админ)."""
+    name = (file.filename or "").lower()
+    if not name.endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="Нужен файл .xlsx")
+    content = await file.read()
+    try:
+        count = replace_payments_from_file(io.BytesIO(content))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка загрузки: {e}")
+    return {"ok": True, "rows": count}
 
 
 @app.delete("/api/admin/users/{user_id}")
