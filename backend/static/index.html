@@ -50,11 +50,14 @@
   <!-- Center: tabbed map block -->
   <div class="map-panel map-tabs">
     <div class="map-tabs-bar">
-      <button type="button" class="mtab-btn active" data-mtab="map" onclick="switchMapTab('map')">Карта</button>
-      <button type="button" class="mtab-btn" data-mtab="summary" onclick="switchMapTab('summary')">Сводка</button>
-      <button type="button" class="mtab-btn" data-mtab="dynamics" onclick="switchMapTab('dynamics')">Динамика</button>
-      <button type="button" class="mtab-btn" data-mtab="pie" onclick="switchMapTab('pie')">3D-пирог</button>
-      <button type="button" class="mtab-btn" data-mtab="data" onclick="switchMapTab('data')">Данные</button>
+      <div class="mtab-scroll">
+        <button type="button" class="mtab-btn active" data-mtab="map" onclick="switchMapTab('map')">Карта</button>
+        <button type="button" class="mtab-btn" data-mtab="summary" onclick="switchMapTab('summary')">Аналитика по МГП</button>
+        <button type="button" class="mtab-btn" data-mtab="regions" onclick="switchMapTab('regions')">Аналитика по регионам</button>
+        <button type="button" class="mtab-btn" data-mtab="dynamics" onclick="switchMapTab('dynamics')">Динамика</button>
+        <button type="button" class="mtab-btn" data-mtab="pie" onclick="switchMapTab('pie')">3D-пирог</button>
+        <button type="button" class="mtab-btn" data-mtab="data" onclick="switchMapTab('data')">Данные</button>
+      </div>
       <button type="button" class="expand-btn map-expand" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
     </div>
     <div class="mtab-pane active" id="mtab-map">
@@ -62,6 +65,7 @@
       <div id="map"></div>
     </div>
     <div class="mtab-pane" id="mtab-summary"><div id="mtab-summary-body" class="mtab-summary-body"></div></div>
+    <div class="mtab-pane" id="mtab-regions"><div id="mtab-regions-body" class="mtab-summary-body"></div></div>
     <div class="mtab-pane" id="mtab-dynamics"></div>
     <div class="mtab-pane" id="mtab-pie"></div>
     <div class="mtab-pane" id="mtab-data"></div>

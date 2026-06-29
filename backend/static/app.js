@@ -1299,11 +1299,13 @@ function _buildGeoPanelHtml(provided, stats) {
   return provided.map(({ c }) => {
     const s = stats && stats[c.id];
     const recip  = s ? formatInt(s.recipients) : '0';
+    const fact   = s ? formatInt(s.fact_recipients || 0) : '0';
     const dec    = s && s.total_dec > 0 ? formatNum(s.total_dec) : '0';
     const deliv  = s && s.total_deliv > 0 ? formatNum(s.total_deliv) : '0';
     return `<div class="gp-row gp-yes">
       <span class="gp-pay">${stripHelpPrefix(c.name)}</span>
       <span class="gp-stat">${recip}</span>
+      <span class="gp-stat">${fact}</span>
       <span class="gp-stat">${dec} ₸</span>
       <span class="gp-stat">${deliv} ₸</span>
       <span class="gp-stat gp-budget">—</span>
@@ -1362,12 +1364,14 @@ async function showGeoPanel(id, name, ev) {
 function _buildGeoTotalRow(stats, kpi) {
   const k = kpi || {};
   const recip = k.unique_recipients != null ? formatInt(k.unique_recipients) : '—';
+  const fact = k.fact_recipients != null ? formatInt(k.fact_recipients) : '—';
   const dec = k.total_dec_pay_sum != null ? formatCompact(k.total_dec_pay_sum) + ' ₸' : '—';
   const deliv = k.total_deliv_sum != null ? formatCompact(k.total_deliv_sum) + ' ₸' : '—';
   const budget = stats && stats._budget > 0 ? formatCompact(stats._budget) + ' ₸' : '—';
   return `<div class="gp-row gp-budget-summary">
       <span class="gp-pay">Итого</span>
       <span class="gp-stat">${recip}</span>
+      <span class="gp-stat">${fact}</span>
       <span class="gp-stat">${dec}</span>
       <span class="gp-stat">${deliv}</span>
       <span class="gp-stat gp-budget">${budget}</span>
@@ -1404,6 +1408,7 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp') {
   const hdr = provided.length ? `<div class="gp-hdr-row">
         <span class="gp-pay gp-hdr">Вид помощи</span>
         <span class="gp-stat gp-hdr">Услугопол.</span>
+        <span class="gp-stat gp-hdr">Факт ус-пол.</span>
         <span class="gp-stat gp-hdr">Сумма заявок</span>
         <span class="gp-stat gp-hdr">Факт выплачено</span>
         <span class="gp-stat gp-hdr">Бюджет</span>
@@ -1525,6 +1530,7 @@ function switchMapTab(name) {
   document.querySelectorAll('.map-tabs .mtab-pane').forEach(p => p.classList.toggle('active', p.id === 'mtab-' + name));
   if (name === 'map') { if (typeof map !== 'undefined' && map) setTimeout(() => map.invalidateSize(), 60); }
   else if (name === 'summary') renderMapSummary();
+  else if (name === 'regions') renderRegionAnalytics();
   else if (name === 'dynamics') loadDynamics();
   else if (name === 'pie') window.renderPie3D?.(currentRegion, currentRaion);
   else if (name === 'data') ensureDataTable();
@@ -1536,6 +1542,7 @@ function refreshActiveMapTab() {
   if (!active) return;
   switch (active.dataset.mtab) {
     case 'summary': renderMapSummary(); break;
+    case 'regions': renderRegionAnalytics(); break;
     case 'dynamics': loadDynamics(); break;
     case 'pie': window.renderPie3D?.(currentRegion, currentRaion); break;
     case 'data': ensureDataTable(); break;
@@ -1570,6 +1577,89 @@ async function renderMapSummary() {
     renderGeoPanelCharts(kpi, 'mt');
   } catch (e) {
     console.error('map summary', e);
+    body.innerHTML = '<div class="loading" style="padding:30px">Ошибка загрузки</div>';
+  }
+}
+
+// Вкладка «Аналитика по регионам» — те же метрики, но по регионам/районам.
+// Локальный drill: _raRegion === null → все регионы, иначе районы выбранного региона.
+let _raRegion = null;
+
+function _buildRegionRow(r, clickable) {
+  const recip  = formatInt(r.recipients || 0);
+  const fact   = formatInt(r.fact_recipients || 0);
+  const dec    = r.total_dec > 0 ? formatCompact(r.total_dec) + ' ₸' : '0';
+  const deliv  = r.total_deliv > 0 ? formatCompact(r.total_deliv) + ' ₸' : '0';
+  const budget = r.budget > 0 ? formatCompact(r.budget) + ' ₸' : '—';
+  const cls = clickable ? 'gp-row gp-yes' : 'gp-row';
+  const onclick = clickable ? ` onclick="renderRegionAnalytics(${r.id})"` : '';
+  return `<div class="${cls}"${onclick}>
+      <span class="gp-pay">${r.name || '—'}</span>
+      <span class="gp-stat">${recip}</span>
+      <span class="gp-stat">${fact}</span>
+      <span class="gp-stat">${dec}</span>
+      <span class="gp-stat">${deliv}</span>
+      <span class="gp-stat gp-budget">${budget}</span>
+    </div>`;
+}
+
+function _buildRegionAnalyticsHtml(titleHtml, rows, stats, kpi, isRaion) {
+  const k = kpi || {};
+  const colName = isRaion ? 'Район' : 'Регион';
+  const hdr = `<div class="gp-hdr-row">
+        <span class="gp-pay gp-hdr">${colName}</span>
+        <span class="gp-stat gp-hdr">Услугопол.</span>
+        <span class="gp-stat gp-hdr">Факт ус-пол.</span>
+        <span class="gp-stat gp-hdr">Сумма заявок</span>
+        <span class="gp-stat gp-hdr">Факт выплачено</span>
+        <span class="gp-stat gp-hdr">Бюджет</span>
+      </div>`;
+  const list = rows.map(r => _buildRegionRow(r, !isRaion)).join('') ||
+    '<div class="gp-empty" style="padding:8px 4px">Нет данных</div>';
+  return `<div class="gp-main">
+      <div class="gp-body">
+        <div class="gp-title">${titleHtml}</div>
+        ${hdr}
+        <div class="gp-list">${_buildGeoTotalRow(stats, kpi)}${list}</div>
+        <div class="gp-charts">
+          <div class="gp-chart-box">
+            <div class="gp-chart-title">Уровень благосостояния по ЦКС</div>
+            <div class="gp-sdu-wrap"><canvas id="ra-sdu-chart"></canvas></div>
+          </div>
+          <div class="gp-chart-box">
+            <div class="gp-chart-title">Пол / Возраст</div>
+            <div id="ra-ga-chart" class="ga-chart gp-ga"></div>
+          </div>
+        </div>
+      </div>
+      ${_buildGauge(k.total_deliv_sum || 0, k.total_dec_pay_sum || 0)}
+    </div>`;
+}
+
+async function renderRegionAnalytics(regionId) {
+  if (regionId !== undefined) _raRegion = regionId;   // undefined → перерисовка текущего уровня
+  const body = document.getElementById('mtab-regions-body');
+  if (!body) return;
+  body.innerHTML = '<div class="loading" style="padding:30px">Загрузка…</div>';
+  const param = _raRegion != null ? `?region_id=${_raRegion}` : '';
+  try {
+    const [rows, stats, kpi] = await Promise.all([
+      fetch('/api/ranking-oblasts' + param).then(r => r.json()),
+      fetch('/api/geo-stats' + param).then(r => r.json()),
+      fetch('/api/kpi' + param).then(r => r.json()),
+    ]);
+    rows.sort((a, b) => (b.total_dec || 0) - (a.total_dec || 0));
+    let title;
+    if (_raRegion != null) {
+      const rname = (regionStats[_raRegion]?.name) || 'Регион';
+      title = `<button type="button" class="ra-back" onclick="renderRegionAnalytics(null)">← Все регионы</button> ${rname}`;
+    } else {
+      title = 'Республика Казахстан · по регионам';
+    }
+    body.innerHTML = _buildRegionAnalyticsHtml(title, rows, stats, kpi, _raRegion != null);
+    renderGeoPanelCharts(kpi, 'ra');
+  } catch (e) {
+    console.error('region analytics', e);
     body.innerHTML = '<div class="loading" style="padding:30px">Ошибка загрузки</div>';
   }
 }

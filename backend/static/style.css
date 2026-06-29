@@ -722,9 +722,16 @@ header h0 {
 .gp-gauge-lbl { display: block; color: var(--tx-dim); font-size: 0.68rem; }
 .gp-gauge-nums b { color: var(--tx-main); font-weight: 700; }
 .gp-title { font-weight: 700; color: var(--tx-head); margin-bottom: 4px; font-size: 0.9rem; }
+.ra-back {
+  font: inherit; font-size: 0.78rem; font-weight: 600;
+  color: var(--tx-head); background: var(--bg-deep);
+  border: 1px solid var(--bd-hi); border-radius: 6px;
+  padding: 2px 8px; margin-right: 6px; cursor: pointer;
+}
+.ra-back:hover { background: var(--bd-mid); }
 .gp-hdr-row, .gp-row {
   display: grid;
-  grid-template-columns: 1fr 60px 115px 115px 100px;
+  grid-template-columns: 1fr 64px 70px 110px 110px 92px;
   gap: 6px;
   padding: 3px 4px;
   border-bottom: 1px solid var(--bd-main);
@@ -3276,18 +3283,37 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 
 /* ════════ Вкладки центрального блока (Карта/Сводка/Динамика/Пирог/Данные) ════════ */
 .map-tabs-bar {
-  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+  display: flex; align-items: stretch; gap: 4px; flex-shrink: 0;
   border-bottom: 1px solid var(--bd-main);
+  min-width: 0;
 }
+.mtab-scroll {
+  display: flex; align-items: center; gap: 4px;
+  flex: 1 1 auto; min-width: 0;
+  overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #4ecdc4 rgba(255,255,255,0.02);
+}
+.mtab-scroll::-webkit-scrollbar { height: 8px; }
+.mtab-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); border-radius: 4px; }
+.mtab-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #5b8af8 0%, #4ecdc4 100%);
+  border-radius: 4px;
+}
+.mtab-scroll::-webkit-scrollbar-thumb:hover { background: #7aa8ff; }
+:root[data-theme="light"] .mtab-scroll { scrollbar-color: #bdc1c6 transparent; }
+:root[data-theme="light"] .mtab-scroll::-webkit-scrollbar-track { background: transparent; }
+:root[data-theme="light"] .mtab-scroll::-webkit-scrollbar-thumb { background: #dadce0; }
+:root[data-theme="light"] .mtab-scroll::-webkit-scrollbar-thumb:hover { background: #bdc1c6; }
 .mtab-btn {
   background: none; border: none; border-bottom: 2px solid transparent;
   color: var(--tx-dim); font-family: inherit; font-size: 0.82rem;
-  padding: 7px 12px; cursor: pointer; white-space: nowrap;
+  padding: 7px 12px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
   transition: color .15s, border-color .15s;
 }
 .mtab-btn:hover { color: var(--tx-sub); }
 .mtab-btn.active { color: var(--ac-teal); border-bottom-color: var(--ac-teal); font-weight: 600; }
-.map-tabs-bar .map-expand { position: static; margin-left: auto; }
+.map-tabs-bar .map-expand { position: static; flex-shrink: 0; align-self: center; }
 
 .mtab-pane { display: none; flex: 1; min-height: 0; }
 .mtab-pane.active { display: flex; flex-direction: column; min-height: 0; }
@@ -3300,6 +3326,10 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
   width: 100%; max-height: none; border: none; box-shadow: none;
   background: transparent; padding: 0; overflow: visible;
 }
+/* Спидометр «Факт / Сумма заявок» во вкладках виден только в полноэкранном
+   режиме; в плавающем тултипе и панели «Казахстан» — всегда. */
+.mtab-summary-body .gp-gauge { display: none; }
+.map-panel.is-fullscreen .mtab-summary-body .gp-gauge { display: flex; }
 
 #mtab-dynamics .dyn-chart-wrap { flex: 1; min-height: 0; }
 #mtab-pie .pie3d-wrap { flex: 1; min-height: 0; height: auto; }

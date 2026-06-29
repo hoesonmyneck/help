@@ -1640,6 +1640,9 @@ def geo_stats(region_id: int = Query(None), raion_id: int = Query(None)):
             base.with_entities(
                 Payment.pay_type_id,
                 func.count(distinct(Payment.sicid)).label('recipients'),
+                func.count(distinct(
+                    sa_case((Payment.app_status == 'Выполнено', Payment.sicid))
+                )).label('fact_recipients'),
                 func.sum(Payment.dec_pay_sum).label('total_dec'),
                 func.sum(
                     sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)
@@ -1655,6 +1658,7 @@ def geo_stats(region_id: int = Query(None), raion_id: int = Query(None)):
                 continue
             result[r.pay_type_id] = {
                 'recipients': r.recipients or 0,
+                'fact_recipients': r.fact_recipients or 0,
                 'total_dec': float(r.total_dec or 0),
                 'total_deliv': float(r.total_deliv or 0),
                 'budget': 0.0,
@@ -1736,6 +1740,9 @@ def ranking_oblasts(region_id: int = Query(None)):
                     Payment.kato_raion.label('geo_id'),
                     Payment.kato_rainame.label('geo_name'),
                     func.count(distinct(Payment.sicid)).label('recipients'),
+                    func.count(distinct(
+                        sa_case((Payment.app_status == 'Выполнено', Payment.sicid))
+                    )).label('fact_recipients'),
                     func.sum(
                         sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)
                     ).label('total_deliv'),
@@ -1754,6 +1761,7 @@ def ranking_oblasts(region_id: int = Query(None)):
                     'id': r.geo_id,
                     'name': r.geo_name or f'Район {r.geo_id}',
                     'recipients': r.recipients or 0,
+                    'fact_recipients': r.fact_recipients or 0,
                     'total_deliv': float(r.total_deliv or 0),
                     'total_dec': float(r.total_dec or 0),
                     'budget': budget_map.get(r.geo_id, 0.0),
@@ -1764,6 +1772,9 @@ def ranking_oblasts(region_id: int = Query(None)):
                     Payment.kato_region.label('geo_id'),
                     Payment.kato_regname.label('geo_name'),
                     func.count(distinct(Payment.sicid)).label('recipients'),
+                    func.count(distinct(
+                        sa_case((Payment.app_status == 'Выполнено', Payment.sicid))
+                    )).label('fact_recipients'),
                     func.sum(
                         sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)
                     ).label('total_deliv'),
@@ -1783,6 +1794,7 @@ def ranking_oblasts(region_id: int = Query(None)):
                     'id': r.geo_id,
                     'name': name,
                     'recipients': r.recipients or 0,
+                    'fact_recipients': r.fact_recipients or 0,
                     'total_deliv': float(r.total_deliv or 0),
                     'total_dec': float(r.total_dec or 0),
                     'budget': budget_map.get(r.geo_id, 0.0),
