@@ -455,6 +455,7 @@ let tableSortDir = 'desc';
 let tableFilters = {};
 
 async function init() {
+  setupMapTabs();   // перенести Динамику / 3D-пирог / Данные в блок карты
   map = L.map('map', { zoomControl: true, attributionControl: false }).setView([48, 68], 4);
 
   // Home button — resets view smoothly via flyTo
@@ -823,6 +824,8 @@ async function refreshKPI(sduSeq) {
   // графики ЦКС/Пол-Возраст в KPI удалены; функции с guard'ами безопасны для тултипа
   renderGenderAgeBar(data.male_count || 0, data.female_count || 0, data.age || {});
   renderSduChart(data.sdu || {});
+
+  refreshActiveMapTab();   // обновить активную вкладку блока карты под новый регион/район
 }
 
 let genderChart = null;
@@ -1394,8 +1397,9 @@ function _buildGauge(deliv, dec) {
     </div>`;
 }
 
-// Общая разметка тултипа: тело (таблица + графики) + спидометр справа
-function _buildGeoMainHtml(titleHtml, provided, stats, kpi) {
+// Общая разметка тултипа: тело (таблица + графики) + спидометр справа.
+// pfx — префикс id для канвасов (чтобы плавающий тултип и вкладка «Сводка» не конфликтовали).
+function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp') {
   const k = kpi || {};
   const hdr = provided.length ? `<div class="gp-hdr-row">
         <span class="gp-pay gp-hdr">Вид помощи</span>
@@ -1412,11 +1416,11 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi) {
         <div class="gp-charts">
           <div class="gp-chart-box">
             <div class="gp-chart-title">Уровень благосостояния по ЦКС</div>
-            <div class="gp-sdu-wrap"><canvas id="gp-sdu-chart"></canvas></div>
+            <div class="gp-sdu-wrap"><canvas id="${pfx}-sdu-chart"></canvas></div>
           </div>
           <div class="gp-chart-box">
             <div class="gp-chart-title">Пол / Возраст</div>
-            <div id="gp-ga-chart" class="ga-chart gp-ga"></div>
+            <div id="${pfx}-ga-chart" class="ga-chart gp-ga"></div>
           </div>
         </div>
       </div>
@@ -1424,13 +1428,14 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi) {
     </div>`;
 }
 
-function renderGeoPanelCharts(kpi) {
-  renderGpSduChart(kpi.sdu || {});
-  renderGpGenderAge(kpi.male_count || 0, kpi.female_count || 0, kpi.age || {});
+const _gpSduCharts = {};
+function renderGeoPanelCharts(kpi, pfx = 'gp') {
+  renderGpSduChart(kpi.sdu || {}, pfx);
+  renderGpGenderAge(kpi.male_count || 0, kpi.female_count || 0, kpi.age || {}, pfx);
 }
 
-function renderGpSduChart(sdu) {
-  const cv = document.getElementById('gp-sdu-chart');
+function renderGpSduChart(sdu, pfx = 'gp') {
+  const cv = document.getElementById(`${pfx}-sdu-chart`);
   if (!cv || !window.Chart) return;
   const keys = ['A', 'B', 'C', 'D', 'E'];
   const values = keys.map(k => sdu[k] || 0);
@@ -1451,8 +1456,8 @@ function renderGpSduChart(sdu) {
       ctx.restore();
     },
   };
-  if (gpSduChart) gpSduChart.destroy();
-  gpSduChart = new Chart(cv.getContext('2d'), {
+  if (_gpSduCharts[pfx]) _gpSduCharts[pfx].destroy();
+  _gpSduCharts[pfx] = new Chart(cv.getContext('2d'), {
     type: 'bar',
     data: { labels: keys, datasets: [{ data: values, backgroundColor: keys.map(k => SDU_META[k].color), borderRadius: 4 }] },
     plugins: [pctLabels],
@@ -1470,8 +1475,8 @@ function renderGpSduChart(sdu) {
   });
 }
 
-function renderGpGenderAge(male, female, age) {
-  const el = document.getElementById('gp-ga-chart');
+function renderGpGenderAge(male, female, age, pfx = 'gp') {
+  const el = document.getElementById(`${pfx}-ga-chart`);
   if (!el) return;
   const total = male + female;
   const fPct = total > 0 ? Math.round(female / total * 100) : 50;
@@ -1500,6 +1505,73 @@ function renderGpGenderAge(male, female, age) {
         <span class="ga-age-pct">${pct}%</span>
       </div>`;
     }).join('')}`;
+}
+
+// ───────── Вкладки центрального блока (Карта / Сводка / Динамика / 3D-пирог / Данные) ─────────
+function setupMapTabs() {
+  const move = (srcId, dstId) => {
+    const src = document.getElementById(srcId), dst = document.getElementById(dstId);
+    if (src && dst) while (src.firstChild) dst.appendChild(src.firstChild);
+  };
+  move('tab-dynamics', 'mtab-dynamics');   // перенос динамики
+  move('antab-data', 'mtab-data');         // перенос таблицы «Данные»
+  const pie = document.getElementById('pie3d-wrap');
+  const pieDst = document.getElementById('mtab-pie');
+  if (pie && pieDst) pieDst.appendChild(pie);
+}
+
+function switchMapTab(name) {
+  document.querySelectorAll('.map-tabs .mtab-btn').forEach(b => b.classList.toggle('active', b.dataset.mtab === name));
+  document.querySelectorAll('.map-tabs .mtab-pane').forEach(p => p.classList.toggle('active', p.id === 'mtab-' + name));
+  if (name === 'map') { if (typeof map !== 'undefined' && map) setTimeout(() => map.invalidateSize(), 60); }
+  else if (name === 'summary') renderMapSummary();
+  else if (name === 'dynamics') loadDynamics();
+  else if (name === 'pie') window.renderPie3D?.(currentRegion, currentRaion);
+  else if (name === 'data') ensureDataTable();
+}
+
+// Перерисовать активную вкладку блока карты при смене региона/района
+function refreshActiveMapTab() {
+  const active = document.querySelector('.map-tabs .mtab-btn.active');
+  if (!active) return;
+  switch (active.dataset.mtab) {
+    case 'summary': renderMapSummary(); break;
+    case 'dynamics': loadDynamics(); break;
+    case 'pie': window.renderPie3D?.(currentRegion, currentRaion); break;
+    case 'data': ensureDataTable(); break;
+  }
+}
+
+// Вкладка «Сводка» — тот же контент, что во всплывающем тултипе, по текущему уровню (КЗ/регион/район)
+async function renderMapSummary() {
+  const body = document.getElementById('mtab-summary-body');
+  if (!body) return;
+  body.innerHTML = '<div class="loading" style="padding:30px">Загрузка…</div>';
+  const presParam = currentRegion != null ? `?region_id=${currentRegion}` : '';
+  const geoQ = currentRaion != null ? `raion_id=${currentRaion}`
+             : (currentRegion != null ? `region_id=${currentRegion}` : '');
+  const geoParam = geoQ ? ('?' + geoQ) : '';
+  try {
+    const [pres, stats, kpi] = await Promise.all([
+      fetch('/api/help-presence' + presParam).then(r => r.json()),
+      fetch('/api/geo-stats' + geoParam).then(r => r.json()),
+      fetch('/api/kpi' + geoParam).then(r => r.json()),
+    ]);
+    const columns = pres.columns || [];
+    const row = currentRaion != null
+      ? ((pres.rows || []).find(r => r.id === currentRaion) || {})
+      : ((pres.rows || []).find(r => r.is_total) || {});
+    const provided = (columns.length && row.pay_cat_lists)
+      ? columns.map((c, i) => ({ c, cnt: (row.pay_cat_lists[i] || []).length })).filter(e => e.cnt > 0) : [];
+    let title = 'Республика Казахстан';
+    if (currentRaion != null) title = (raionStats[currentRaion]?.name) || row.name || 'Район';
+    else if (currentRegion != null) title = (regionStats[currentRegion]?.name) || row.name || 'Регион';
+    body.innerHTML = _buildGeoMainHtml(title, provided, stats, kpi, 'mt');
+    renderGeoPanelCharts(kpi, 'mt');
+  } catch (e) {
+    console.error('map summary', e);
+    body.innerHTML = '<div class="loading" style="padding:30px">Ошибка загрузки</div>';
+  }
 }
 
 let _countryCache = null;

@@ -157,7 +157,8 @@ body {
   background-size: 400% 400%;
   animation: bg-drift 24s ease infinite;
   color: var(--tx-main);
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -258,11 +259,10 @@ header h0 {
 
 .main-layout {
   display: flex;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   gap: 16px;
   padding: 20px;
   align-items: stretch;
-  height: clamp(510px, calc(56vh + 30px), 650px);
   min-height: 0;
 }
 
@@ -3273,3 +3273,40 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 .admin-upload-status { font-size: 0.8rem; margin-top: 8px; min-height: 1em; color: var(--tx-dim); }
 .admin-upload-status.ok { color: #2ecc71; }
 .admin-upload-status.err { color: #e74c3c; }
+
+/* ════════ Вкладки центрального блока (Карта/Сводка/Динамика/Пирог/Данные) ════════ */
+.map-tabs-bar {
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+  border-bottom: 1px solid var(--bd-main);
+}
+.mtab-btn {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--tx-dim); font-family: inherit; font-size: 0.82rem;
+  padding: 7px 12px; cursor: pointer; white-space: nowrap;
+  transition: color .15s, border-color .15s;
+}
+.mtab-btn:hover { color: var(--tx-sub); }
+.mtab-btn.active { color: var(--ac-teal); border-bottom-color: var(--ac-teal); font-weight: 600; }
+.map-tabs-bar .map-expand { position: static; margin-left: auto; }
+
+.mtab-pane { display: none; flex: 1; min-height: 0; }
+.mtab-pane.active { display: flex; flex-direction: column; min-height: 0; }
+
+#mtab-map { position: relative; }
+#mtab-map #map { flex: 1; min-height: 0; height: auto; }
+
+.mtab-summary-body { flex: 1; min-height: 0; overflow-y: auto; }
+.mtab-summary-body .gp-main {
+  width: 100%; max-height: none; border: none; box-shadow: none;
+  background: transparent; padding: 0; overflow: visible;
+}
+
+#mtab-dynamics .dyn-chart-wrap { flex: 1; min-height: 0; }
+#mtab-pie .pie3d-wrap { flex: 1; min-height: 0; height: auto; }
+
+#mtab-data .data-table-wrap { flex: 1; min-height: 0; overflow: auto; }
+#mtab-data .pagination { flex-shrink: 0; }
+
+/* Один экран: шапка не сжимается, колонки/карта не растягивают страницу */
+header { flex-shrink: 0; }
+.map-panel, .kpi-col { min-height: 0; }
