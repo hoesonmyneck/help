@@ -181,8 +181,8 @@ def load_excel():
         if count > 0:
             return
 
-    # new13.xlsx has a leading row-number column at index 0; data starts at index 1
-    path = os.path.join(os.path.dirname(__file__), "data", "new13.xlsx")
+    # new14.xlsx has a leading row-number column at index 0; data starts at index 1
+    path = os.path.join(os.path.dirname(__file__), "data", "new14.xlsx")
     wb = load_workbook(path, read_only=True, data_only=True)
     ws = wb.active
 
