@@ -3196,12 +3196,25 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 .map-info { position: absolute; top: 10px; right: 12px; z-index: 1000; margin: 0; white-space: nowrap; }
 
 /* ── Переключатель режима покраски карты ── */
-.map-color-modes {
+.map-controls-row {
   position: absolute; top: 10px; left: 58px; z-index: 1000;
+  display: flex; align-items: center; gap: 8px;
+}
+.map-color-modes {
   display: flex; background: var(--bg-card);
   border: 1px solid var(--bd-hi); border-radius: 8px; overflow: hidden;
   box-shadow: 0 2px 10px rgba(0,0,0,0.35);
 }
+.map-tip-toggle {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--bg-card); border: 1px solid var(--bd-hi);
+  border-radius: 8px; padding: 5px 10px; cursor: pointer;
+  font-size: 0.76rem; color: var(--tx-dim); white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+  user-select: none;
+}
+.map-tip-toggle input { width: 14px; height: 14px; cursor: pointer; accent-color: var(--ac-teal); margin: 0; }
+.map-tip-toggle:hover { color: var(--tx-sub); }
 .mcm-btn {
   background: none; border: none; font-family: inherit; font-size: 0.76rem;
   color: var(--tx-dim); padding: 6px 11px; cursor: pointer; white-space: nowrap;
@@ -3305,7 +3318,7 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 }
 .mtab-scroll {
   display: flex; align-items: center; gap: 4px;
-  flex: 1 1 auto; min-width: 0;
+  flex: 0 1 auto; min-width: 0;
   overflow-x: auto; overflow-y: hidden;
   scrollbar-width: thin;
   scrollbar-color: #4ecdc4 rgba(255,255,255,0.02);
@@ -3329,7 +3342,16 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 }
 .mtab-btn:hover { color: var(--tx-sub); }
 .mtab-btn.active { color: var(--ac-teal); border-bottom-color: var(--ac-teal); font-weight: 600; }
-.map-tabs-bar .map-expand { position: static; flex-shrink: 0; align-self: center; }
+.map-tabs-bar .map-expand { position: static; flex-shrink: 0; align-self: center; margin-left: auto; }
+
+/* Хлебные крошки в баре вкладок — видны только в полноэкранном режиме (справа от вкладок) */
+.map-fs-crumb { display: none; }
+.map-panel.is-fullscreen .map-fs-crumb {
+  display: flex; align-items: center; gap: 4px;
+  flex: 0 1 auto; min-width: 0; margin-left: auto;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.map-panel.is-fullscreen .map-tabs-bar .map-expand { margin-left: 10px; }
 
 .mtab-pane { display: none; flex: 1; min-height: 0; }
 .mtab-pane.active { display: flex; flex-direction: column; min-height: 0; }

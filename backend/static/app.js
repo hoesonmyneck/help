@@ -411,6 +411,7 @@ function toggleFullscreen(btn) {
 // В полноэкранном режиме приближаем карту на 1 уровень, но только если открыта
 // вся страна (не вошли в регион/район). При выходе — возвращаем обратно.
 let _fsZoomBoost = false;
+let _mapNeedsFit = false;   // отложенный fitBounds, если карта drill'илась в скрытой вкладке
 function applyFsZoom(fs) {
   if (!map) return;
   if (fs && !_fsZoomBoost && currentRegion == null && currentRaion == null) {
@@ -769,7 +770,13 @@ async function drillRegion(regionId) {
     },
   }).addTo(map);
 
-  map.fitBounds(raionsLayer.getBounds(), { padding: [20, 20] });
+  // Если блок карты сейчас показывает не вкладку «Карта» (нулевой размер
+  // контейнера), откладываем fitBounds до момента открытия вкладки.
+  if (document.getElementById('mtab-map')?.classList.contains('active')) {
+    map.fitBounds(raionsLayer.getBounds(), { padding: [20, 20] });
+  } else {
+    _mapNeedsFit = true;
+  }
   renderRaionLabels();
 
   const regionName = regionStats[regionId]?.name || `Регион ${regionId}`;
@@ -856,11 +863,14 @@ function _stripRaionWord(name) {
 }
 
 function updateBreadcrumb(region, raion) {
-  const el = document.getElementById('breadcrumb');
   let html = '<span onclick="goBack()">Казахстан</span>';
   if (region) html += ` / <span onclick="drillRegion(${currentRegion})">${_stripRegionWord(region)}</span>`;
   if (raion) html += ` / ${_stripRaionWord(raion)}`;
-  el.innerHTML = html;
+  const el = document.getElementById('breadcrumb');
+  if (el) el.innerHTML = html;
+  // Дубликат в баре вкладок блока карты (виден в полноэкранном режиме)
+  const fs = document.getElementById('map-fs-breadcrumb');
+  if (fs) fs.innerHTML = html;
 }
 
 
@@ -1376,7 +1386,15 @@ function _buildGeoPanelHtml(provided, stats) {
   }).join('');
 }
 
+// Галочка «Без тултипа» — отключает всплывающую сводку при наведении на карту
+let tooltipDisabled = false;
+function setTooltipDisabled(off) {
+  tooltipDisabled = !!off;
+  if (tooltipDisabled) hideGeoPanelNow();
+}
+
 async function showGeoPanel(id, name, ev) {
+  if (tooltipDisabled) return;
   const rid = Math.round(id);
   _geoPanelActiveId = rid;
   const row = presenceById[rid];
@@ -1591,7 +1609,15 @@ function setupMapTabs() {
 function switchMapTab(name) {
   document.querySelectorAll('.map-tabs .mtab-btn').forEach(b => b.classList.toggle('active', b.dataset.mtab === name));
   document.querySelectorAll('.map-tabs .mtab-pane').forEach(p => p.classList.toggle('active', p.id === 'mtab-' + name));
-  if (name === 'map') { if (typeof map !== 'undefined' && map) setTimeout(() => map.invalidateSize(), 60); }
+  if (name === 'map') {
+    if (typeof map !== 'undefined' && map) setTimeout(() => {
+      map.invalidateSize();
+      if (_mapNeedsFit && raionsLayer) {
+        try { map.fitBounds(raionsLayer.getBounds(), { padding: [20, 20] }); } catch (_) {}
+      }
+      _mapNeedsFit = false;
+    }, 60);
+  }
   else if (name === 'summary') renderMapSummary();
   else if (name === 'regions') renderRegionAnalytics();
   else if (name === 'dynamics') loadDynamics();
@@ -1645,8 +1671,8 @@ async function renderMapSummary() {
 }
 
 // Вкладка «Аналитика по регионам» — те же метрики, но по регионам/районам.
-// Локальный drill: _raRegion === null → все регионы, иначе районы выбранного региона.
-let _raRegion = null;
+// Синхронизирована с картой: уровень определяется глобальным currentRegion.
+// Клик по региону drill'ит карту, кнопка «Все регионы» — возврат к стране.
 
 function _buildRegionRow(r, clickable) {
   const recip  = formatInt(r.recipients || 0);
@@ -1655,7 +1681,7 @@ function _buildRegionRow(r, clickable) {
   const deliv  = r.total_deliv > 0 ? formatCompact(r.total_deliv) + ' ₸' : '0';
   const budget = r.budget > 0 ? formatCompact(r.budget) + ' ₸' : '—';
   const cls = clickable ? 'gp-row gp-yes' : 'gp-row';
-  const onclick = clickable ? ` onclick="renderRegionAnalytics(${r.id})"` : '';
+  const onclick = clickable ? ` onclick="drillRegion(${r.id})"` : '';
   return `<div class="${cls}"${onclick}>
       <span class="gp-pay">${r.name || '—'}</span>
       <span class="gp-stat">${recip}</span>
@@ -1699,12 +1725,12 @@ function _buildRegionAnalyticsHtml(titleHtml, rows, stats, kpi, isRaion) {
     </div>`;
 }
 
-async function renderRegionAnalytics(regionId) {
-  if (regionId !== undefined) _raRegion = regionId;   // undefined → перерисовка текущего уровня
+async function renderRegionAnalytics() {
   const body = document.getElementById('mtab-regions-body');
   if (!body) return;
   body.innerHTML = '<div class="loading" style="padding:30px">Загрузка…</div>';
-  const param = _raRegion != null ? `?region_id=${_raRegion}` : '';
+  const region = currentRegion;   // уровень синхронизирован с картой
+  const param = region != null ? `?region_id=${region}` : '';
   try {
     const [rows, stats, kpi] = await Promise.all([
       fetch('/api/ranking-oblasts' + param).then(r => r.json()),
@@ -1713,13 +1739,13 @@ async function renderRegionAnalytics(regionId) {
     ]);
     rows.sort((a, b) => (b.total_dec || 0) - (a.total_dec || 0));
     let title;
-    if (_raRegion != null) {
-      const rname = (regionStats[_raRegion]?.name) || 'Регион';
-      title = `<button type="button" class="ra-back" onclick="renderRegionAnalytics(null)">← Все регионы</button> ${rname}`;
+    if (region != null) {
+      const rname = (regionStats[region]?.name) || 'Регион';
+      title = `<button type="button" class="ra-back" onclick="goBack()">← Все регионы</button> ${rname}`;
     } else {
       title = 'Республика Казахстан · по регионам';
     }
-    body.innerHTML = _buildRegionAnalyticsHtml(title, rows, stats, kpi, _raRegion != null);
+    body.innerHTML = _buildRegionAnalyticsHtml(title, rows, stats, kpi, region != null);
     renderGeoPanelCharts(kpi, 'ra');
   } catch (e) {
     console.error('region analytics', e);

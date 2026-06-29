@@ -58,13 +58,20 @@
         <button type="button" class="mtab-btn" data-mtab="pie" onclick="switchMapTab('pie')">3D-пирог</button>
         <button type="button" class="mtab-btn" data-mtab="data" onclick="switchMapTab('data')">Данные</button>
       </div>
+      <div class="breadcrumb map-fs-crumb" id="map-fs-breadcrumb"><span onclick="goBack()">Казахстан</span></div>
       <button type="button" class="expand-btn map-expand" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
     </div>
     <div class="mtab-pane active" id="mtab-map">
       <button type="button" class="expand-btn map-info" onclick="showCountryPanel(event)" title="Сводка по Казахстану">Казахстан</button>
-      <div class="map-color-modes">
-        <button type="button" class="mcm-btn active" data-mode="vidy" onclick="setMapColorMode('vidy')">По видам помощи</button>
-        <button type="button" class="mcm-btn" data-mode="pct" onclick="setMapColorMode('pct')">% выплат</button>
+      <div class="map-controls-row">
+        <div class="map-color-modes">
+          <button type="button" class="mcm-btn active" data-mode="vidy" onclick="setMapColorMode('vidy')">По видам помощи</button>
+          <button type="button" class="mcm-btn" data-mode="pct" onclick="setMapColorMode('pct')">% выплат</button>
+        </div>
+        <label class="map-tip-toggle" title="Скрыть всплывающую сводку при наведении на карту">
+          <input type="checkbox" id="tip-toggle" onchange="setTooltipDisabled(this.checked)">
+          <span>Без тултипа</span>
+        </label>
       </div>
       <div id="map"></div>
     </div>
