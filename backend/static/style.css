@@ -782,6 +782,21 @@ header h0 {
 
 .leaflet-interactive:focus { outline: none; }
 
+/* Простой тултип с именем региона/района */
+.map-name-tip {
+  background: rgba(10, 15, 40, 0.88);
+  color: #e8eeff;
+  border: 1px solid rgba(112, 144, 255, 0.4);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.map-name-tip::before { display: none; }
+
 /* Leaflet overrides for light theme */
 :root[data-theme="light"] .leaflet-tooltip {
   background: rgba(255,255,255,0.95);
@@ -3271,6 +3286,10 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 }
 
 /* ── Топ-4 МГП KPI карточка — мини-таблица ── */
+.kpi-card:has(.kpi-top-mgp) {
+  align-items: flex-start;
+  text-align: left;
+}
 .kpi-top-mgp {
   display: flex;
   flex-direction: column;
@@ -3278,6 +3297,7 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
   border-radius: 7px;
   overflow: hidden;
   border: 1px solid var(--bd-main);
+  align-self: stretch;
 }
 .kpi-top-mgp-hdr,
 .kpi-top-mgp-item {
@@ -3317,6 +3337,7 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
   white-space: nowrap;
   color: var(--tx-main);
   font-size: 0.83rem;
+  text-align: left;
 }
 .kpi-top-mgp-val {
   color: var(--ac-teal);
@@ -3434,10 +3455,20 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 #mtab-map { position: relative; }
 #mtab-map #map { flex: 1; min-height: 0; height: auto; }
 
-.mtab-summary-body { flex: 1; min-height: 0; overflow-y: auto; }
+.mtab-summary-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .mtab-summary-body .gp-main {
   width: 100%; max-height: none; border: none; box-shadow: none;
-  background: transparent; padding: 0; overflow: visible;
+  background: transparent; padding: 0; overflow: hidden;
+}
+.mtab-summary-body .gp-list {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ac-teal) transparent;
+}
+.mtab-summary-body .gp-hdr-row,
+.mtab-summary-body .gp-row {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 64px 108px 68px 108px 90px;
 }
 /* Спидометр «Факт / Сумма заявок» во вкладках виден только в полноэкранном
    режиме; в плавающем тултипе и панели «Казахстан» — всегда. */
@@ -3469,3 +3500,241 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 /* Один экран: шапка не сжимается, колонки/карта не растягивают страницу */
 header { flex-shrink: 0; }
 .map-panel, .kpi-col { min-height: 0; }
+
+/* ── Drill-expand: карта расширяется вправо, левая колонка показывает гео-панель ── */
+.kpi-col-left { position: relative; }
+
+/* Правая KPI-колонка схлопывается */
+.kpi-col-right {
+  overflow: visible; /* позволяет 3D-тилту выходить за границы */
+  max-width: 1000px;
+  transition: max-width 0.42s cubic-bezier(0.4,0,0.2,1),
+              opacity    0.28s ease,
+              margin-left 0.42s cubic-bezier(0.4,0,0.2,1);
+}
+.main-layout.map-drill-active .kpi-col-right {
+  overflow: hidden; /* только во время схлопывания */
+  max-width: 0;
+  opacity: 0;
+  margin-left: -16px; /* компенсация gap */
+}
+
+/* Левая колонка расширяется на ~10% когда правая схлопнута */
+.kpi-col-left {
+  transition: flex-grow 0.42s cubic-bezier(0.4,0,0.2,1);
+}
+.main-layout.map-drill-active .kpi-col-left {
+  flex-grow: 1.6;
+}
+
+/* Карточки левой колонки скрываются */
+.kpi-col-left > .kpi-card {
+  transition: opacity 0.22s ease;
+}
+.main-layout.map-drill-active .kpi-col-left > .kpi-card {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Оверлей с гео-данными поверх левой колонки */
+.kpi-geo-side {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease 0.12s;
+  overflow: hidden;           /* скролл убран — внутренние блоки сами управляют переполнением */
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  z-index: 5;
+}
+.main-layout.map-drill-active .kpi-geo-side {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Адаптация .gp-main к левой колонке (без фиксированной ширины 960px) */
+.kpi-geo-side .gp-main {
+  width: auto;
+  max-height: none;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+  overflow: hidden;
+  flex: 1;                    /* занимает всё пространство ниже gs-back */
+  min-height: 0;
+  flex-direction: column;
+  gap: 0;
+}
+/* Верхняя часть (таблица + графики) — скроллится сама если не влезает */
+.kpi-geo-side .gp-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ac-teal) transparent;
+  padding-bottom: 6px;
+}
+.kpi-geo-side .gp-list {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ac-teal) transparent;
+}
+/* Спидометр — растягивается на всё оставшееся пространство снизу */
+.kpi-geo-side .gp-gauge {
+  flex: 1;
+  min-height: 120px;
+  width: 100%;
+  border-left: none;
+  border-top: 1px solid var(--bd-main);
+  padding: 8px 0 0;
+  position: static;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  overflow: hidden;
+}
+/* SVG заполняет всю высоту gauge-блока */
+.kpi-geo-side .gp-gauge-svg {
+  flex: 1;
+  min-height: 0;
+  width: auto;
+  max-width: 100%;
+  height: 100%;
+  display: block;
+}
+/* Компактные колонки таблицы МГП */
+.kpi-geo-side .gp-hdr-row,
+.kpi-geo-side .gp-row {
+  grid-template-columns: minmax(0, 250px) 70px 90px 90px 105px 60px;
+  font-size: 0.70rem;
+}
+/* Заголовки числовых колонок не вылезают за ячейку */
+.kpi-geo-side .gp-hdr-row .gp-stat {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Чип фильтра по виду помощи в "Аналитика по МГП" */
+.gp-pay-filter-label {
+  grid-column: 1 / -1;
+  padding: 0 0 6px;
+}
+.gp-pay-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(78, 205, 196, 0.12);
+  border: 1px solid rgba(78, 205, 196, 0.4);
+  color: var(--ac-teal);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* Контент гео-панели */
+.gs-back {
+  font-size: 0.75rem;
+  color: var(--tx-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0 4px;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+.gs-back:hover { color: var(--ac-teal); }
+.gs-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ac-teal);
+  text-align: center;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+.gs-kpi-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.gs-kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--bd-main);
+  border-radius: 8px;
+  padding: 7px 8px;
+  text-align: center;
+}
+.gs-kpi-label {
+  font-size: 0.62rem;
+  color: var(--tx-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.gs-kpi-val {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ac-teal);
+  margin-top: 2px;
+  line-height: 1.15;
+}
+.gs-pay-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--bd-main);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.gs-pay-hdr {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  padding: 5px 8px;
+  background: rgba(78,205,196,0.08);
+  border-bottom: 1px solid var(--bd-main);
+  font-size: 0.63rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tx-dim);
+  flex-shrink: 0;
+}
+.gs-pay-list {
+  overflow-y: auto;
+  flex: 1;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ac-teal) transparent;
+}
+.gs-pay-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  padding: 6px 8px;
+  align-items: center;
+  font-size: 0.74rem;
+  transition: background 0.12s;
+}
+.gs-pay-row:not(:last-child) { border-bottom: 1px solid var(--bd-main); }
+.gs-pay-row:hover { background: rgba(78,205,196,0.06); }
+.gs-pay-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tx-main);
+}
+.gs-pay-val {
+  color: var(--ac-teal);
+  font-weight: 600;
+  white-space: nowrap;
+  text-align: right;
+  font-size: 0.70rem;
+}

@@ -1,4 +1,4 @@
-const API = '';
+﻿const API = '';
 let map, regionsLayer, raionsLayer, labelsLayer;
 let sduChart = null;
 let tileLayer = null;
@@ -676,15 +676,11 @@ function renderRegions() {
   regionsLayer = L.geoJSON(regionGeoJSON, {
     style: regionStyle,
     onEachFeature(feature, layer) {
-      const s = regionStats[feature.properties.id_reg] || {};
+      layer.bindTooltip(() => regionStats[feature.properties.id_reg]?.name || '', { sticky: true, className: 'map-name-tip' });
       layer.on({
-        mouseover(e) {
-          e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 });
-          cancelHideGeoPanel();
-          showGeoPanel(feature.properties.id_reg, s.name || feature.properties.region, e.originalEvent);
-        },
-        mouseout(e) { regionsLayer.resetStyle(e.target); scheduleHideGeoPanel(); },
-        click() { hideGeoPanelNow(); drillRegion(feature.properties.id_reg); },
+        mouseover(e) { e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 }); },
+        mouseout(e)  { regionsLayer.resetStyle(e.target); },
+        click()      { drillRegion(feature.properties.id_reg); },
       });
     },
   }).addTo(map);
@@ -712,15 +708,11 @@ async function drillRegionFromRanking(regionId) {
   raionsLayer = L.geoJSON(filtered, {
     style: raionStyle,
     onEachFeature(feature, layer) {
-      const s = raionStats[Math.round(feature.properties.id_rai)] || {};
+      layer.bindTooltip(() => raionStats[feature.properties.id_rai]?.name || '', { sticky: true, className: 'map-name-tip' });
       layer.on({
-        mouseover(e) {
-          e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 });
-          cancelHideGeoPanel();
-          showGeoPanel(feature.properties.id_rai, s.name || feature.properties.raion, e.originalEvent);
-        },
-        mouseout(e) { raionsLayer.resetStyle(e.target); scheduleHideGeoPanel(); },
-        click() { hideGeoPanelNow(); selectRaion(feature.properties.id_rai); },
+        mouseover(e) { e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 }); },
+        mouseout(e)  { raionsLayer.resetStyle(e.target); },
+        click()      { selectRaion(feature.properties.id_rai); },
       });
     },
   }).addTo(map);
@@ -757,15 +749,11 @@ async function drillRegion(regionId) {
   raionsLayer = L.geoJSON(filtered, {
     style: raionStyle,
     onEachFeature(feature, layer) {
-      const s = raionStats[Math.round(feature.properties.id_rai)] || {};
+      layer.bindTooltip(() => raionStats[feature.properties.id_rai]?.name || '', { sticky: true, className: 'map-name-tip' });
       layer.on({
-        mouseover(e) {
-          e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 });
-          cancelHideGeoPanel();
-          showGeoPanel(feature.properties.id_rai, s.name || feature.properties.raion, e.originalEvent);
-        },
-        mouseout(e) { raionsLayer.resetStyle(e.target); scheduleHideGeoPanel(); },
-        click() { hideGeoPanelNow(); selectRaion(feature.properties.id_rai); },
+        mouseover(e) { e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 }); },
+        mouseout(e)  { raionsLayer.resetStyle(e.target); },
+        click()      { selectRaion(feature.properties.id_rai); },
       });
     },
   }).addTo(map);
@@ -781,6 +769,7 @@ async function drillRegion(regionId) {
 
   const regionName = regionStats[regionId]?.name || `Регион ${regionId}`;
   updateBreadcrumb(regionName, null);
+  if (_shouldShowGeoSide()) showGeoSidePanel(regionId, regionName, false);
   loadDistinct('kato_rainame');
   await refreshKPI();
   await Promise.all([loadSummary(), loadHelpPresence(), loadGapAnalysis()]);
@@ -796,6 +785,7 @@ async function selectRaion(raionId) {
   const raionName = raionStats[raionId]?.name || `Район ${raionId}`;
   const regionName = regionStats[currentRegion]?.name || '';
   updateBreadcrumb(regionName, raionName);
+  if (_shouldShowGeoSide()) showGeoSidePanel(raionId, raionName, true);
   await refreshKPI();
   loadDynamics();
   loadPayTypes();
@@ -827,6 +817,7 @@ function goBack() {
   currentRaion = null;
   currentPage = 1;
   hideGeoPanelNow();
+  hideGeoSidePanel();
   updateBreadcrumb(null, null);
   clearLabels();
   renderRegions();
@@ -873,6 +864,59 @@ function updateBreadcrumb(region, raion) {
   if (fs) fs.innerHTML = html;
 }
 
+
+// ── Гео-панель в левой колонке (при клике на регион/район на карте) ──────────
+function _shouldShowGeoSide() {
+  const mapActive = document.querySelector('.map-tabs .mtab-btn[data-mtab="map"].active');
+  const sideOpen  = document.querySelector('.main-layout.map-drill-active');
+  return !!(mapActive || sideOpen);
+}
+
+async function showGeoSidePanel(geoId, geoName, isRaion) {
+  const layout = document.querySelector('.main-layout');
+  const panel  = document.getElementById('kpi-geo-side');
+  if (!panel || !layout) return;
+  layout.classList.add('map-drill-active');
+  panel.innerHTML = '<div class="gp-main"><div class="gp-body"><div class="gp-title">Загрузка…</div></div></div>';
+
+  try {
+    const geoParam  = isRaion ? `raion_id=${geoId}` : `region_id=${geoId}`;
+    const presParam = isRaion ? `?region_id=${currentRegion}` : `?region_id=${geoId}`;
+    const [stats, kpi, pres] = await Promise.all([
+      fetch(`/api/geo-stats?${geoParam}`).then(r => r.json()),
+      fetch(`/api/kpi?${geoParam}`).then(r => r.json()),
+      fetch(`/api/help-presence${presParam}`).then(r => r.json()),
+    ]);
+
+    const columns = pres.columns || [];
+    const presRow = isRaion
+      ? ((pres.rows || []).find(r => r.id === geoId) || (pres.rows || [])[0] || {})
+      : ((pres.rows || []).find(r => r.is_total) || {});
+    const provided = (columns.length && presRow.pay_cat_lists)
+      ? columns.map((c, i) => ({ c, cnt: (presRow.pay_cat_lists[i] || []).length })).filter(e => e.cnt > 0)
+      : [];
+
+    const backLabel = isRaion
+      ? `← ${_stripRegionWord(regionStats[currentRegion]?.name || 'Регион')}`
+      : '← Казахстан';
+    const backClick = isRaion ? `drillRegion(${currentRegion})` : `goBack()`;
+
+    panel.innerHTML =
+      _buildGeoMainHtml(geoName, provided, stats, kpi, 'gs');
+    renderGeoPanelCharts(kpi, 'gs');
+  } catch(e) {
+    panel.innerHTML = '<div class="gp-title" style="padding:20px">Ошибка загрузки</div>';
+    console.error('geoSide', e);
+  }
+}
+
+function hideGeoSidePanel() {
+  const layout = document.querySelector('.main-layout');
+  if (!layout?.classList.contains('map-drill-active')) return;
+  layout.classList.remove('map-drill-active');
+  const panel = document.getElementById('kpi-geo-side');
+  if (panel) setTimeout(() => { panel.innerHTML = ''; }, 450);
+}
 
 async function refreshKPI(sduSeq) {
   const params = buildFilterParams();
@@ -1396,6 +1440,7 @@ const _raSort  = { col: null, dir: 1 };   // Аналитика по регио�
 
 // Кешируем последние данные для перерисовки без повторного запроса
 let _lastGpProvided = [], _lastGpStats = {}, _lastGpPfx = 'mt';
+let _mtPayFilter = null; // pay_type_id выбранной строки в "Аналитика по МГП"
 let _lastRaRows = [], _lastRaIsRaion = false;
 // «Итого» кешируем отдельно, чтобы всегда вставлять первой
 let _lastGpTotal = '', _lastRaTotal = '';
@@ -1405,7 +1450,7 @@ function sortGpTable(col) {
   if (_gpSort.col === col) _gpSort.dir *= -1; else { _gpSort.col = col; _gpSort.dir = 1; }
   const listEl = document.getElementById('gp-sort-list');
   if (!listEl) return;
-  listEl.innerHTML = _lastGpTotal + _buildGeoPanelHtml(_lastGpProvided, _lastGpStats);
+  listEl.innerHTML = _lastGpTotal + _buildGeoPanelHtml(_lastGpProvided, _lastGpStats, _lastGpPfx);
 }
 function sortRaTable(col) {
   if (_raSort.col === col) _raSort.dir *= -1; else { _raSort.col = col; _raSort.dir = 1; }
@@ -1446,7 +1491,7 @@ function _makeRaComparator() {
   };
 }
 
-function _buildGeoPanelHtml(provided, stats) {
+function _buildGeoPanelHtml(provided, stats, pfx = 'gp') {
   if (!provided.length) return '<div class="gp-empty">Нет данных</div>';
   let rows = provided.map(({ c }) => {
     const s = stats && stats[c.id];
@@ -1469,8 +1514,10 @@ function _buildGeoPanelHtml(provided, stats) {
     const fact  = formatInt(fact_recipients);
     const dec   = total_dec > 0 ? formatNum(total_dec) : '0';
     const deliv = total_deliv > 0 ? formatNum(total_deliv) : '0';
-    return `<div class="gp-row gp-yes">
-      <span class="gp-pay">${stripHelpPrefix(c.name)}</span>
+    const isActive = pfx === 'mt' && _mtPayFilter === c.id;
+    const onclick  = pfx === 'mt' ? ` onclick="filterMtByPayType(${c.id}, this)"` : '';
+    return `<div class="gp-row gp-yes${isActive ? ' gp-active' : ''}"${onclick}>
+      <span class="gp-pay" title="${c.name}">${stripHelpPrefix(c.name)}</span>
       <span class="gp-stat">${recip}</span>
       <span class="gp-stat">${dec} ₸</span>
       <span class="gp-stat">${fact}</span>
@@ -1603,7 +1650,7 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp') {
       <div class="gp-body">
         <div class="gp-title">${titleHtml}</div>
         ${hdr}
-        <div class="gp-list"${listId}>${totalHtml}${_buildGeoPanelHtml(provided, stats)}</div>
+        <div class="gp-list"${listId}>${totalHtml}${_buildGeoPanelHtml(provided, stats, pfx)}</div>
         <div class="gp-charts">
           <div class="gp-chart-box">
             <div class="gp-chart-title">Уровень благосостояния по ЦКС</div>
@@ -1617,6 +1664,32 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp') {
       </div>
       ${_buildGauge(k.total_deliv_sum || 0, k.total_dec_pay_sum || 0)}
     </div>`;
+}
+
+async function filterMtByPayType(payTypeId, rowEl) {
+  // Повторный клик — снять фильтр
+  _mtPayFilter = _mtPayFilter === payTypeId ? null : payTypeId;
+
+  // Подсветить активную строку
+  const row = (rowEl && rowEl.closest) ? rowEl.closest('.gp-row') : rowEl;
+  document.querySelectorAll('#gp-sort-list .gp-row').forEach(r => r.classList.remove('gp-active'));
+  if (_mtPayFilter !== null && row) row.classList.add('gp-active');
+
+  // Запросить KPI с фильтром по виду помощи
+  const p = new URLSearchParams();
+  if (currentRaion != null)       p.set('raion_id',    currentRaion);
+  else if (currentRegion != null) p.set('region_id',   currentRegion);
+  if (_mtPayFilter !== null)      p.set('pay_type_id', _mtPayFilter);
+
+  try {
+    const kpi = await fetch(`/api/kpi?${p}`).then(r => r.json());
+    // Безопасно уничтожить старый chart перед пересозданием (проценты в замыкании плагина)
+    const cv = document.getElementById('mt-sdu-chart');
+    if (cv && window.Chart) { try { Chart.getChart(cv)?.destroy(); } catch(_) {} }
+    delete _gpSduCharts['mt'];
+    renderGpSduChart(kpi.sdu || {}, 'mt');
+    renderGpGenderAge(kpi.male_count || 0, kpi.female_count || 0, kpi.age || {}, 'mt');
+  } catch(e) { console.error('filterMtByPayType', e); }
 }
 
 const _gpSduCharts = {};
@@ -1712,6 +1785,7 @@ function setupMapTabs() {
 }
 
 function switchMapTab(name) {
+  if (name !== 'map') hideGeoSidePanel();
   document.querySelectorAll('.map-tabs .mtab-btn').forEach(b => b.classList.toggle('active', b.dataset.mtab === name));
   document.querySelectorAll('.map-tabs .mtab-pane').forEach(p => p.classList.toggle('active', p.id === 'mtab-' + name));
   if (name === 'map') {
@@ -1722,6 +1796,13 @@ function switchMapTab(name) {
       }
       _mapNeedsFit = false;
     }, 60);
+    if (currentRaion) {
+      const raionName = raionStats[currentRaion]?.name || `Район ${currentRaion}`;
+      showGeoSidePanel(currentRaion, raionName, true);
+    } else if (currentRegion) {
+      const regionName = regionStats[currentRegion]?.name || `Регион ${currentRegion}`;
+      showGeoSidePanel(currentRegion, regionName, false);
+    }
   }
   else if (name === 'summary') renderMapSummary();
   else if (name === 'regions') renderRegionAnalytics();
@@ -1768,7 +1849,7 @@ async function renderMapSummary() {
     if (currentRaion != null) title = (raionStats[currentRaion]?.name) || row.name || 'Район';
     else if (currentRegion != null) title = (regionStats[currentRegion]?.name) || row.name || 'Регион';
     _lastGpProvided = provided; _lastGpStats = stats; _lastGpPfx = 'mt';
-    _gpSort.col = null;   // сброс сортировки при смене уровня
+    _gpSort.col = null; _mtPayFilter = null; // сброс при смене уровня
     body.innerHTML = _buildGeoMainHtml(title, provided, stats, kpi, 'mt');
     renderGeoPanelCharts(kpi, 'mt');
   } catch (e) {

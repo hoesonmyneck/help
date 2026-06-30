@@ -362,10 +362,12 @@ def build_filter(q, region_id, raion_id, sdu_filter=None, gender_filter=None, ag
 
 
 @app.get("/api/kpi")
-def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
+def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None), pay_type_id: int = Query(None)):
     with Session(engine) as db:
         base = db.query(Payment)
         base = build_filter(base, region_id, raion_id, sdu_filter, gender_filter, age_group)
+        if pay_type_id is not None:
+            base = base.filter(Payment.pay_type_id == pay_type_id)
 
         total_max = base.with_entities(func.sum(Payment.max_pay_sum)).scalar() or 0
         total_dec = base.with_entities(func.sum(Payment.dec_pay_sum)).scalar() or 0
@@ -641,6 +643,9 @@ def summary(region_id: int = Query(None), sdu_filter: str = Query(None), gender_
             geo_budget = {str(r[0]): float(r[1] or 0) for r in bgt_rows}
             nat_budget = sum(geo_budget.values())
 
+            region_pt_counts = {str(r[0]): r[1] for r in db.query(
+                Payment.kato_region, func.count(distinct(Payment.pay_type_id))
+            ).group_by(Payment.kato_region).all()}
             result = []
             for kato in all_region_katos:
                 r = db_dict.get(kato)
@@ -649,7 +654,7 @@ def summary(region_id: int = Query(None), sdu_filter: str = Query(None), gender_
                 result.append({
                     "id": r.kato_region if r else (int(kato) if kato.isdigit() else kato),
                     "name": r.kato_regname if r else (name_map.get(kato) or REGION_NAMES.get(kato, kato)),
-                    "help_types": len(region_help_ids.get(kato, set())),
+                    "help_types": region_pt_counts.get(kato, 0),
                     "cat_count": r.cat_count if r else 0,
                     "total_sum": round(ts, 2),
                     "max_sum": round(ms, 2),
