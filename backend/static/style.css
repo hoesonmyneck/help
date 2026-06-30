@@ -745,6 +745,8 @@ header h0 {
 .gp-yes .gp-pay { color: #2ecc71; }
 .gp-yes { cursor: pointer; }
 .gp-yes:hover { background: rgba(78,205,196,0.10); }
+.gp-sortable { cursor: pointer; user-select: none; }
+.gp-sortable:hover { color: var(--ac-teal); }
 .gp-row.gp-active { background: rgba(78,205,196,0.18); }
 .gp-empty { color: var(--tx-muted); }
 
@@ -3370,7 +3372,23 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 .map-panel.is-fullscreen .mtab-summary-body .gp-gauge { display: flex; }
 
 #mtab-dynamics .dyn-chart-wrap { flex: 1; min-height: 0; }
+#mtab-pie { flex-direction: column; }
 #mtab-pie .pie3d-wrap { flex: 1; min-height: 0; height: auto; }
+
+/* ── Суб-вкладки внутри 3D-пирога ── */
+.pie-subtab-bar {
+  display: flex; flex-shrink: 0; gap: 0;
+  border-bottom: 1px solid var(--bd-main);
+  padding: 0 10px;
+}
+.pie-stab {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--tx-dim); font-family: inherit; font-size: 0.8rem;
+  padding: 6px 14px; cursor: pointer; white-space: nowrap;
+  transition: color .15s, border-color .15s;
+}
+.pie-stab:hover { color: var(--tx-sub); }
+.pie-stab.active { color: var(--ac-teal); border-bottom-color: var(--ac-teal); font-weight: 600; }
 
 #mtab-data .data-table-wrap { flex: 1; min-height: 0; overflow: auto; }
 #mtab-data .pagination { flex-shrink: 0; }

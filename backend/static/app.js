@@ -1367,14 +1367,85 @@ const _geoKpiCache = {};
 let _geoPanelActiveId = null;
 let gpSduChart = null;
 
+// ── Состояние сортировки для двух табличных вкладок ──────────────────────────
+const _gpSort  = { col: null, dir: 1 };   // Аналитика по МГП
+const _raSort  = { col: null, dir: 1 };   // Аналитика по регионам
+
+// Кешируем последние данные для перерисовки без повторного запроса
+let _lastGpProvided = [], _lastGpStats = {}, _lastGpPfx = 'mt';
+let _lastRaRows = [], _lastRaIsRaion = false;
+// «Итого» кешируем отдельно, чтобы всегда вставлять первой
+let _lastGpTotal = '', _lastRaTotal = '';
+
+// Применить/инвертировать сортировку и перерисовать только строки (не «Итого»)
+function sortGpTable(col) {
+  if (_gpSort.col === col) _gpSort.dir *= -1; else { _gpSort.col = col; _gpSort.dir = 1; }
+  const listEl = document.getElementById('gp-sort-list');
+  if (!listEl) return;
+  listEl.innerHTML = _lastGpTotal + _buildGeoPanelHtml(_lastGpProvided, _lastGpStats);
+}
+function sortRaTable(col) {
+  if (_raSort.col === col) _raSort.dir *= -1; else { _raSort.col = col; _raSort.dir = 1; }
+  const listEl = document.getElementById('ra-sort-list');
+  if (!listEl) return;
+  const sorted = [..._lastRaRows].sort(_makeRaComparator());
+  listEl.innerHTML = _lastRaTotal +
+    (sorted.map(r => _buildRegionRow(r, !_lastRaIsRaion)).join('') ||
+     '<div class="gp-empty" style="padding:8px 4px">Нет данных</div>');
+}
+
+function _gpSortHdrInner() {
+  return `<span class="gp-pay gp-hdr gp-sortable" onclick="sortGpTable('name')">Вид помощи</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('recipients')">Услугопол.</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_dec')">Сумма заявок</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('fact_recipients')">Факт ус-пол.</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_deliv')">Факт выплачено</span>
+        <span class="gp-stat gp-hdr">Бюджет</span>`;
+}
+
+function _raSortHdrInner() {
+  const col = _lastRaIsRaion ? 'Район' : 'Регион';
+  return `<span class="gp-pay gp-hdr gp-sortable" onclick="sortRaTable('name')">${col}</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('recipients')">Услугопол.</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_dec')">Сумма заявок</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('fact_recipients')">Факт ус-пол.</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_deliv')">Факт выплачено</span>
+        <span class="gp-stat gp-hdr">Бюджет</span>`;
+}
+
+function _makeRaComparator() {
+  const col = _raSort.col, dir = _raSort.dir;
+  if (!col) return () => 0;
+  return (a, b) => {
+    const av = col === 'name' ? (a.name || '') : (a[col] || 0);
+    const bv = col === 'name' ? (b.name || '') : (b[col] || 0);
+    return col === 'name' ? dir * av.localeCompare(bv, 'ru') : dir * (av - bv);
+  };
+}
+
 function _buildGeoPanelHtml(provided, stats) {
   if (!provided.length) return '<div class="gp-empty">Нет данных</div>';
-  return provided.map(({ c }) => {
+  let rows = provided.map(({ c }) => {
     const s = stats && stats[c.id];
-    const recip  = s ? formatInt(s.recipients) : '0';
-    const fact   = s ? formatInt(s.fact_recipients || 0) : '0';
-    const dec    = s && s.total_dec > 0 ? formatNum(s.total_dec) : '0';
-    const deliv  = s && s.total_deliv > 0 ? formatNum(s.total_deliv) : '0';
+    return { c, s,
+      recipients:      s ? (s.recipients || 0) : 0,
+      fact_recipients: s ? (s.fact_recipients || 0) : 0,
+      total_dec:       s ? (s.total_dec || 0) : 0,
+      total_deliv:     s ? (s.total_deliv || 0) : 0,
+    };
+  });
+  // Сортировка МГП-строк
+  const col = _gpSort.col, dir = _gpSort.dir;
+  if (col) {
+    rows.sort((a, b) => col === 'name'
+      ? dir * stripHelpPrefix(a.c.name).localeCompare(stripHelpPrefix(b.c.name), 'ru')
+      : dir * (a[col] - b[col]));
+  }
+  return rows.map(({ c, recipients, fact_recipients, total_dec, total_deliv }) => {
+    const recip = formatInt(recipients);
+    const fact  = formatInt(fact_recipients);
+    const dec   = total_dec > 0 ? formatNum(total_dec) : '0';
+    const deliv = total_deliv > 0 ? formatNum(total_deliv) : '0';
     return `<div class="gp-row gp-yes">
       <span class="gp-pay">${stripHelpPrefix(c.name)}</span>
       <span class="gp-stat">${recip}</span>
@@ -1486,19 +1557,30 @@ function _buildGauge(deliv, dec) {
 // pfx — префикс id для канвасов (чтобы плавающий тултип и вкладка «Сводка» не конфликтовали).
 function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp') {
   const k = kpi || {};
-  const hdr = provided.length ? `<div class="gp-hdr-row">
+  const isSortable = (pfx === 'mt');   // сортировка только во вкладке, не в плавающем тултипе
+  let hdr = '';
+  if (provided.length) {
+    if (isSortable) {
+      hdr = `<div class="gp-hdr-row" id="gp-sort-hdr">${_gpSortHdrInner()}</div>`;
+    } else {
+      hdr = `<div class="gp-hdr-row">
         <span class="gp-pay gp-hdr">Вид помощи</span>
         <span class="gp-stat gp-hdr">Услугопол.</span>
         <span class="gp-stat gp-hdr">Сумма заявок</span>
         <span class="gp-stat gp-hdr">Факт ус-пол.</span>
         <span class="gp-stat gp-hdr">Факт выплачено</span>
         <span class="gp-stat gp-hdr">Бюджет</span>
-      </div>` : '';
+      </div>`;
+    }
+  }
+  const totalHtml = _buildGeoTotalRow(stats, kpi);
+  if (isSortable) _lastGpTotal = totalHtml;
+  const listId = isSortable ? ' id="gp-sort-list"' : '';
   return `<div class="gp-main">
       <div class="gp-body">
         <div class="gp-title">${titleHtml}</div>
         ${hdr}
-        <div class="gp-list">${_buildGeoTotalRow(stats, kpi)}${_buildGeoPanelHtml(provided, stats)}</div>
+        <div class="gp-list"${listId}>${totalHtml}${_buildGeoPanelHtml(provided, stats)}</div>
         <div class="gp-charts">
           <div class="gp-chart-box">
             <div class="gp-chart-title">Уровень благосостояния по ЦКС</div>
@@ -1662,6 +1744,8 @@ async function renderMapSummary() {
     let title = 'Республика Казахстан';
     if (currentRaion != null) title = (raionStats[currentRaion]?.name) || row.name || 'Район';
     else if (currentRegion != null) title = (regionStats[currentRegion]?.name) || row.name || 'Регион';
+    _lastGpProvided = provided; _lastGpStats = stats; _lastGpPfx = 'mt';
+    _gpSort.col = null;   // сброс сортировки при смене уровня
     body.innerHTML = _buildGeoMainHtml(title, provided, stats, kpi, 'mt');
     renderGeoPanelCharts(kpi, 'mt');
   } catch (e) {
@@ -1694,22 +1778,18 @@ function _buildRegionRow(r, clickable) {
 
 function _buildRegionAnalyticsHtml(titleHtml, rows, stats, kpi, isRaion) {
   const k = kpi || {};
-  const colName = isRaion ? 'Район' : 'Регион';
-  const hdr = `<div class="gp-hdr-row">
-        <span class="gp-pay gp-hdr">${colName}</span>
-        <span class="gp-stat gp-hdr">Услугопол.</span>
-        <span class="gp-stat gp-hdr">Сумма заявок</span>
-        <span class="gp-stat gp-hdr">Факт ус-пол.</span>
-        <span class="gp-stat gp-hdr">Факт выплачено</span>
-        <span class="gp-stat gp-hdr">Бюджет</span>
-      </div>`;
-  const list = rows.map(r => _buildRegionRow(r, !isRaion)).join('') ||
+  _lastRaIsRaion = isRaion;
+  const sorted = _raSort.col ? [...rows].sort(_makeRaComparator()) : rows;
+  const hdr = `<div class="gp-hdr-row" id="ra-sort-hdr">${_raSortHdrInner()}</div>`;
+  const list = sorted.map(r => _buildRegionRow(r, !isRaion)).join('') ||
     '<div class="gp-empty" style="padding:8px 4px">Нет данных</div>';
+  const totalHtml = _buildGeoTotalRow(stats, kpi);
+  _lastRaTotal = totalHtml;
   return `<div class="gp-main">
       <div class="gp-body">
         <div class="gp-title">${titleHtml}</div>
         ${hdr}
-        <div class="gp-list">${_buildGeoTotalRow(stats, kpi)}${list}</div>
+        <div class="gp-list" id="ra-sort-list">${totalHtml}${list}</div>
         <div class="gp-charts">
           <div class="gp-chart-box">
             <div class="gp-chart-title">Уровень благосостояния по ЦКС</div>
@@ -1737,7 +1817,8 @@ async function renderRegionAnalytics() {
       fetch('/api/geo-stats' + param).then(r => r.json()),
       fetch('/api/kpi' + param).then(r => r.json()),
     ]);
-    rows.sort((a, b) => (b.total_dec || 0) - (a.total_dec || 0));
+    _lastRaRows = rows;
+    _raSort.col = null;   // сброс сортировки при смене уровня
     let title;
     if (region != null) {
       const rname = (regionStats[region]?.name) || 'Регион';

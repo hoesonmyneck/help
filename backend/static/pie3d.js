@@ -1,10 +1,9 @@
-// 3D-пирог видов помощи. Кусок = вид помощи; высота куска = сумма заявок,
-// угол ∝ числу заявок (с минимальным порогом). Данные из /api/pay-type-stats.
-// Подписи — HTML-плашки поверх сцены, раскладка в колонки с защитой от наложения.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 let S = null;
+let _pieMode = 'dec';   // 'dec' = сумма заявок, 'deliv' = факт выплачено
+let _lastRows = [];     // кешируем для перерисовки при смене режима
 const SVGNS = 'http://www.w3.org/2000/svg';
 const PALETTE = [
   0x5b8af8, 0x4ecdc4, 0xf875c3, 0xffb454, 0x9b8cff, 0x63e6a0,
@@ -109,10 +108,12 @@ function ensureScene() {
     }
     if (obj && tip) {
       const d = obj.userData.d;
+      const vk = obj.userData.valKey || 'total_dec';
+      const label = vk === 'total_deliv' ? 'Факт выплачено' : 'Сумма заявок';
       tip.style.display = 'block';
       tip.style.left = (e.clientX - r.left + 14) + 'px';
       tip.style.top = (e.clientY - r.top + 14) + 'px';
-      tip.innerHTML = `<b>${stripHelpPrefix(d.pay_type)}</b><br>Сумма заявок: ${fmtMoney(d.total_dec)} · ${d.pctDec}%<br>` +
+      tip.innerHTML = `<b>${stripHelpPrefix(d.pay_type)}</b><br>${label}: ${fmtMoney(d[vk])} · ${d.pctVal}%<br>` +
         `<span class="cube3d-tip-dim">Заявок: ${d.count}</span>`;
     } else if (tip) { tip.style.display = 'none'; }
   });
@@ -186,7 +187,10 @@ function ensureScene() {
 }
 
 function buildPie(s, rows) {
+  const mode = _pieMode;
+  const valKey = mode === 'deliv' ? 'total_deliv' : 'total_dec';
   const empty = document.getElementById('pie3d-empty');
+
   // очистка прошлых кусков
   while (s.sliceGroup.children.length) {
     const o = s.sliceGroup.children[s.sliceGroup.children.length - 1];
@@ -194,29 +198,30 @@ function buildPie(s, rows) {
     if (o.geometry) o.geometry.dispose();
     if (o.material) { o.material.map?.dispose?.(); o.material.dispose(); }
   }
-  // очистка прошлых подписей
   s.labels.forEach(L => { L.el.remove(); L.line.remove(); });
   s.labels = [];
 
-  let data = (rows || []).filter(r => (r.total_dec || 0) > 0);
+  let data = (rows || []).filter(r => (r[valKey] || 0) > 0);
   if (!data.length) { if (empty) empty.style.display = 'flex'; return; }
   if (empty) empty.style.display = 'none';
 
-  data.sort((a, b) => b.total_dec - a.total_dec);
+  data.sort((a, b) => b[valKey] - a[valKey]);
   if (data.length > 12) {
     const top = data.slice(0, 11);
     const rest = data.slice(11);
     top.push({
       pay_type: `Прочие (${rest.length})`,
-      count: rest.reduce((s, r) => s + (r.count || 0), 0),
-      total_dec: rest.reduce((s, r) => s + (r.total_dec || 0), 0),
+      count:       rest.reduce((s, r) => s + (r.count       || 0), 0),
+      total_dec:   rest.reduce((s, r) => s + (r.total_dec   || 0), 0),
+      total_deliv: rest.reduce((s, r) => s + (r.total_deliv || 0), 0),
     });
     data = top;
   }
 
   const totalCount = data.reduce((s, r) => s + (r.count || 0), 0) || 1;
-  const totalDec = data.reduce((s, r) => s + (r.total_dec || 0), 0) || 1;
-  const maxDec = Math.max(...data.map(r => r.total_dec)) || 1;
+  const totalVal   = data.reduce((s, r) => s + (r[valKey] || 0), 0) || 1;
+  const maxVal     = Math.max(...data.map(r => r[valKey])) || 1;
+
   const rOuter = 5.4, pad = 0.03;
   const minAng = Math.min(0.16, (Math.PI * 2) / data.length * 0.6);
   const distributable = Math.PI * 2 - minAng * data.length;
@@ -225,10 +230,10 @@ function buildPie(s, rows) {
 
   data.forEach((d, i) => {
     d.pctCount = Math.round((d.count || 0) / totalCount * 100);
-    d.pctDec = Math.round((d.total_dec || 0) / totalDec * 100);
-    const ang = minAng + ((d.count || 0) / totalCount) * distributable;
+    d.pctVal   = Math.round((d[valKey] || 0) / totalVal * 100);
+    const ang    = minAng + ((d.count || 0) / totalCount) * distributable;
     const a0 = a + pad / 2, a1 = a + ang - pad / 2;
-    const height = 0.7 + (d.total_dec / maxDec) * 6.0;
+    const height = 0.7 + ((d[valKey] || 0) / maxVal) * 6.0;
 
     const shape = new THREE.Shape();
     shape.moveTo(0, 0);
@@ -249,17 +254,16 @@ function buildPie(s, rows) {
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = true; mesh.receiveShadow = true;
     mesh.scale.y = 0.001;
-    mesh.userData = { d, hex, baseEmis: 0.14, t0, delay: i * 0.07 };
+    mesh.userData = { d, hex, baseEmis: 0.14, t0, delay: i * 0.07, valKey };
     s.sliceGroup.add(mesh);
 
-    // якорь подписи — середина внешнего ребра куска, на его верхушке
     const mid = (a0 + a1) / 2;
     const anchor = new THREE.Vector3(Math.cos(mid) * rOuter, height, Math.sin(mid) * rOuter);
 
     const el = document.createElement('div');
     el.className = 'pie3d-lab';
     el.style.setProperty('--clr', '#' + hex.toString(16).padStart(6, '0'));
-    el.innerHTML = `<b>${stripHelpPrefix(d.pay_type)}</b><span>${fmtMoney(d.total_dec)}</span>`;
+    el.innerHTML = `<b>${stripHelpPrefix(d.pay_type)}</b><span>${fmtMoney(d[valKey])}</span>`;
     s.labelLayer.appendChild(el);
 
     const line = document.createElementNS(SVGNS, 'polyline');
@@ -358,9 +362,10 @@ async function loadDetail() {
   const byRaion = eff != null;
   if (titleEl) titleEl.textContent = stripHelpPrefix(detail.payName);
   if (subEl) {
+    const metricLabel = _pieMode === 'deliv' ? 'Факт выплачено' : 'Сумма заявок';
     subEl.textContent = byRaion
-      ? ('Сумма заявок по районам' + (detail.region != null && detail.regionName ? ' — ' + stripHelpPrefix(detail.regionName) : ''))
-      : 'Сумма заявок по областям';
+      ? (`${metricLabel} по районам` + (detail.region != null && detail.regionName ? ' — ' + stripHelpPrefix(detail.regionName) : ''))
+      : `${metricLabel} по областям`;
   }
   // «назад» доступно только когда мы провалились в область из общего вида
   if (backBtn) backBtn.style.display = (detail.baseRegion == null && detail.region != null) ? '' : 'none';
@@ -384,8 +389,9 @@ function drawBars(rows, hex, clickable) {
   const ctx = document.getElementById('pie3d-detail-chart');
   if (!ctx || !window.Chart) return;
   const color = '#' + hex.toString(16).padStart(6, '0');
+  const vk = _pieMode === 'deliv' ? 'total_deliv' : 'total_dec';
   const labels = rows.map(r => stripHelpPrefix(r.name));
-  const vals = rows.map(r => r.total_dec);
+  const vals = rows.map(r => r[vk] || 0);
   const light = document.documentElement.dataset.theme === 'light';
   const tickColor = light ? '#3c4043' : '#cfd6e6';
   const lblColor = light ? '#202124' : '#e6ebf5';
@@ -436,9 +442,9 @@ function drawBars(rows, hex, clickable) {
 window.renderPie3D = async function (regionId, raionId) {
   const s = ensureScene();
   if (!s) return;
-  s.applyTheme();   // подхватить текущую тему (светлая/тёмная)
+  s.applyTheme();
   s.region = regionId != null ? regionId : null;
-  s.raion = raionId != null ? raionId : null;
+  s.raion  = raionId  != null ? raionId  : null;
   closeDetail();
   const p = new URLSearchParams();
   if (raionId) p.set('raion_id', raionId);
@@ -446,5 +452,15 @@ window.renderPie3D = async function (regionId, raionId) {
   let rows = [];
   try { rows = await fetch('/api/pay-type-stats?' + p.toString()).then(r => r.json()); }
   catch (e) { console.error('pie3d fetch', e); }
+  _lastRows = rows;
   buildPie(s, rows);
+};
+
+window.switchPieMode = function (mode) {
+  if (mode === _pieMode) return;
+  _pieMode = mode;
+  document.querySelectorAll('.pie-stab').forEach(b =>
+    b.classList.toggle('active', b.dataset.pmode === mode));
+  const s = ensureScene();
+  if (s) { closeDetail(); buildPie(s, _lastRows); }
 };

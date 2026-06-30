@@ -1856,21 +1856,25 @@ def pay_type_stats(
 
 @app.get("/api/paytype-geo")
 def paytype_geo(pay_type_id: int = Query(...), region_id: int = Query(None)):
-    """Сумма заявок (dec_pay_sum) по регионам (или районам региона) для одного вида помощи."""
+    """Сумма заявок и факт выплачено по регионам (или районам) для одного вида помощи."""
+    from sqlalchemy import case as sa_case
     with Session(engine) as db:
         if region_id is not None:
             rows = db.query(
                 Payment.kato_raion, Payment.kato_rainame,
                 func.sum(Payment.dec_pay_sum),
+                func.sum(sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)),
             ).filter(Payment.pay_type_id == pay_type_id, Payment.kato_region == region_id)\
              .group_by(Payment.kato_raion, Payment.kato_rainame).all()
         else:
             rows = db.query(
                 Payment.kato_region, Payment.kato_regname,
                 func.sum(Payment.dec_pay_sum),
+                func.sum(sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)),
             ).filter(Payment.pay_type_id == pay_type_id)\
              .group_by(Payment.kato_region, Payment.kato_regname).all()
-        result = [{"id": r[0], "name": r[1] or '—', "total_dec": float(r[2] or 0)}
+        result = [{"id": r[0], "name": r[1] or '—',
+                   "total_dec": float(r[2] or 0), "total_deliv": float(r[3] or 0)}
                   for r in rows if (r[2] or 0) > 0]
         result.sort(key=lambda x: x["total_dec"], reverse=True)
         return result
