@@ -878,6 +878,7 @@ async function showGeoSidePanel(geoId, geoName, isRaion) {
   if (!panel || !layout) return;
   layout.classList.add('map-drill-active');
   panel.innerHTML = '<div class="gp-main"><div class="gp-body"><div class="gp-title">Загрузка…</div></div></div>';
+  _gsPayFilter = null; _gsGeoId = geoId; _gsGeoIsRaion = isRaion;
   if (map) { setTimeout(() => map.invalidateSize(), 60); setTimeout(() => map.invalidateSize(), 460); }
 
   try {
@@ -1443,6 +1444,8 @@ const _raSort  = { col: null, dir: 1 };   // Аналитика по регио�
 // Кешируем последние данные для перерисовки без повторного запроса
 let _lastGpProvided = [], _lastGpStats = {}, _lastGpPfx = 'mt';
 let _mtPayFilter = null; // pay_type_id выбранной строки в "Аналитика по МГП"
+let _gsPayFilter = null; _gsGeoId = null; _gsGeoIsRaion = false; // фильтр в левой боковой панели
+let _raGeoFilter = null; // raion_id выбранной строки в "Аналитика по регионам"
 let _lastRaRows = [], _lastRaIsRaion = false;
 // «Итого» кешируем отдельно, чтобы всегда вставлять первой
 let _lastGpTotal = '', _lastRaTotal = '';
@@ -1460,7 +1463,7 @@ function sortRaTable(col) {
   if (!listEl) return;
   const sorted = [..._lastRaRows].sort(_makeRaComparator());
   listEl.innerHTML = _lastRaTotal +
-    (sorted.map(r => _buildRegionRow(r, !_lastRaIsRaion)).join('') ||
+    (sorted.map(r => _buildRegionRow(r, !_lastRaIsRaion, _lastRaIsRaion)).join('') ||
      '<div class="gp-empty" style="padding:8px 4px">Нет данных</div>');
 }
 
@@ -1516,8 +1519,9 @@ function _buildGeoPanelHtml(provided, stats, pfx = 'gp') {
     const fact  = formatInt(fact_recipients);
     const dec   = total_dec > 0 ? formatNum(total_dec) : '0';
     const deliv = total_deliv > 0 ? formatNum(total_deliv) : '0';
-    const isActive = pfx === 'mt' && _mtPayFilter === c.id;
-    const onclick  = pfx === 'mt' ? ` onclick="filterMtByPayType(${c.id}, this)"` : '';
+    const isActive = (pfx === 'mt' && _mtPayFilter === c.id) || (pfx === 'gs' && _gsPayFilter === c.id);
+    const onclick  = pfx === 'mt' ? ` onclick="filterMtByPayType(${c.id}, this)"`
+                   : pfx === 'gs' ? ` onclick="filterGsByPayType(${c.id}, this)"` : '';
     return `<div class="gp-row gp-yes${isActive ? ' gp-active' : ''}"${onclick}>
       <span class="gp-pay" title="${c.name}">${stripHelpPrefix(c.name)}</span>
       <span class="gp-stat">${recip}</span>
@@ -1697,6 +1701,34 @@ async function filterMtByPayType(payTypeId, rowEl) {
   } catch(e) { console.error('filterMtByPayType', e); }
 }
 
+function _replaceGauge(selector, kpi) {
+  const el = document.querySelector(selector + ' .gp-gauge');
+  if (!el) return;
+  const div = document.createElement('div');
+  div.innerHTML = _buildGauge(kpi.total_deliv_sum || 0, kpi.total_dec_pay_sum || 0);
+  el.replaceWith(div.firstElementChild);
+}
+
+async function filterGsByPayType(payTypeId, rowEl) {
+  _gsPayFilter = _gsPayFilter === payTypeId ? null : payTypeId;
+  const row = rowEl?.closest?.('.gp-row') || rowEl;
+  document.querySelectorAll('#kpi-geo-side .gp-row').forEach(r => r.classList.remove('gp-active'));
+  if (_gsPayFilter !== null && row) row.classList.add('gp-active');
+  const p = new URLSearchParams();
+  if (_gsGeoIsRaion) p.set('raion_id', _gsGeoId);
+  else               p.set('region_id', _gsGeoId);
+  if (_gsPayFilter !== null) p.set('pay_type_id', _gsPayFilter);
+  try {
+    const kpi = await fetch(`/api/kpi?${p}`).then(r => r.json());
+    const cv = document.getElementById('gs-sdu-chart');
+    if (cv && window.Chart) { try { Chart.getChart(cv)?.destroy(); } catch(_) {} }
+    delete _gpSduCharts['gs'];
+    renderGpSduChart(kpi.sdu || {}, 'gs');
+    renderGpGenderAge(kpi.male_count || 0, kpi.female_count || 0, kpi.age || {}, 'gs');
+    _replaceGauge('#kpi-geo-side', kpi);
+  } catch(e) { console.error('filterGsByPayType', e); }
+}
+
 const _gpSduCharts = {};
 function renderGeoPanelCharts(kpi, pfx = 'gp') {
   renderGpSduChart(kpi.sdu || {}, pfx);
@@ -1867,14 +1899,16 @@ async function renderMapSummary() {
 // Синхронизирована с картой: уровень определяется глобальным currentRegion.
 // Клик по региону drill'ит карту, кнопка «Все регионы» — возврат к стране.
 
-function _buildRegionRow(r, clickable) {
+function _buildRegionRow(r, clickable, isRaionRow) {
   const recip  = formatInt(r.recipients || 0);
   const fact   = formatInt(r.fact_recipients || 0);
   const dec    = r.total_dec > 0 ? formatCompact(r.total_dec) + ' ₸' : '0';
   const deliv  = r.total_deliv > 0 ? formatCompact(r.total_deliv) + ' ₸' : '0';
   const budget = r.budget > 0 ? formatCompact(r.budget) + ' ₸' : '—';
-  const cls = clickable ? 'gp-row gp-yes' : 'gp-row';
-  const onclick = clickable ? ` onclick="drillRegion(${r.id})"` : '';
+  const isActive = isRaionRow && _raGeoFilter === r.id;
+  const cls = (clickable || isRaionRow) ? `gp-row gp-yes${isActive ? ' gp-active' : ''}` : 'gp-row';
+  const onclick = clickable  ? ` onclick="drillRegion(${r.id})"`
+               : isRaionRow ? ` onclick="filterRaByRaion(${r.id}, this)"` : '';
   return `<div class="${cls}"${onclick}>
       <span class="gp-pay">${r.name || '—'}</span>
       <span class="gp-stat">${recip}</span>
@@ -1890,7 +1924,7 @@ function _buildRegionAnalyticsHtml(titleHtml, rows, stats, kpi, isRaion) {
   _lastRaIsRaion = isRaion;
   const sorted = _raSort.col ? [...rows].sort(_makeRaComparator()) : rows;
   const hdr = `<div class="gp-hdr-row" id="ra-sort-hdr">${_raSortHdrInner()}</div>`;
-  const list = sorted.map(r => _buildRegionRow(r, !isRaion)).join('') ||
+  const list = sorted.map(r => _buildRegionRow(r, !isRaion, isRaion)).join('') ||
     '<div class="gp-empty" style="padding:8px 4px">Нет данных</div>';
   const totalHtml = _buildGeoTotalRow(stats, kpi);
   _lastRaTotal = totalHtml;
@@ -1927,6 +1961,7 @@ async function renderRegionAnalytics() {
       fetch('/api/kpi' + param).then(r => r.json()),
     ]);
     _lastRaRows = rows;
+    _raGeoFilter = null;  // сброс фильтра по району при смене уровня
     _raSort.col = null;   // сброс сортировки при смене уровня
     let title;
     if (region != null) {
@@ -1941,6 +1976,25 @@ async function renderRegionAnalytics() {
     console.error('region analytics', e);
     body.innerHTML = '<div class="loading" style="padding:30px">Ошибка загрузки</div>';
   }
+}
+
+async function filterRaByRaion(raionId, rowEl) {
+  _raGeoFilter = _raGeoFilter === raionId ? null : raionId;
+  const row = rowEl?.closest?.('.gp-row') || rowEl;
+  document.querySelectorAll('#ra-sort-list .gp-row').forEach(r => r.classList.remove('gp-active'));
+  if (_raGeoFilter !== null && row) row.classList.add('gp-active');
+  const p = new URLSearchParams();
+  if (currentRegion != null) p.set('region_id', currentRegion);
+  if (_raGeoFilter !== null) p.set('raion_id', _raGeoFilter);
+  try {
+    const kpi = await fetch(`/api/kpi?${p}`).then(r => r.json());
+    const cv = document.getElementById('ra-sdu-chart');
+    if (cv && window.Chart) { try { Chart.getChart(cv)?.destroy(); } catch(_) {} }
+    delete _gpSduCharts['ra'];
+    renderGpSduChart(kpi.sdu || {}, 'ra');
+    renderGpGenderAge(kpi.male_count || 0, kpi.female_count || 0, kpi.age || {}, 'ra');
+    _replaceGauge('#mtab-regions-body', kpi);
+  } catch(e) { console.error('filterRaByRaion', e); }
 }
 
 let _countryCache = null;
