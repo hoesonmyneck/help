@@ -878,6 +878,7 @@ async function showGeoSidePanel(geoId, geoName, isRaion) {
   if (!panel || !layout) return;
   layout.classList.add('map-drill-active');
   panel.innerHTML = '<div class="gp-main"><div class="gp-body"><div class="gp-title">Загрузка…</div></div></div>';
+  if (map) { setTimeout(() => map.invalidateSize(), 60); setTimeout(() => map.invalidateSize(), 460); }
 
   try {
     const geoParam  = isRaion ? `raion_id=${geoId}` : `region_id=${geoId}`;
@@ -916,6 +917,7 @@ function hideGeoSidePanel() {
   layout.classList.remove('map-drill-active');
   const panel = document.getElementById('kpi-geo-side');
   if (panel) setTimeout(() => { panel.innerHTML = ''; }, 450);
+  if (map) { setTimeout(() => map.invalidateSize(), 60); setTimeout(() => map.invalidateSize(), 460); }
 }
 
 async function refreshKPI(sduSeq) {

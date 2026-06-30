@@ -3468,7 +3468,7 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 .mtab-summary-body .gp-hdr-row,
 .mtab-summary-body .gp-row {
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) 64px 108px 68px 108px 90px;
+  grid-template-columns: minmax(200, 750px) 100px 108px 100px 108px 100px;
 }
 /* Спидометр «Факт / Сумма заявок» во вкладках виден только в полноэкранном
    режиме; в плавающем тултипе и панели «Казахстан» — всегда. */
@@ -3568,10 +3568,12 @@ header { flex-shrink: 0; }
   flex-direction: column;
   gap: 0;
 }
-/* Верхняя часть (таблица + графики) — скроллится сама если не влезает */
+/* Верхняя часть (таблица + графики) — занимает всё пространство до Пол/Возраст */
 .kpi-geo-side .gp-body {
-  flex: 0 1 auto;
+  flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;
@@ -3583,9 +3585,14 @@ header { flex-shrink: 0; }
   scrollbar-width: thin;
   scrollbar-color: var(--ac-teal) transparent;
 }
-/* ЦКС-чарт растягивается на полную высоту своего блока */
-.kpi-geo-side .gp-charts { align-items: stretch; }
-.kpi-geo-side .gp-chart-box { display: flex; flex-direction: column; }
+/* ЦКС-чарт прижат к низу gp-body, высота адаптивная */
+.kpi-geo-side .gp-charts {
+  align-items: stretch;
+  height: clamp(140px, 28vh, 260px);
+  flex-shrink: 0;
+  margin-top: auto;
+}
+.kpi-geo-side .gp-chart-box { display: flex; flex-direction: column; min-height: 0; }
 .kpi-geo-side .gp-sdu-wrap { flex: 1; min-height: 0; }
 .kpi-geo-side .gp-sdu-wrap canvas { width: 100% !important; height: 100% !important; }
 
