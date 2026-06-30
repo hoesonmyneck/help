@@ -3574,15 +3574,21 @@ header { flex-shrink: 0; }
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--ac-teal) transparent;
+  scrollbar-width: none;
   padding-bottom: 6px;
 }
+.kpi-geo-side .gp-body::-webkit-scrollbar { display: none; }
 .kpi-geo-side .gp-list {
   overflow-x: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--ac-teal) transparent;
 }
+/* ЦКС-чарт растягивается на полную высоту своего блока */
+.kpi-geo-side .gp-charts { align-items: stretch; }
+.kpi-geo-side .gp-chart-box { display: flex; flex-direction: column; }
+.kpi-geo-side .gp-sdu-wrap { flex: 1; min-height: 0; }
+.kpi-geo-side .gp-sdu-wrap canvas { width: 100% !important; height: 100% !important; }
+
 /* Спидометр — горизонтально рядом с ЦКС, растягивается по высоте */
 .kpi-geo-side .gp-gauge {
   flex: 0 0 44%;
