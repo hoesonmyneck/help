@@ -877,7 +877,10 @@ function updateBreadcrumb(region, raion) {
 async function refreshKPI(sduSeq) {
   const params = buildFilterParams();
 
-  const data = await fetch(`/api/kpi?${params}`).then(r => r.json());
+  const [data, ptRows] = await Promise.all([
+    fetch(`/api/kpi?${params}`).then(r => r.json()),
+    fetch(`/api/pay-type-stats?${params}`).then(r => r.json()).catch(() => []),
+  ]);
   if (sduSeq < _sduSeq) return; // stale — a newer sdu change superseded this call
 
   animateCounter('kpi-dec',         data.total_dec_pay_sum,   v => formatCompact(v));
@@ -886,7 +889,7 @@ async function refreshKPI(sduSeq) {
   animateCounter('kpi-recipients',  data.fact_recipients || 0, v => formatInt(v));
   animateCounter('kpi-help-types',  data.help_type_count || 0, v => formatInt(v));
   animateCounter('kpi-app-count',   data.app_count || 0,      v => formatInt(v));
-  animateCounter('kpi-fact-help-types', data.fact_help_type_count || 0, v => formatInt(v));
+  renderTopMgp(ptRows);
 
   // проценты
   const decPct = data.budget_total ? (data.total_dec_pay_sum || 0) / data.budget_total * 100 : 0;
@@ -899,6 +902,26 @@ async function refreshKPI(sduSeq) {
   renderSduChart(data.sdu || {});
 
   refreshActiveMapTab();   // обновить активную вкладку блока карты под новый регион/район
+}
+
+function renderTopMgp(rows) {
+  const el = document.getElementById('kpi-top-mgp');
+  if (!el) return;
+  const top4 = (rows || []).slice(0, 4);
+  if (!top4.length) { el.innerHTML = '<div class="kpi-empty">Нет данных</div>'; return; }
+  el.innerHTML =
+    `<div class="kpi-top-mgp-hdr">
+      <span>#</span><span>Вид помощи</span><span>Сумма</span>
+    </div>` +
+    top4.map((r, i) => {
+      const name = stripHelpPrefix(r.pay_type || '—');
+      const val = formatCompact(r.total_dec || 0) + ' ₸';
+      return `<div class="kpi-top-mgp-item">
+        <span class="kpi-top-mgp-num">${i + 1}</span>
+        <span class="kpi-top-mgp-name" title="${name}">${name}</span>
+        <span class="kpi-top-mgp-val">${val}</span>
+      </div>`;
+    }).join('');
 }
 
 let genderChart = null;
@@ -2297,10 +2320,14 @@ function fmtCell(key, val) {
 function animateCounter(id, end, formatter) {
   const el = document.getElementById(id);
   if (!el) return;
-  const prev = parseFloat(el.dataset.raw ?? end);
+  const prev = parseFloat(el.dataset.raw ?? 0);
   el.dataset.raw = end;
   if (Math.abs(prev - end) < 0.01) { el.textContent = formatter(end); return; }
-  const dur = 750;
+  // 3D flip-in effect
+  el.classList.remove('kpi-count-anim');
+  void el.offsetWidth;
+  el.classList.add('kpi-count-anim');
+  const dur = 1600;
   const t0 = performance.now();
   const tick = (now) => {
     const p = Math.min((now - t0) / dur, 1);

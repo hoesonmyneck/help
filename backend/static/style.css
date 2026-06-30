@@ -682,6 +682,10 @@ header h0 {
   border: 1px solid var(--bd-main);
   height: 100%;
 }
+#map .leaflet-container,
+#map.leaflet-container { background: #2b2f3e; }
+/* Осветляем тёмные тайлы, чтобы фон вокруг Казахстана стал серым */
+#map .leaflet-tile-pane { filter: contrast(0.38) brightness(1.5); }
 
 /* Interactive map hover panel */
 .geo-panel {
@@ -2698,6 +2702,8 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
   border: 2px solid #c4c7cc;
   box-shadow: 0 2px 6px rgba(60,64,67,0.18), 0 6px 20px rgba(60,64,67,0.12);
 }
+/* светлая тема: тайловый фильтр не нужен — отменяем */
+:root[data-theme="light"] #map .leaflet-tile-pane { filter: none; }
 :root[data-theme="light"] .map-legend {
   background: rgba(255,255,255,0.96);
   border: 1px solid #dadce0;
@@ -3252,6 +3258,73 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 }
 .kpi-sum-row .label { margin: 0; }
 .kpi-sum-row .kpi-sum-val { display: inline-block; }
+
+/* ── KPI 3D flip-in анимация при смене значения ── */
+@keyframes kpiCountIn {
+  0%   { transform: perspective(400px) rotateX(-80deg) scale(0.85); opacity: 0; }
+  55%  { transform: perspective(400px) rotateX(12deg)  scale(1.04); opacity: 1; }
+  100% { transform: perspective(400px) rotateX(0deg)   scale(1);    opacity: 1; }
+}
+.kpi-count-anim {
+  display: inline-block;
+  animation: kpiCountIn 0.65s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* ── Топ-4 МГП KPI карточка — мини-таблица ── */
+.kpi-top-mgp {
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+  border-radius: 7px;
+  overflow: hidden;
+  border: 1px solid var(--bd-main);
+}
+.kpi-top-mgp-hdr,
+.kpi-top-mgp-item {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+.kpi-top-mgp-hdr {
+  background: rgba(78, 205, 196, 0.08);
+  font-size: 0.70rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tx-dim);
+  border-bottom: 1px solid var(--bd-main);
+}
+.kpi-top-mgp-item {
+  transition: background 0.15s;
+}
+.kpi-top-mgp-item:not(:last-child) {
+  border-bottom: 1px solid var(--bd-main);
+}
+.kpi-top-mgp-item:hover {
+  background: rgba(78, 205, 196, 0.07);
+}
+.kpi-top-mgp-num {
+  color: var(--ac-teal);
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-align: center;
+}
+.kpi-top-mgp-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--tx-main);
+  font-size: 0.83rem;
+}
+.kpi-top-mgp-val {
+  color: var(--ac-teal);
+  font-weight: 600;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  text-align: right;
+}
 
 /* ── 3D-пирог: светлая тема ── */
 :root[data-theme="light"] .pie3d-wrap {
