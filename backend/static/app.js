@@ -1646,6 +1646,12 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp') {
   const totalHtml = _buildGeoTotalRow(stats, kpi);
   if (isSortable) _lastGpTotal = totalHtml;
   const listId = isSortable ? ' id="gp-sort-list"' : '';
+  const gaChartBox = `<div class="gp-chart-box">
+            <div class="gp-chart-title">Пол / Возраст</div>
+            <div id="${pfx}-ga-chart" class="ga-chart gp-ga"></div>
+          </div>`;
+  const gaugeHtml = _buildGauge(k.total_deliv_sum || 0, k.total_dec_pay_sum || 0);
+  const isGeoSide = pfx === 'gs';
   return `<div class="gp-main">
       <div class="gp-body">
         <div class="gp-title">${titleHtml}</div>
@@ -1656,13 +1662,10 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp') {
             <div class="gp-chart-title">Уровень благосостояния по ЦКС</div>
             <div class="gp-sdu-wrap"><canvas id="${pfx}-sdu-chart"></canvas></div>
           </div>
-          <div class="gp-chart-box">
-            <div class="gp-chart-title">Пол / Возраст</div>
-            <div id="${pfx}-ga-chart" class="ga-chart gp-ga"></div>
-          </div>
+          ${isGeoSide ? gaugeHtml : gaChartBox}
         </div>
       </div>
-      ${_buildGauge(k.total_deliv_sum || 0, k.total_dec_pay_sum || 0)}
+      ${isGeoSide ? gaChartBox : gaugeHtml}
     </div>`;
 }
 

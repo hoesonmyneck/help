@@ -3583,30 +3583,36 @@ header { flex-shrink: 0; }
   scrollbar-width: thin;
   scrollbar-color: var(--ac-teal) transparent;
 }
-/* Спидометр — растягивается на всё оставшееся пространство снизу */
+/* Спидометр — горизонтально рядом с ЦКС, растягивается по высоте */
 .kpi-geo-side .gp-gauge {
-  flex: 1;
-  min-height: 120px;
-  width: 100%;
-  border-left: none;
-  border-top: 1px solid var(--bd-main);
-  padding: 8px 0 0;
+  flex: 0 0 44%;
+  align-self: stretch;
+  min-height: 80px;
+  width: auto;
+  border-left: 1px solid var(--bd-main);
+  border-top: none;
+  padding: 4px 0 4px 10px;
   position: static;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 4px;
   overflow: hidden;
 }
-/* SVG заполняет всю высоту gauge-блока */
 .kpi-geo-side .gp-gauge-svg {
   flex: 1;
   min-height: 0;
-  width: auto;
-  max-width: 100%;
-  height: 100%;
+  width: 100%;
+  height: 0;
   display: block;
+}
+/* Блок Пол/Возраст — ниже ЦКС+спидометра, снаружи gp-body */
+.kpi-geo-side .gp-main > .gp-chart-box {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--bd-main);
+  padding-top: 8px;
+  padding-bottom: 6px;
 }
 /* Компактные колонки таблицы МГП */
 .kpi-geo-side .gp-hdr-row,
