@@ -113,8 +113,11 @@ function ensureScene() {
       tip.style.display = 'block';
       tip.style.left = (e.clientX - r.left + 14) + 'px';
       tip.style.top = (e.clientY - r.top + 14) + 'px';
+      const dimLine = vk === 'total_deliv'
+        ? `Факт услугополучателей: ${formatInt(d.fact_recipients || 0)}`
+        : `Заявок: ${d.count}`;
       tip.innerHTML = `<b>${stripHelpPrefix(d.pay_type)}</b><br>${label}: ${fmtMoney(d[vk])} · ${d.pctVal}%<br>` +
-        `<span class="cube3d-tip-dim">Заявок: ${d.count}</span>`;
+        `<span class="cube3d-tip-dim">${dimLine}</span>`;
     } else if (tip) { tip.style.display = 'none'; }
   });
   renderer.domElement.addEventListener('pointerleave', () => {
@@ -210,10 +213,11 @@ function buildPie(s, rows) {
     const top = data.slice(0, 11);
     const rest = data.slice(11);
     top.push({
-      pay_type: `Прочие (${rest.length})`,
-      count:       rest.reduce((s, r) => s + (r.count       || 0), 0),
-      total_dec:   rest.reduce((s, r) => s + (r.total_dec   || 0), 0),
-      total_deliv: rest.reduce((s, r) => s + (r.total_deliv || 0), 0),
+      pay_type:        `Прочие (${rest.length})`,
+      count:           rest.reduce((s, r) => s + (r.count           || 0), 0),
+      fact_recipients: rest.reduce((s, r) => s + (r.fact_recipients || 0), 0),
+      total_dec:       rest.reduce((s, r) => s + (r.total_dec       || 0), 0),
+      total_deliv:     rest.reduce((s, r) => s + (r.total_deliv     || 0), 0),
     });
     data = top;
   }

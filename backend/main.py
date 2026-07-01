@@ -1857,6 +1857,9 @@ def pay_type_stats(
                     Payment.pay_type_id,
                     Payment.pay_type,
                     func.count(Payment.id).label('cnt'),
+                    func.count(distinct(
+                        sa_case((Payment.app_status == 'Выполнено', Payment.sicid))
+                    )).label('fact_recipients'),
                     func.sum(Payment.dec_pay_sum).label('total_dec'),
                     func.sum(
                         sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)
@@ -1883,6 +1886,7 @@ def pay_type_stats(
                 'pay_type_id': r.pay_type_id,
                 'pay_type': r.pay_type or '—',
                 'count': r.cnt or 0,
+                'fact_recipients': r.fact_recipients or 0,
                 'budget': budget_map.get(r.pay_type_id, 0.0),
                 'total_dec': round(float(r.total_dec or 0), 2),
                 'total_deliv': round(float(r.total_deliv or 0), 2),
