@@ -629,6 +629,7 @@ header h0 {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  position: relative;
 }
 .kpi-col .kpi-card {
   flex: 1 1 0;
@@ -742,6 +743,40 @@ header h0 {
 }
 .gp-budget-summary .gp-pay { color: var(--tx-dim); font-style: italic; }
 .gp-hdr-row { border-bottom: 2px solid var(--bd-mid); margin-bottom: 1px; }
+.gp-grp-row {
+  display: grid;
+  grid-template-columns: 1fr 64px 110px 70px 110px 92px;
+  gap: 6px;
+  padding: 3px 4px 0;
+}
+.gp-grp-span {
+  grid-column: span 2;
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--bd-hi);
+  border: 1px solid var(--bd-mid);
+  border-bottom: none;
+  border-radius: 3px 3px 0 0;
+  background: rgba(106,136,200,0.07);
+  padding: 2px 4px;
+}
+:root[data-theme="light"] .gp-grp-span {
+  color: var(--ac-blue);
+  border-color: var(--ac-blue);
+  background: rgba(47,86,127,0.08);
+}
+/* Боковые обводки для ячеек сгруппированных колонок */
+.gp-hdr-row > :nth-child(2), .gp-row > :nth-child(2),
+.gp-hdr-row > :nth-child(4), .gp-row > :nth-child(4) {
+  border-left: 1px solid var(--bd-mid);
+}
+.gp-hdr-row > :nth-child(3), .gp-row > :nth-child(3),
+.gp-hdr-row > :nth-child(5), .gp-row > :nth-child(5) {
+  border-right: 1px solid var(--bd-mid);
+}
 .gp-row:last-child { border-bottom: none; }
 .gp-hdr { font-size: 0.7rem; color: var(--tx-dim); font-weight: 600; }
 .gp-pay { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3249,6 +3284,12 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 
 /* ── Кликабельный режим тултипа (сводка по стране) ── */
 .geo-panel.country-mode { pointer-events: auto; }
+.geo-panel.country-mode .gp-main { width: 1060px; }
+.geo-panel.country-mode .gp-grp-row,
+.geo-panel.country-mode .gp-hdr-row,
+.geo-panel.country-mode .gp-row {
+  grid-template-columns: minmax(200px, 1fr) 70px 130px 70px 140px 145px;
+}
 .gp-main { position: relative; }
 .gp-close {
   position: absolute; top: 8px; right: 10px; z-index: 2;
@@ -3465,17 +3506,24 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
   scrollbar-width: thin;
   scrollbar-color: var(--ac-teal) transparent;
 }
+.mtab-summary-body .gp-grp-row {
+  width: 100%;
+  min-width: min-content;
+  grid-template-columns: minmax(150px, 1fr) 70px 120px 70px 110px 190px;
+}
 .mtab-summary-body .gp-hdr-row,
 .mtab-summary-body .gp-row {
   width: 100%;
   min-width: min-content;
-  grid-template-columns: minmax(150px, 0.9fr) 70px 130px 70px 140px 100px;
+  grid-template-columns: minmax(150px, 1fr) 70px 120px 70px 110px 190px;
 }
 .mtab-summary-body .gp-row > *:nth-child(even),
 .mtab-summary-body .gp-hdr-row > *:nth-child(even) {
   background: rgba(255,255,255,0.06);
   border-radius: 3px;
 }
+.mtab-summary-body .gp-hdr { font-size: 0.9rem; }
+.mtab-summary-body .gp-grp-span { font-size:0.9rem; }
 /* Спидометр «Факт / Сумма заявок» во вкладках виден только в полноэкранном
    режиме; в плавающем тултипе и панели «Казахстан» — всегда. */
 .mtab-summary-body .gp-gauge { display: none; }
@@ -3634,9 +3682,10 @@ header { flex-shrink: 0; }
   padding-bottom: 6px;
 }
 /* Компактные колонки таблицы МГП */
+.kpi-geo-side .gp-grp-row,
 .kpi-geo-side .gp-hdr-row,
 .kpi-geo-side .gp-row {
-  grid-template-columns: minmax(0, 150px) 50px 130px 50px 120px 120px;
+  grid-template-columns: minmax(0, 150px) 50px 100px 50px 100px 150px;
   font-size: 0.70rem;
 }
 /* Заголовки числовых колонок не вылезают за ячейку */
@@ -3763,3 +3812,95 @@ header { flex-shrink: 0; }
   text-align: right;
   font-size: 0.70rem;
 }
+
+/* ── Расширяемая карточка "Всего видов помощи" ── */
+@keyframes kpi-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes kpi-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes kpi-cn-tl { 0%,100%{opacity:.35;transform:translate(0,0)}  50%{opacity:1;transform:translate(-3px,-3px)} }
+@keyframes kpi-cn-tr { 0%,100%{opacity:.35;transform:translate(0,0)}  50%{opacity:1;transform:translate(3px,-3px)}  }
+@keyframes kpi-cn-bl { 0%,100%{opacity:.35;transform:translate(0,0)}  50%{opacity:1;transform:translate(-3px,3px)}  }
+@keyframes kpi-cn-br { 0%,100%{opacity:.35;transform:translate(0,0)}  50%{opacity:1;transform:translate(3px,3px)}   }
+
+/* Другие карточки плавно исчезают/появляются */
+.kpi-col-left .kpi-card { transition: opacity 0.22s ease; }
+.kpi-col-left.kpi-expanding .kpi-card:not(.expanded) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.kpi-card-expandable { cursor: pointer; position: relative; }
+.kpi-card-expandable:hover { filter: brightness(1.08); }
+
+.kpi-card-expandable.expanded {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start !important;
+  text-align: left !important;
+  overflow-x: hidden;
+  overflow-y: auto;
+  cursor: default;
+  animation: kpi-fade-in 0.25s ease forwards;
+}
+.kpi-card-expandable.closing {
+  animation: kpi-fade-out 0.22s ease forwards;
+  pointer-events: none;
+}
+
+.kpi-expand-corners {
+  position: absolute; inset: 0; pointer-events: none;
+}
+.kpi-cn {
+  position: absolute; width: 9px; height: 9px; display: block;
+  border-color: var(--ac-teal); border-style: solid; border-width: 0;
+}
+.kpi-cn-tl { top: 6px;    left: 6px;    border-top-width: 2px; border-left-width: 2px;   animation: kpi-cn-tl 1.6s ease-in-out infinite; }
+.kpi-cn-tr { top: 6px;    right: 6px;   border-top-width: 2px; border-right-width: 2px;  animation: kpi-cn-tr 1.6s ease-in-out infinite; }
+.kpi-cn-bl { bottom: 6px; left: 6px;    border-bottom-width: 2px; border-left-width: 2px; animation: kpi-cn-bl 1.6s ease-in-out infinite; }
+.kpi-cn-br { bottom: 6px; right: 6px;   border-bottom-width: 2px; border-right-width: 2px; animation: kpi-cn-br 1.6s ease-in-out infinite; }
+.kpi-card-expandable.expanded .kpi-expand-corners,
+.kpi-card-expandable.closing .kpi-expand-corners { display: none; }
+
+.kpi-help-list {
+  display: none;
+  width: 100%;
+  margin-top: 8px;
+}
+.kpi-card-expandable.expanded .kpi-help-list { display: block; }
+
+.kpi-help-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--bd-main);
+  font-size: 0.8rem;
+  color: var(--tx-main);
+  line-height: 1.3;
+}
+.kpi-help-item:last-child { border-bottom: none; }
+.kpi-help-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kpi-help-val  { flex-shrink: 0; font-weight: 700; color: var(--ac-teal); margin-left: 6px; font-size: 0.75rem; }
+.kpi-help-num {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: var(--ac-teal);
+  min-width: 18px;
+  font-size: 0.75rem;
+}
+.kpi-help-close {
+  display: none;
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--tx-dim);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+.kpi-card-expandable.expanded .kpi-help-close { display: inline-flex; }

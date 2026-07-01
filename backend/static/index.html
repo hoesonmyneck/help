@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ЕЦП "Анализ по мерам государственной поддержки МИО"</title>
+  <title>ЕЦП "Анализ по дополнительным видам помощи МИО"</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="/style.css?v=37">
+  <link rel="stylesheet" href="/style.css?v=54">
 </head>
 <body>
 
 <header>
   <div class="header-title-block">
-    <h0>Единая цифровая платформа "Анализ по мерам государственной поддержки МИО"</h0>
+    <h0>Единая цифровая платформа "Анализ по дополнительным видам помощи МИО"</h0>
     <div class="header-date" id="header-date"></div>
   </div>
   <div class="breadcrumb" id="breadcrumb">
@@ -28,13 +28,17 @@
 
   <!-- Left KPI column (3) -->
   <div class="kpi-col kpi-col-left">
-    <div class="kpi-card">
-      <div class="label">Кол-во видов помощи</div>
+    <div class="kpi-card kpi-card-expandable" id="kpi-card-help-types" onclick="toggleHelpTypesList()">
+      <div class="label">Всего видов помощи</div>
       <div class="value accent" id="kpi-help-types">—</div>
+      <div class="kpi-expand-corners"><span class="kpi-cn kpi-cn-tl"></span><span class="kpi-cn kpi-cn-tr"></span><span class="kpi-cn kpi-cn-bl"></span><span class="kpi-cn kpi-cn-br"></span></div>
+      <div class="kpi-help-list" id="kpi-help-list"></div>
     </div>
-    <div class="kpi-card">
-      <div class="label">Утвержденный бюджет</div>
+    <div class="kpi-card kpi-card-expandable" id="kpi-card-budget" onclick="toggleBudgetList()">
+      <div class="label">Годовой утвержденный бюджет МИО</div>
       <div class="value accent" id="kpi-budget">—</div>
+      <div class="kpi-expand-corners"><span class="kpi-cn kpi-cn-tl"></span><span class="kpi-cn kpi-cn-tr"></span><span class="kpi-cn kpi-cn-bl"></span><span class="kpi-cn kpi-cn-br"></span></div>
+      <div class="kpi-help-list" id="kpi-budget-list"></div>
     </div>
     <div class="kpi-card kpi-multi">
       <div class="label">ПРИНЯТО ЗАЯВЛЕНИЙ</div>
@@ -87,8 +91,7 @@
   <!-- Right KPI column (2) -->
   <div class="kpi-col kpi-col-right">
     <div class="kpi-card">
-      <div class="label">СУММЫ ПО ПРИНЯТЫМ ЗАЯВЛЕНИЯМ
-        В РАЗРЕЗЕ ВИДОВ ПОМОЩИ
+      <div class="label">Рейтинг сумм видов помощи по принятым заявлениям
         </div>
       <div id="kpi-top-mgp" class="kpi-top-mgp"></div>
     </div>
@@ -352,7 +355,7 @@
 <div id="geo-panel" class="geo-panel"></div>
 <div id="pay-tooltip" class="pay-tooltip" style="display:none"></div>
 
-<script src="/app.js?v=26"></script>
+<script src="/app.js?v=36"></script>
 <script src="/kpifx.js?v=11"></script>
 
 <!-- Three.js (для 3D-пирога видов помощи) -->

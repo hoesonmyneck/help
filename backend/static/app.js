@@ -42,6 +42,84 @@ function stripHelpPrefix(name) {
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 }
 
+function toggleHelpTypesList(ev) {
+  if (ev) ev.stopPropagation();
+  _kpiCardToggle('kpi-card-help-types', () => {
+    const list = document.getElementById('kpi-help-list');
+    const populate = (cols) => {
+      if (!cols.length) { list.innerHTML = '<div class="kpi-help-item">Нет данных</div>'; return; }
+      list.innerHTML = cols.map((c, i) =>
+        `<div class="kpi-help-item"><span class="kpi-help-num">${i + 1}</span>${stripHelpPrefix(c.name)}</div>`
+      ).join('');
+    };
+    if (presenceColumns.length) {
+      populate(presenceColumns);
+    } else {
+      list.innerHTML = '<div class="kpi-help-item" style="opacity:.5">Загрузка…</div>';
+      fetch('/api/help-presence').then(r => r.json()).then(d => populate(d.columns || []));
+    }
+  });
+}
+
+function _kpiCardToggle(cardId, renderFn) {
+  const card = document.getElementById(cardId);
+  const col  = card?.closest('.kpi-col-left');
+  if (!card) return;
+  if (card.classList.contains('expanded')) {
+    card.classList.add('closing');
+    card.addEventListener('animationend', () => {
+      card.classList.remove('expanded', 'closing');
+      col?.classList.remove('kpi-expanding');
+    }, { once: true });
+    return;
+  }
+  col?.classList.add('kpi-expanding');
+  card.classList.add('expanded');
+  renderFn();
+}
+
+function _fmtRegionName(s) {
+  if (!s) return s;
+  const l = s.toLowerCase();
+  if (l.startsWith('г.') || l.startsWith('г. ')) {
+    return 'г.' + l.slice(2).replace(/^\s*([а-яёa-z])/i, (m, ch) => m.replace(ch, ch.toUpperCase()));
+  }
+  return l.charAt(0).toUpperCase() + l.slice(1);
+}
+
+function _fmtBudgetBln(v) {
+  if (!v) return '—';
+  if (v >= 1e9) return (v / 1e9).toFixed(1).replace(/\.0$/, '') + ' млрд ₸';
+  if (v >= 1e6) return (v / 1e6).toFixed(1).replace(/\.0$/, '') + ' млн ₸';
+  return Math.round(v).toLocaleString('ru') + ' ₸';
+}
+
+function toggleBudgetList(ev) {
+  if (ev) ev.stopPropagation();
+  _kpiCardToggle('kpi-card-budget', () => {
+    const list = document.getElementById('kpi-budget-list');
+    const populate = (rows) => {
+      const items = rows
+        .filter(r => !r.is_total)
+        .sort((a, b) => (b.mini?.budget_val || 0) - (a.mini?.budget_val || 0));
+      if (!items.length) { list.innerHTML = '<div class="kpi-help-item">Нет данных</div>'; return; }
+      list.innerHTML = items.map((r, i) =>
+        `<div class="kpi-help-item">
+          <span class="kpi-help-num">${i + 1}</span>
+          <span class="kpi-help-name">${_fmtRegionName(r.name)}</span>
+          <span class="kpi-help-val">${_fmtBudgetBln(r.mini?.budget_val)}</span>
+        </div>`
+      ).join('');
+    };
+    if (presenceRows.length) {
+      populate(presenceRows);
+    } else {
+      list.innerHTML = '<div class="kpi-help-item" style="opacity:.5">Загрузка…</div>';
+      fetch('/api/help-presence').then(r => r.json()).then(d => populate(d.rows || []));
+    }
+  });
+}
+
 function fmtCompact(v) {
   if (!v || v === 0) return '';
   if (v >= 1_000_000) return (v / 1_000_000).toFixed(1).replace(/\.0$/, '') + ' млн';
@@ -638,6 +716,23 @@ function addLabel(latlng, text) {
   });
 }
 
+function _toTitleCase(s) {
+  if (!s) return s;
+  const l = s.toLowerCase();
+  return l.charAt(0).toUpperCase() + l.slice(1);
+}
+
+const REGIONS_NO_NPA = new Set([10, 62]);
+
+function _npaEmptyMsg(regionId) {
+  return REGIONS_NO_NPA.has(+regionId) ? 'Не предусмотрено в НПА' : 'Нет обращений';
+}
+
+function _regionName(id) {
+  const n = regionStats[id]?.name || presenceById[Math.round(id)]?.name;
+  return n ? _toTitleCase(n) : `Регион ${id}`;
+}
+
 // Label: виды помощи в регионе / общее число видов помощи (14)
 function entitledLabel(id) {
   const row = presenceById[Math.round(id)];
@@ -677,7 +772,11 @@ function renderRegions() {
   regionsLayer = L.geoJSON(regionGeoJSON, {
     style: regionStyle,
     onEachFeature(feature, layer) {
-      layer.bindTooltip(() => regionStats[feature.properties.id_reg]?.name || '', { sticky: true, className: 'map-name-tip' });
+      layer.bindTooltip(() => {
+        const rid = feature.properties.id_reg;
+        const n = regionStats[rid]?.name || presenceById[Math.round(rid)]?.name || '';
+        return _toTitleCase(n) || '';
+      }, { sticky: true, className: 'map-name-tip' });
       layer.on({
         mouseover(e) { e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 }); },
         mouseout(e)  { regionsLayer.resetStyle(e.target); },
@@ -719,7 +818,7 @@ async function drillRegionFromRanking(regionId) {
   }).addTo(map);
   renderRaionLabels();
 
-  const regionName = regionStats[regionId]?.name || `Регион ${regionId}`;
+  const regionName = _regionName(regionId);
   updateBreadcrumb(regionName, null);
   loadDistinct('kato_rainame');
   await refreshKPI();
@@ -768,7 +867,7 @@ async function drillRegion(regionId) {
   }
   renderRaionLabels();
 
-  const regionName = regionStats[regionId]?.name || `Регион ${regionId}`;
+  const regionName = _regionName(regionId);
   updateBreadcrumb(regionName, null);
   if (_shouldShowGeoSide()) showGeoSidePanel(regionId, regionName, false);
   loadDistinct('kato_rainame');
@@ -784,7 +883,7 @@ async function selectRaion(raionId) {
   currentRaion = raionId;
   currentPage = 1;
   const raionName = raionStats[raionId]?.name || `Район ${raionId}`;
-  const regionName = regionStats[currentRegion]?.name || '';
+  const regionName = _regionName(currentRegion);
   updateBreadcrumb(regionName, raionName);
   if (_shouldShowGeoSide()) showGeoSidePanel(raionId, raionName, true);
   await refreshKPI();
@@ -900,12 +999,13 @@ async function showGeoSidePanel(geoId, geoName, isRaion) {
       : [];
 
     const backLabel = isRaion
-      ? `← ${_stripRegionWord(regionStats[currentRegion]?.name || 'Регион')}`
+      ? `← ${_stripRegionWord(_regionName(currentRegion))}`
       : '← Казахстан';
     const backClick = isRaion ? `drillRegion(${currentRegion})` : `goBack()`;
 
+    const _effRegion = isRaion ? currentRegion : geoId;
     panel.innerHTML =
-      _buildGeoMainHtml(geoName, provided, stats, kpi, 'gs');
+      _buildGeoMainHtml(geoName, provided, stats, kpi, 'gs', _npaEmptyMsg(_effRegion));
     renderGeoPanelCharts(kpi, 'gs');
   } catch(e) {
     panel.innerHTML = '<div class="gp-title" style="padding:20px">Ошибка загрузки</div>';
@@ -1452,11 +1552,21 @@ let _lastRaRows = [], _lastRaIsRaion = false;
 let _lastGpTotal = '', _lastRaTotal = '';
 
 // Применить/инвертировать сортировку и перерисовать только строки (не «Итого»)
+function _tableGroupHdr() {
+  return `<div class="gp-grp-row">` +
+    `<span></span>` +
+    `<span class="gp-grp-span">Принятые заявления</span>` +
+    `<span class="gp-grp-span">Фактическая выплата</span>` +
+    `<span></span>` +
+    `</div>`;
+}
+
 function sortGpTable(col) {
   if (_gpSort.col === col) _gpSort.dir *= -1; else { _gpSort.col = col; _gpSort.dir = 1; }
   const listEl = document.getElementById('gp-sort-list');
   if (!listEl) return;
-  listEl.innerHTML = `<div class="gp-hdr-row" id="gp-sort-hdr">${_gpSortHdrInner()}</div>` +
+  listEl.innerHTML = _tableGroupHdr() +
+    `<div class="gp-hdr-row" id="gp-sort-hdr">${_gpSortHdrInner()}</div>` +
     _lastGpTotal + _buildGeoPanelHtml(_lastGpProvided, _lastGpStats, _lastGpPfx);
 }
 function sortRaTable(col) {
@@ -1464,7 +1574,8 @@ function sortRaTable(col) {
   const listEl = document.getElementById('ra-sort-list');
   if (!listEl) return;
   const sorted = [..._lastRaRows].sort(_makeRaComparator());
-  listEl.innerHTML = `<div class="gp-hdr-row" id="ra-sort-hdr">${_raSortHdrInner()}</div>` +
+  listEl.innerHTML = _tableGroupHdr() +
+    `<div class="gp-hdr-row" id="ra-sort-hdr">${_raSortHdrInner()}</div>` +
     _lastRaTotal +
     (sorted.map(r => _buildRegionRow(r, !_lastRaIsRaion, _lastRaIsRaion)).join('') ||
      '<div class="gp-empty" style="padding:8px 4px">Нет данных</div>');
@@ -1473,9 +1584,9 @@ function sortRaTable(col) {
 function _gpSortHdrInner() {
   return `<span class="gp-pay gp-hdr gp-sortable" onclick="sortGpTable('name')">Вид помощи</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('recipients')">Кол-во</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_dec')">Принятые заявления</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_dec')">Сумма</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('fact_recipients')">Кол-во</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_deliv')">Фактическая выплата</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_deliv')">Сумма</span>
         <span class="gp-stat gp-hdr">Утвержденный бюджет</span>`;
 }
 
@@ -1483,9 +1594,9 @@ function _raSortHdrInner() {
   const col = _lastRaIsRaion ? 'Район' : 'Регион';
   return `<span class="gp-pay gp-hdr gp-sortable" onclick="sortRaTable('name')">${col}</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('recipients')">Кол-во</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_dec')">Принятые заявления</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_dec')">Сумма</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('fact_recipients')">Кол-во</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_deliv')">Фактическая выплата</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_deliv')">Сумма</span>
         <span class="gp-stat gp-hdr">Утвержденный бюджет</span>`;
 }
 
@@ -1499,8 +1610,8 @@ function _makeRaComparator() {
   };
 }
 
-function _buildGeoPanelHtml(provided, stats, pfx = 'gp') {
-  if (!provided.length) return '<div class="gp-empty">Нет данных</div>';
+function _buildGeoPanelHtml(provided, stats, pfx = 'gp', emptyMsg = 'Нет данных') {
+  if (!provided.length) return `<div class="gp-empty">${emptyMsg}</div>`;
   let rows = provided.map(({ c }) => {
     const s = stats && stats[c.id];
     return { c, s,
@@ -1555,10 +1666,11 @@ async function showGeoPanel(id, name, ev) {
     ? presenceColumns.map((c, i) => ({ c, cnt: (row.pay_cat_lists[i] || []).length })).filter(e => e.cnt > 0)
     : [];
 
-  const geoName = (row && row.name) || name || '—';
+  const geoName = _toTitleCase((row && row.name) || name || '') || '—';
+  const _emptyMsgHover = _npaEmptyMsg(currentRegion !== null ? currentRegion : rid);
 
   const renderPanel = (stats, kpi) => {
-    panel.innerHTML = _buildGeoMainHtml(geoName, provided, stats, kpi);
+    panel.innerHTML = _buildGeoMainHtml(geoName, provided, stats, kpi, 'gp', _emptyMsgHover);
     panel.classList.remove('country-mode');
     panel.classList.add('visible');
     positionGeoPanel(ev);
@@ -1634,7 +1746,7 @@ function _buildGauge(deliv, dec) {
 
 // Общая разметка тултипа: тело (таблица + графики) + спидометр справа.
 // pfx — префикс id для канвасов (чтобы плавающий тултип и вкладка «Сводка» не конфликтовали).
-function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp') {
+function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp', emptyMsg = 'Нет данных') {
   const k = kpi || {};
   const isSortable = (pfx === 'mt');   // сортировка только во вкладке, не в плавающем тултипе
   let hdr = '';
@@ -1645,9 +1757,9 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp') {
       hdr = `<div class="gp-hdr-row">
         <span class="gp-pay gp-hdr">Вид помощи</span>
         <span class="gp-stat gp-hdr">Кол-во</span>
-        <span class="gp-stat gp-hdr">Приняты заявления</span>
+        <span class="gp-stat gp-hdr">Сумма</span>
         <span class="gp-stat gp-hdr">Кол-во</span>
-        <span class="gp-stat gp-hdr">Фактическая выплата</span>
+        <span class="gp-stat gp-hdr">Сумма</span>
         <span class="gp-stat gp-hdr">Утвержденный бюджет</span>
       </div>`;
     }
@@ -1664,7 +1776,7 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp') {
   return `<div class="gp-main">
       <div class="gp-body">
         <div class="gp-title">${titleHtml}</div>
-        <div class="gp-list"${listId}>${hdr}${totalHtml}${_buildGeoPanelHtml(provided, stats, pfx)}</div>
+        <div class="gp-list"${listId}>${hdr ? _tableGroupHdr() : ''}${hdr}${totalHtml}${_buildGeoPanelHtml(provided, stats, pfx, emptyMsg)}</div>
         <div class="gp-charts">
           <div class="gp-chart-box">
             <div class="gp-chart-title">Уровень благосостояния по ЦКС</div>
@@ -1839,7 +1951,7 @@ function switchMapTab(name) {
       const raionName = raionStats[currentRaion]?.name || `Район ${currentRaion}`;
       showGeoSidePanel(currentRaion, raionName, true);
     } else if (currentRegion) {
-      const regionName = regionStats[currentRegion]?.name || `Регион ${currentRegion}`;
+      const regionName = _regionName(currentRegion);
       showGeoSidePanel(currentRegion, regionName, false);
     }
   }
@@ -1885,11 +1997,11 @@ async function renderMapSummary() {
     const provided = (columns.length && row.pay_cat_lists)
       ? columns.map((c, i) => ({ c, cnt: (row.pay_cat_lists[i] || []).length })).filter(e => e.cnt > 0) : [];
     let title = 'Республика Казахстан';
-    if (currentRaion != null) title = (raionStats[currentRaion]?.name) || row.name || 'Район';
-    else if (currentRegion != null) title = (regionStats[currentRegion]?.name) || row.name || 'Регион';
+    if (currentRaion != null) title = _toTitleCase((raionStats[currentRaion]?.name) || row.name || 'Район');
+    else if (currentRegion != null) title = _toTitleCase((regionStats[currentRegion]?.name) || row.name || 'Регион');
     _lastGpProvided = provided; _lastGpStats = stats; _lastGpPfx = 'mt';
     _gpSort.col = null; _mtPayFilter = null; // сброс при смене уровня
-    body.innerHTML = _buildGeoMainHtml(title, provided, stats, kpi, 'mt');
+    body.innerHTML = _buildGeoMainHtml(title, provided, stats, kpi, 'mt', _npaEmptyMsg(currentRegion));
     renderGeoPanelCharts(kpi, 'mt');
   } catch (e) {
     console.error('map summary', e);
@@ -1933,7 +2045,7 @@ function _buildRegionAnalyticsHtml(titleHtml, rows, stats, kpi, isRaion) {
   return `<div class="gp-main">
       <div class="gp-body">
         <div class="gp-title">${titleHtml}</div>
-        <div class="gp-list" id="ra-sort-list">${hdr}${totalHtml}${list}</div>
+        <div class="gp-list" id="ra-sort-list">${_tableGroupHdr()}${hdr}${totalHtml}${list}</div>
         <div class="gp-charts">
           <div class="gp-chart-box">
             <div class="gp-chart-title">Уровень благосостояния по ЦКС</div>
