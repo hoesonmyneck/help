@@ -116,7 +116,8 @@ function ensureScene() {
       const dimLine = vk === 'total_deliv'
         ? `Факт услугополучателей: ${formatInt(d.fact_recipients || 0)}`
         : `Заявок: ${d.count}`;
-      tip.innerHTML = `<b>${stripHelpPrefix(d.pay_type)}</b><br>${label}: ${fmtMoney(d[vk])} · ${d.pctVal}%<br>` +
+      const pct = vk === 'total_deliv' ? d.pctRecip : d.pctCount;
+      tip.innerHTML = `<b>${stripHelpPrefix(d.pay_type)}</b><br>${label}: ${fmtMoney(d[vk])} · ${pct}%<br>` +
         `<span class="cube3d-tip-dim">${dimLine}</span>`;
     } else if (tip) { tip.style.display = 'none'; }
   });
@@ -223,6 +224,7 @@ function buildPie(s, rows) {
   }
 
   const totalCount = data.reduce((s, r) => s + (r.count || 0), 0) || 1;
+  const totalRecip = data.reduce((s, r) => s + (r.fact_recipients || 0), 0) || 1;
   const totalVal   = data.reduce((s, r) => s + (r[valKey] || 0), 0) || 1;
   const maxVal     = Math.max(...data.map(r => r[valKey])) || 1;
 
@@ -233,9 +235,13 @@ function buildPie(s, rows) {
   const t0 = s.clock.getElapsedTime();
 
   data.forEach((d, i) => {
-    d.pctCount = Math.round((d.count || 0) / totalCount * 100);
+    const _p = (d.count || 0) / totalCount * 100;
+    d.pctCount = _p < 1 ? _p.toFixed(2) : Math.round(_p);
+    const _pr = (d.fact_recipients || 0) / totalRecip * 100;
+    d.pctRecip = _pr < 1 ? _pr.toFixed(2) : Math.round(_pr);
     d.pctVal   = Math.round((d[valKey] || 0) / totalVal * 100);
-    const ang    = minAng + ((d.count || 0) / totalCount) * distributable;
+    const _base  = mode === 'deliv' ? (d.fact_recipients || 0) / totalRecip : (d.count || 0) / totalCount;
+    const ang    = minAng + _base * distributable;
     const a0 = a + pad / 2, a1 = a + ang - pad / 2;
     const height = 0.7 + ((d[valKey] || 0) / maxVal) * 6.0;
 
