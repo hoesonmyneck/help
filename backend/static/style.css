@@ -1,14 +1,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Google+Sans:wght@400;500;700&display=swap');
 
 :root {
-  --bg-body:    #141831;
-  --bg-card:    #272d40;
-  --bg-deep:    #2c3552;
-  --bg-deeper:  #222942;
-  --bg-hover:   #2e374e;
-  --bd-main:    #383f63;
-  --bd-mid:     #394a74;
-  --bd-hi:      #4a5f98;
+  --bg-body:    #2e3558;
+  --bg-card:    #3a4168;
+  --bg-deep:    #404c78;
+  --bg-deeper:  #343c64;
+  --bg-hover:   #454f7a;
+  --bd-main:    #545e90;
+  --bd-mid:     #5870a8;
+  --bd-hi:      #6a88c8;
   --tx-main:    #ffffff;
   --tx-dim:     #ffffff;
   --tx-label:   #ffffff;
@@ -20,7 +20,7 @@
   --ac-teal:    #4ecdc4;
   --ac-male:    #5b8af8;
   --ac-female:  #f875c3;
-  --map-lbl-bg: rgba(10,14,30,0.78);
+  --map-lbl-bg: rgba(20,26,55,0.82);
   --map-lbl-tx: #ffffff;
 }
 
@@ -153,7 +153,7 @@ html { font-size: 115%; }
 
 body {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  background: linear-gradient(-45deg, #141831, #181d38, #12152e, #161e34);
+  background: linear-gradient(-45deg, #2e3558, #353c64, #2a3260, #323a6a);
   background-size: 400% 400%;
   animation: bg-drift 24s ease infinite;
   color: var(--tx-main);
@@ -178,7 +178,7 @@ body::before {
 header, .main-layout, .table-section { position: relative; z-index: 1; }
 
 header {
-  background: var(--bg-card);
+  background: #5560a0;
   border-bottom: 1px solid var(--bd-main);
   padding: 14px 24px;
   display: flex;
@@ -3467,8 +3467,14 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 }
 .mtab-summary-body .gp-hdr-row,
 .mtab-summary-body .gp-row {
-  min-width: 0;
-  grid-template-columns: minmax(200, 750px) 100px 108px 100px 108px 100px;
+  width: 100%;
+  min-width: min-content;
+  grid-template-columns: minmax(200px, 1fr) 100px 120px 160px 108px 100px;
+}
+.mtab-summary-body .gp-row > *:nth-child(even),
+.mtab-summary-body .gp-hdr-row > *:nth-child(even) {
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
 }
 /* Спидометр «Факт / Сумма заявок» во вкладках виден только в полноэкранном
    режиме; в плавающем тултипе и панели «Казахстан» — всегда. */

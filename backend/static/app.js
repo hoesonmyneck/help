@@ -38,7 +38,8 @@ let ageChart = null;
 
 function stripHelpPrefix(name) {
   if (!name) return name;
-  return name.replace(/^\s*СОЦИАЛЬНАЯ\s+ПОМОЩЬ\s+/i, '');
+  const s = name.replace(/^\s*СОЦИАЛЬНАЯ\s+ПОМОЩЬ\s+/i, '');
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 }
 
 function fmtCompact(v) {
@@ -1455,23 +1456,25 @@ function sortGpTable(col) {
   if (_gpSort.col === col) _gpSort.dir *= -1; else { _gpSort.col = col; _gpSort.dir = 1; }
   const listEl = document.getElementById('gp-sort-list');
   if (!listEl) return;
-  listEl.innerHTML = _lastGpTotal + _buildGeoPanelHtml(_lastGpProvided, _lastGpStats, _lastGpPfx);
+  listEl.innerHTML = `<div class="gp-hdr-row" id="gp-sort-hdr">${_gpSortHdrInner()}</div>` +
+    _lastGpTotal + _buildGeoPanelHtml(_lastGpProvided, _lastGpStats, _lastGpPfx);
 }
 function sortRaTable(col) {
   if (_raSort.col === col) _raSort.dir *= -1; else { _raSort.col = col; _raSort.dir = 1; }
   const listEl = document.getElementById('ra-sort-list');
   if (!listEl) return;
   const sorted = [..._lastRaRows].sort(_makeRaComparator());
-  listEl.innerHTML = _lastRaTotal +
+  listEl.innerHTML = `<div class="gp-hdr-row" id="ra-sort-hdr">${_raSortHdrInner()}</div>` +
+    _lastRaTotal +
     (sorted.map(r => _buildRegionRow(r, !_lastRaIsRaion, _lastRaIsRaion)).join('') ||
      '<div class="gp-empty" style="padding:8px 4px">Нет данных</div>');
 }
 
 function _gpSortHdrInner() {
   return `<span class="gp-pay gp-hdr gp-sortable" onclick="sortGpTable('name')">Вид помощи</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('recipients')">Услугопол.</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('recipients')">Услугополучатели</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_dec')">Сумма заявок</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('fact_recipients')">Факт ус-пол.</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('fact_recipients')">Факт услугополучателей</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_deliv')">Факт выплачено</span>
         <span class="gp-stat gp-hdr">Бюджет</span>`;
 }
@@ -1479,9 +1482,9 @@ function _gpSortHdrInner() {
 function _raSortHdrInner() {
   const col = _lastRaIsRaion ? 'Район' : 'Регион';
   return `<span class="gp-pay gp-hdr gp-sortable" onclick="sortRaTable('name')">${col}</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('recipients')">Услугопол.</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('recipients')">Услугополучатели</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_dec')">Сумма заявок</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('fact_recipients')">Факт ус-пол.</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('fact_recipients')">Факт услугополучателей</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_deliv')">Факт выплачено</span>
         <span class="gp-stat gp-hdr">Бюджет</span>`;
 }
@@ -1523,7 +1526,7 @@ function _buildGeoPanelHtml(provided, stats, pfx = 'gp') {
     const onclick  = pfx === 'mt' ? ` onclick="filterMtByPayType(${c.id}, this)"`
                    : pfx === 'gs' ? ` onclick="filterGsByPayType(${c.id}, this)"` : '';
     return `<div class="gp-row gp-yes${isActive ? ' gp-active' : ''}"${onclick}>
-      <span class="gp-pay" title="${c.name}">${stripHelpPrefix(c.name)}</span>
+      <span class="gp-pay" title="${stripHelpPrefix(c.name)}">${stripHelpPrefix(c.name)}</span>
       <span class="gp-stat">${recip}</span>
       <span class="gp-stat">${dec} ₸</span>
       <span class="gp-stat">${fact}</span>
@@ -1661,8 +1664,7 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp') {
   return `<div class="gp-main">
       <div class="gp-body">
         <div class="gp-title">${titleHtml}</div>
-        ${hdr}
-        <div class="gp-list"${listId}>${totalHtml}${_buildGeoPanelHtml(provided, stats, pfx)}</div>
+        <div class="gp-list"${listId}>${hdr}${totalHtml}${_buildGeoPanelHtml(provided, stats, pfx)}</div>
         <div class="gp-charts">
           <div class="gp-chart-box">
             <div class="gp-chart-title">Уровень благосостояния по ЦКС</div>
@@ -1931,8 +1933,7 @@ function _buildRegionAnalyticsHtml(titleHtml, rows, stats, kpi, isRaion) {
   return `<div class="gp-main">
       <div class="gp-body">
         <div class="gp-title">${titleHtml}</div>
-        ${hdr}
-        <div class="gp-list" id="ra-sort-list">${totalHtml}${list}</div>
+        <div class="gp-list" id="ra-sort-list">${hdr}${totalHtml}${list}</div>
         <div class="gp-charts">
           <div class="gp-chart-box">
             <div class="gp-chart-title">Уровень благосостояния по ЦКС</div>
@@ -3029,7 +3030,7 @@ function initPayTooltip() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  const savedTheme = localStorage.getItem('theme') || 'light';
+  const savedTheme = localStorage.getItem('theme') || 'dark';
   document.documentElement.dataset.theme = savedTheme === 'light' ? 'light' : '';
   const sw = document.getElementById('theme-switch');
   if (sw) sw.checked = savedTheme === 'light';
