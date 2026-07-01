@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ЕЦП "Анализ по мерам государственной поддержке МИО"</title>
+  <title>ЕЦП "Анализ по мерам государственной поддержки МИО"</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="/style.css?v=37">
 </head>
@@ -11,7 +11,7 @@
 
 <header>
   <div class="header-title-block">
-    <h0>Единая цифровая платформа "Анализ по мерам государственной поддержке МИО"</h0>
+    <h0>Единая цифровая платформа "Анализ по мерам государственной поддержки МИО"</h0>
     <div class="header-date" id="header-date"></div>
   </div>
   <div class="breadcrumb" id="breadcrumb">
@@ -37,7 +37,7 @@
       <div class="value accent" id="kpi-budget">—</div>
     </div>
     <div class="kpi-card kpi-multi">
-      <div class="label">Подано заявок</div>
+      <div class="label">ПРИНЯТО ЗАЯВЛЕНИЙ</div>
       <div class="value accent" id="kpi-app-count">—</div>
       <div class="kpi-sum-row">
         <span class="label">на сумму</span>
@@ -87,15 +87,17 @@
   <!-- Right KPI column (2) -->
   <div class="kpi-col kpi-col-right">
     <div class="kpi-card">
-      <div class="label">МГП по сумме заявок</div>
+      <div class="label">СУММЫ ПО ПРИНЯТЫМ ЗАЯВЛЕНИЯМ
+        В РАЗРЕЗЕ ВИДОВ ПОМОЩИ
+        </div>
       <div id="kpi-top-mgp" class="kpi-top-mgp"></div>
     </div>
     <div class="kpi-card kpi-multi">
-      <div class="label">Фактических услугополучателей</div>
-      <div class="value" id="kpi-recipients">—</div>
-      <div class="label" style="margin-top:14px">Факт выплачено</div>
+      <div class="label">ПРОИЗВЕДЁННЫЕ ВЫПЛАТЫ</div>
       <div class="value kpi-deliv" id="kpi-deliv">—</div>
+      <div class="label">ВЫПЛАЧЕННАЯ СУММА</div>
       <div class="kpi-sub"><b id="kpi-deliv-pct">—</b> от суммы заявок</div>
+      <div class="kpi-sub" style="margin-top:6px">по <b id="kpi-recipients">—</b> получателям</div>
     </div>
   </div>
 

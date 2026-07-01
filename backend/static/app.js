@@ -87,7 +87,7 @@ function showLogin() {
   ov.innerHTML = `
     <form class="auth-card" id="auth-form">
       <div class="auth-logo">🏛️</div>
-      <div class="auth-title">Анализ по мерам государственной поддержке МИО</div>
+      <div class="auth-title">Анализ по мерам государственной поддержки МИО</div>
       <div class="auth-sub">Войдите в систему, чтобы продолжить</div>
       <input type="text" id="auth-login" placeholder="Логин" autocomplete="username" autofocus>
       <input type="password" id="auth-pass" placeholder="Пароль" autocomplete="current-password">
@@ -531,7 +531,7 @@ async function init() {
   mapLegend.onAdd = function() {
     const div = L.DomUtil.create('div', 'map-legend');
     div.innerHTML = `
-      <div class="ml-title">Фактически оказанных МГП</div>
+      <div class="ml-title">Утвержденные виды помощи в МИО </div>
       <div class="ml-item"><span class="ml-dot" style="background:#c0392b"></span>0 видов помощи</div>
       <div class="ml-item"><span class="ml-dot" style="background:#e67e22"></span>1–4 вида</div>
       <div class="ml-item"><span class="ml-dot" style="background:#27ae60"></span>5 и более</div>`;
@@ -615,7 +615,7 @@ function updateMapLegend() {
       <div class="ml-item"><span class="ml-dot" style="background:#27ae60"></span>20% и более</div>`;
   } else {
     div.innerHTML = `
-      <div class="ml-title">Фактически оказанных МГП</div>
+      <div class="ml-title">Утвержденные виды помощи в МИО </div>
       <div class="ml-item"><span class="ml-dot" style="background:#c0392b"></span>0 видов помощи</div>
       <div class="ml-item"><span class="ml-dot" style="background:#e67e22"></span>1–4 вида</div>
       <div class="ml-item"><span class="ml-dot" style="background:#27ae60"></span>5 и более</div>`;
@@ -1472,21 +1472,21 @@ function sortRaTable(col) {
 
 function _gpSortHdrInner() {
   return `<span class="gp-pay gp-hdr gp-sortable" onclick="sortGpTable('name')">Вид помощи</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('recipients')">Услугополучатели</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_dec')">Сумма заявок</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('fact_recipients')">Факт услугополучателей</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_deliv')">Факт выплачено</span>
-        <span class="gp-stat gp-hdr">Бюджет</span>`;
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('recipients')">Кол-во</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_dec')">Принятые заявления</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('fact_recipients')">Кол-во</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_deliv')">Фактическая выплата</span>
+        <span class="gp-stat gp-hdr">Утвержденный бюджет</span>`;
 }
 
 function _raSortHdrInner() {
   const col = _lastRaIsRaion ? 'Район' : 'Регион';
   return `<span class="gp-pay gp-hdr gp-sortable" onclick="sortRaTable('name')">${col}</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('recipients')">Услугополучатели</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_dec')">Сумма заявок</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('fact_recipients')">Факт услугополучателей</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_deliv')">Факт выплачено</span>
-        <span class="gp-stat gp-hdr">Бюджет</span>`;
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('recipients')">Кол-во</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_dec')">Принятые заявления</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('fact_recipients')">Кол-во</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_deliv')">Фактическая выплата</span>
+        <span class="gp-stat gp-hdr">Утвержденный бюджет</span>`;
 }
 
 function _makeRaComparator() {
@@ -1619,7 +1619,7 @@ function _buildGauge(deliv, dec) {
   const color = frac >= 0.66 ? '#2ecc71' : frac >= 0.33 ? '#f7dc6f' : '#e67e22';
   const pctTxt = (dec > 0 ? pct.toFixed(1).replace('.', ',') : '0') + '%';
   return `<div class="gp-gauge">
-      <div class="gp-gauge-title">Факт / Сумма заявок</div>
+      <div class="gp-gauge-title">Факт выплаты / к сумме принятых заявлении</div>
       <svg viewBox="0 0 200 120" class="gp-gauge-svg">
         <path d="M20,100 A80,80 0 0 1 180,100" fill="none" stroke="rgba(150,160,190,0.25)" stroke-width="15" stroke-linecap="round"/>
         <path d="M20,100 A80,80 0 0 1 ${xe},${ye}" fill="none" stroke="${color}" stroke-width="15" stroke-linecap="round"/>
@@ -1627,7 +1627,7 @@ function _buildGauge(deliv, dec) {
       </svg>
       <div class="gp-gauge-nums">
         <div><span class="gp-gauge-lbl">Факт выплачено</span><b>${formatCompact(deliv)} ₸</b></div>
-        <div><span class="gp-gauge-lbl">Сумма заявок</span><b>${formatCompact(dec)} ₸</b></div>
+        <div><span class="gp-gauge-lbl">Сумма принятых заявлений</span><b>${formatCompact(dec)} ₸</b></div>
       </div>
     </div>`;
 }
@@ -1644,11 +1644,11 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp') {
     } else {
       hdr = `<div class="gp-hdr-row">
         <span class="gp-pay gp-hdr">Вид помощи</span>
-        <span class="gp-stat gp-hdr">Услугопол.</span>
-        <span class="gp-stat gp-hdr">Сумма заявок</span>
-        <span class="gp-stat gp-hdr">Факт ус-пол.</span>
-        <span class="gp-stat gp-hdr">Факт выплачено</span>
-        <span class="gp-stat gp-hdr">Бюджет</span>
+        <span class="gp-stat gp-hdr">Кол-во</span>
+        <span class="gp-stat gp-hdr">Приняты заявления</span>
+        <span class="gp-stat gp-hdr">Кол-во</span>
+        <span class="gp-stat gp-hdr">Фактическая выплата</span>
+        <span class="gp-stat gp-hdr">Утвержденный бюджет</span>
       </div>`;
     }
   }

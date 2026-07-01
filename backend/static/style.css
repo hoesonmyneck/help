@@ -3469,7 +3469,7 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 .mtab-summary-body .gp-row {
   width: 100%;
   min-width: min-content;
-  grid-template-columns: minmax(200px, 1fr) 100px 120px 160px 108px 100px;
+  grid-template-columns: minmax(150px, 0.9fr) 70px 130px 70px 140px 100px;
 }
 .mtab-summary-body .gp-row > *:nth-child(even),
 .mtab-summary-body .gp-hdr-row > *:nth-child(even) {
@@ -3636,7 +3636,7 @@ header { flex-shrink: 0; }
 /* Компактные колонки таблицы МГП */
 .kpi-geo-side .gp-hdr-row,
 .kpi-geo-side .gp-row {
-  grid-template-columns: minmax(0, 250px) 70px 90px 90px 105px 60px;
+  grid-template-columns: minmax(0, 150px) 50px 130px 50px 120px 120px;
   font-size: 0.70rem;
 }
 /* Заголовки числовых колонок не вылезают за ячейку */
