@@ -719,6 +719,9 @@ function addLabel(latlng, text) {
 function _toTitleCase(s) {
   if (!s) return s;
   const l = s.toLowerCase();
+  // города республиканского значения: «г.Астана» — префикс строчный, название с заглавной
+  const m = l.match(/^г\.\s*(.+)$/);
+  if (m) return 'г.' + m[1].charAt(0).toUpperCase() + m[1].slice(1);
   return l.charAt(0).toUpperCase() + l.slice(1);
 }
 

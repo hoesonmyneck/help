@@ -3789,7 +3789,7 @@ header { flex-shrink: 0; }
 .kpi-geo-side .gp-grp-row,
 .kpi-geo-side .gp-hdr-row,
 .kpi-geo-side .gp-row {
-  grid-template-columns: minmax(0, 150px) 50px 100px 50px 100px 150px;
+  grid-template-columns: minmax(0, 1fr) 50px 100px 50px 100px 150px;
   font-size: 0.70rem;
 }
 /* Заголовки числовых колонок не вылезают за ячейку */
