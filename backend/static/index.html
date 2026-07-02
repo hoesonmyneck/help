@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ЕЦП "Анализ по дополнительным видам помощи МИО"</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="/style.css?v=62">
+  <link rel="stylesheet" href="/style.css?v=67">
 </head>
 <body>
 
@@ -90,9 +90,12 @@
             </div>
           </div>
           <button type="button" id="map3d-back" class="map3d-back" style="display:none" onclick="backFromRegion3D()">← Регионы</button>
-          <div id="map3d-legend" class="map3d-legend">
-            <div class="m3l-item"><span class="m3l-bar"></span><span id="map3d-legend-metric">Высота столбца = сумма принятых заявлений</span></div>
-            <div class="m3l-item"><span class="m3l-cross">✕</span>Сумма отсутствует</div>
+          <div class="map3d-br">
+            <button type="button" id="map3d-home" class="map3d-home" title="Сбросить вид" aria-label="Сбросить вид" onclick="resetMap3DView()">⌂</button>
+            <div id="map3d-legend" class="map3d-legend">
+              <div class="m3l-item"><span class="m3l-bar"></span><span id="map3d-legend-metric">Высота столбца = сумма принятых заявлений</span></div>
+              <div class="m3l-item"><span class="m3l-cross">✕</span>Сумма отсутствует</div>
+            </div>
           </div>
           <div id="map3d-tip" class="cube3d-tip" style="display:none"></div>
           <div id="map3d-empty" class="map3d-empty" style="display:none">Нет данных</div>
@@ -113,10 +116,12 @@
 
   <!-- Right KPI column (2) -->
   <div class="kpi-col kpi-col-right">
-    <div class="kpi-card">
+    <div class="kpi-card kpi-card-expandable" id="kpi-card-top-mgp" onclick="toggleTopMgpList()">
       <div class="label">Рейтинг сумм видов помощи по принятым заявлениям
         </div>
       <div id="kpi-top-mgp" class="kpi-top-mgp"></div>
+      <div class="kpi-expand-corners"><span class="kpi-cn kpi-cn-tl"></span><span class="kpi-cn kpi-cn-tr"></span><span class="kpi-cn kpi-cn-bl"></span><span class="kpi-cn kpi-cn-br"></span></div>
+      <div class="kpi-help-list" id="kpi-top-mgp-list"></div>
     </div>
     <div class="kpi-card kpi-multi">
       <div class="label">ПРОИЗВЕДЁННЫЕ ВЫПЛАТЫ</div>
@@ -382,7 +387,7 @@
 <div id="geo-panel" class="geo-panel"></div>
 <div id="pay-tooltip" class="pay-tooltip" style="display:none"></div>
 
-<script src="/app.js?v=47"></script>
+<script src="/app.js?v=48"></script>
 <script src="/kpifx.js?v=11"></script>
 
 <!-- Three.js (для 3D-пирога видов помощи) -->
@@ -395,6 +400,6 @@
 }
 </script>
 <script type="module" src="/pie3d.js?v=15"></script>
-<script type="module" src="/map3d.js?v=7"></script>
+<script type="module" src="/map3d.js?v=11"></script>
 </body>
 </html>

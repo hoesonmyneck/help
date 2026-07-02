@@ -63,7 +63,7 @@ function toggleHelpTypesList(ev) {
 
 function _kpiCardToggle(cardId, renderFn) {
   const card = document.getElementById(cardId);
-  const col  = card?.closest('.kpi-col-left');
+  const col  = card?.closest('.kpi-col-left, .kpi-col-right');
   if (!card) return;
   if (card.classList.contains('expanded')) {
     card.classList.add('closing');
@@ -1055,9 +1055,35 @@ async function refreshKPI(sduSeq) {
   refreshActiveMapTab();   // обновить активную вкладку блока карты под новый регион/район
 }
 
+let _lastTopMgpRows = [];
+function toggleTopMgpList(ev) {
+  if (ev) ev.stopPropagation();
+  _kpiCardToggle('kpi-card-top-mgp', _populateTopMgpList);
+}
+function _populateTopMgpList() {
+  const list = document.getElementById('kpi-top-mgp-list');
+  if (!list) return;
+  const items = [..._lastTopMgpRows]
+    .filter(r => (r.total_dec || 0) > 0)
+    .sort((a, b) => (b.total_dec || 0) - (a.total_dec || 0));
+  if (!items.length) { list.innerHTML = '<div class="kpi-help-item">Нет данных</div>'; return; }
+  list.innerHTML = items.map((r, i) => {
+    const name = stripHelpPrefix(r.pay_type || '—');
+    return `<div class="kpi-help-item">
+      <span class="kpi-help-num">${i + 1}</span>
+      <span class="kpi-help-name" title="${name}">${name}</span>
+      <span class="kpi-help-val">${formatCompact(r.total_dec || 0)} ₸</span>
+    </div>`;
+  }).join('');
+}
+
 function renderTopMgp(rows) {
+  _lastTopMgpRows = rows || [];
   const el = document.getElementById('kpi-top-mgp');
   if (!el) return;
+  // если карточка раскрыта — обновить полный список под новый регион/фильтр
+  const card = document.getElementById('kpi-card-top-mgp');
+  if (card && card.classList.contains('expanded')) _populateTopMgpList();
   const top4 = (rows || []).slice(0, 4);
   if (!top4.length) { el.innerHTML = '<div class="kpi-empty">Нет данных</div>'; return; }
   el.innerHTML =

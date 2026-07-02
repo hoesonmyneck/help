@@ -3559,6 +3559,20 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 /* Переключатель метрики в 3D — слева сверху (в 3D нет контрола зума, поэтому левее, чем в 2D) */
 .map3d-controls { left: 12px; z-index: 6; }
 
+/* Правый нижний угол: домик над легендой */
+.map3d-br {
+  position: absolute; right: 12px; bottom: 12px; z-index: 6;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+}
+/* Кнопка-домик: сброс вида (зум + ориентация) в 3D-карте */
+.map3d-home {
+  width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+  background: var(--bg-card); border: 1px solid var(--bd-hi); border-radius: 8px;
+  color: var(--tx-sub); font-size: 1.2rem; line-height: 1; cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35); transition: background .15s, color .15s;
+}
+.map3d-home:hover { background: var(--ac-teal); color: #fff; border-color: var(--ac-teal); }
+
 .map3d-back {
   position: absolute; top: 10px; right: 12px; left: auto; z-index: 6;
   background: var(--bg-card); border: 1px solid var(--bd-hi); border-radius: 8px;
@@ -3570,7 +3584,6 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 
 /* Легенда 3D-карты (правый нижний угол) */
 .map3d-legend {
-  position: absolute; right: 12px; bottom: 12px; z-index: 6;
   background: var(--bg-card); border: 1px solid var(--bd-hi); border-radius: 8px;
   padding: 8px 11px; box-shadow: 0 2px 10px rgba(0,0,0,0.35);
   display: flex; flex-direction: column; gap: 6px;
@@ -3650,6 +3663,7 @@ header { flex-shrink: 0; }
 
 /* Правая KPI-колонка схлопывается */
 .kpi-col-right {
+  position: relative; /* для раскрытия карточки-рейтинга поверх колонки */
   overflow: visible; /* позволяет 3D-тилту выходить за границы */
   max-width: 1000px;
   transition: max-width 0.42s cubic-bezier(0.4,0,0.2,1),
@@ -3912,11 +3926,15 @@ header { flex-shrink: 0; }
 @keyframes kpi-cn-br { 0%,100%{opacity:.35;transform:translate(0,0)}  50%{opacity:1;transform:translate(3px,3px)}   }
 
 /* Другие карточки плавно исчезают/появляются */
-.kpi-col-left .kpi-card { transition: opacity 0.22s ease; }
-.kpi-col-left.kpi-expanding .kpi-card:not(.expanded) {
+.kpi-col-left .kpi-card,
+.kpi-col-right .kpi-card { transition: opacity 0.22s ease; }
+.kpi-col-left.kpi-expanding .kpi-card:not(.expanded),
+.kpi-col-right.kpi-expanding .kpi-card:not(.expanded) {
   opacity: 0;
   pointer-events: none;
 }
+/* при раскрытии карточки-рейтинга прячем превью топ-4, показываем полный список */
+.kpi-card-expandable.expanded .kpi-top-mgp { display: none; }
 
 .kpi-card-expandable { cursor: pointer; position: relative; }
 .kpi-card-expandable:hover { filter: brightness(1.08); }

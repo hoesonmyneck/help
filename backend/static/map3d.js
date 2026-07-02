@@ -31,7 +31,8 @@ function ensureScene() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 600);
-  camera.position.set(0, 26, 30);
+  const CAM_START = new THREE.Vector3(0, 26, 30);
+  camera.position.copy(CAM_START);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -54,6 +55,25 @@ function ensureScene() {
   controls.target.set(0, 0, 0);
   controls.minDistance = 12; controls.maxDistance = 90;
   controls.maxPolarAngle = Math.PI / 2.06;
+
+  // Сброс вида: плавно вернуть камеру в стартовую позицию/ориентацию и убрать зум
+  const homeTarget = new THREE.Vector3(0, 0, 0);
+  const _view = {
+    anim: false, t0: 0, dur: 0.7,
+    fromPos: new THREE.Vector3(), fromTgt: new THREE.Vector3(), toTgt: new THREE.Vector3(),
+  };
+  function resetView() {
+    // погасить инерцию вращения: с выключенным damping update() обнуляет накопленную скорость
+    controls.enableDamping = false;
+    controls.update();
+    controls.enableDamping = true;
+    _view.fromPos.copy(camera.position);
+    _view.fromTgt.copy(controls.target);
+    _view.toTgt.copy(homeTarget);
+    _view.t0 = clock.getElapsedTime();
+    _view.anim = true;
+    controls.enabled = false;   // блокируем ввод/инерцию на время анимации
+  }
 
   const mapGroup = new THREE.Group();   // плитки регионов/районов
   const barGroup = new THREE.Group();   // столбцы
@@ -154,12 +174,26 @@ function ensureScene() {
       // геометрия сдвинута так, что основание в локальном 0 → масштабируем только по Y,
       // position.y остаётся PLATE_H, столбец растёт от плитки карты вверх
       m.scale.y = Math.max(0.001, e);
+      // подпись с суммой едет вместе с вершиной столбца
+      if (m.userData.label) {
+        m.userData.label.position.y = m.position.y + m.userData.h * m.scale.y + 0.7;
+      }
     });
-    controls.update();
+    if (_view.anim) {
+      // плавный возврат камеры к стартовому виду (easeInOutCubic)
+      const k = Math.min(1, (t - _view.t0) / _view.dur);
+      const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      camera.position.lerpVectors(_view.fromPos, CAM_START, e);
+      controls.target.lerpVectors(_view.fromTgt, _view.toTgt, e);
+      camera.lookAt(controls.target);
+      if (k >= 1) { _view.anim = false; controls.enabled = true; }
+    } else {
+      controls.update();
+    }
     renderer.render(scene, camera);
   })();
 
-  S = { scene, camera, controls, renderer, mapGroup, barGroup, clock };
+  S = { scene, camera, controls, renderer, mapGroup, barGroup, clock, homeTarget, resetView };
   return S;
 }
 
@@ -168,8 +202,36 @@ function clearGroup(g) {
     const o = g.children[g.children.length - 1];
     g.remove(o);
     o.geometry?.dispose?.();
-    if (o.material) { (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); }
+    if (o.material) { (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { m.map?.dispose?.(); m.dispose(); }); }
   }
+}
+
+// Текстовая подпись (сумма) как спрайт — всегда повёрнута к камере, рисуется поверх столбца.
+function makeTextSprite(text, light) {
+  const fs = 44, padX = 10, padY = 6;
+  const cv = document.createElement('canvas');
+  const ctx = cv.getContext('2d');
+  const font = `700 ${fs}px 'Roboto', Arial, sans-serif`;
+  ctx.font = font;
+  const w = ctx.measureText(text).width;
+  cv.width = Math.ceil(w + padX * 2);
+  cv.height = fs + padY * 2;
+  ctx.font = font;                                  // сброс после смены размера canvas
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 7;
+  ctx.strokeStyle = light ? 'rgba(255,255,255,0.95)' : 'rgba(8,11,22,0.9)';
+  ctx.strokeText(text, cv.width / 2, cv.height / 2);   // контур для читаемости на любом фоне
+  ctx.fillStyle = light ? '#12233f' : '#ffffff';
+  ctx.fillText(text, cv.width / 2, cv.height / 2);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = 4;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
+  const sprite = new THREE.Sprite(mat);
+  const SC = 0.02;                                  // мировых единиц на пиксель
+  sprite.scale.set(cv.width * SC, cv.height * SC, 1);
+  sprite.renderOrder = 10;
+  return sprite;
 }
 
 // Собираем проекцию lng/lat → плоскость XZ по границам всех полигонов текущего уровня.
@@ -289,11 +351,19 @@ function buildMap(s, payload) {
     mesh.scale.y = 0.001;
     mesh.userData = { d: u, featId: u.id, baseEmis: 0.16, t0, delay: (idx % 40) * 0.02, h };
     s.barGroup.add(mesh);
+
+    // подпись с суммой на вершине столбца (без значка ₸; едет вверх вместе с ростом)
+    const label = makeTextSprite(fmtMoney(v).replace(/\s*₸/, ''), light);
+    label.position.set(x, PLATE_H + h + 0.7, z);
+    mesh.userData.label = label;
+    s.barGroup.add(label);
     idx++;
   });
 
   // подгоняем target камеры к центру карты (уже 0,0 по построению)
-  s.controls.target.set(0, Math.min(8, maxVal ? 4 : 0), 0);
+  const ty = Math.min(8, maxVal ? 4 : 0);
+  s.controls.target.set(0, ty, 0);
+  s.homeTarget?.set(0, ty, 0);   // «домик» будет возвращать к этой цели
 }
 
 // Красный крестик (+) на плитке региона — маркер нулевой суммы заявок.
@@ -328,3 +398,6 @@ window.renderMap3D = function (payload) {
 window.refreshMap3DTheme = function () {
   if (S && _lastPayload) buildMap(S, _lastPayload);
 };
+
+// сброс вида (кнопка-домик): убрать зум и вернуть правильную ориентацию
+window.resetMap3DView = function () { S?.resetView?.(); };
