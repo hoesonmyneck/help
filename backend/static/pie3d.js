@@ -190,10 +190,18 @@ function ensureScene() {
   return S;
 }
 
+function updatePieLegend(mode) {
+  const h = document.getElementById('pie3d-legend-h');
+  const a = document.getElementById('pie3d-legend-a');
+  if (h) h.textContent = 'Высота сектора = ' + (mode === 'deliv' ? 'сумма фактической выплаты' : 'сумма заявлений');
+  if (a) a.textContent = 'Угол сектора = ' + (mode === 'deliv' ? 'кол-во услугополучателей' : 'количество заявлений');
+}
+
 function buildPie(s, rows) {
   const mode = _pieMode;
   const valKey = mode === 'deliv' ? 'total_deliv' : 'total_dec';
   const empty = document.getElementById('pie3d-empty');
+  updatePieLegend(mode);
 
   // очистка прошлых кусков
   while (s.sliceGroup.children.length) {
@@ -354,6 +362,7 @@ async function openDetail(d, hex) {
   detail.baseRegion = (S && S.region != null) ? S.region : null; // если пирог в регионе — сразу районы
   detail.region = null;
   panel.style.display = 'flex';
+  document.getElementById('pie3d-legend')?.style.setProperty('display', 'none');
   if (S) {
     S.controls.autoRotate = false;
     // сдвигаем пирог влево на половину ширины панели, чтобы она его не перекрывала
@@ -385,6 +394,12 @@ async function loadDetail() {
   let rows = [];
   try { rows = await fetch('/api/paytype-geo?' + p.toString()).then(r => r.json()); }
   catch (e) { console.error('paytype-geo', e); }
+  // В режиме «По фактической сумме» показываем только реальные выплаты:
+  // прячем регионы/районы с нулевой факт. выплатой и сортируем по ней.
+  if (_pieMode === 'deliv') {
+    rows = rows.filter(r => (r.total_deliv || 0) > 0)
+               .sort((a, b) => (b.total_deliv || 0) - (a.total_deliv || 0));
+  }
   detail.rows = rows;
   drawBars(rows, detail.hex, eff == null); // на уровне областей бары кликабельны (провал в районы)
 }
@@ -392,6 +407,7 @@ async function loadDetail() {
 function closeDetail() {
   const panel = document.getElementById('pie3d-detail');
   if (panel) panel.style.display = 'none';
+  document.getElementById('pie3d-legend')?.style.setProperty('display', '');   // вернуть к CSS (flex)
   if (S) { S.controls.autoRotate = true; S.setShift(0); }
 }
 
@@ -406,6 +422,34 @@ function drawBars(rows, hex, clickable) {
   const tickColor = light ? '#3c4043' : '#cfd6e6';
   const lblColor = light ? '#202124' : '#e6ebf5';
   const gridColor = light ? 'rgba(60,64,67,0.12)' : 'rgba(255,255,255,0.08)';
+
+  // Сумма у вершины каждого столбца: снаружи справа, а если не влезает — внутри столбца
+  const valueLabels = {
+    id: 'pie3dBarValues',
+    afterDatasetsDraw(chart) {
+      const { ctx: c, chartArea } = chart;
+      const meta = chart.getDatasetMeta(0);
+      c.save();
+      c.font = "700 10px 'Roboto', sans-serif";
+      c.textBaseline = 'middle';
+      const PAD = 6;
+      meta.data.forEach((bar, i) => {
+        const v = vals[i];
+        if (!v) return;
+        const txt = fmtMoney(v);
+        const w = c.measureText(txt).width;
+        if (bar.x + PAD + w <= chartArea.right) {
+          c.textAlign = 'left'; c.fillStyle = lblColor;
+          c.fillText(txt, bar.x + PAD, bar.y);           // снаружи, справа от вершины
+        } else {
+          c.textAlign = 'right'; c.fillStyle = '#ffffff';
+          c.fillText(txt, bar.x - PAD, bar.y);           // внутри столбца (не влезло снаружи)
+        }
+      });
+      c.restore();
+    },
+  };
+
   if (detailChart) detailChart.destroy();
   detailChart = new window.Chart(ctx, {
     type: 'bar',
@@ -419,6 +463,7 @@ function drawBars(rows, hex, clickable) {
         borderRadius: 4,
       }],
     },
+    plugins: [valueLabels],
     options: {
       indexAxis: 'y',
       responsive: true,

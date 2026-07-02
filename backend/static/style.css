@@ -742,6 +742,17 @@ header h0 {
   border-bottom: 1px solid var(--bd-main);
 }
 .gp-budget-summary .gp-pay { color: var(--tx-dim); font-style: italic; }
+/* Итоговая строка «Республика Казахстан» — выделена цветом */
+.gp-row.gp-total-kz {
+  background: rgba(78,205,196,0.16);
+  border-radius: 4px;
+}
+.gp-row.gp-total-kz .gp-pay {
+  color: var(--ac-teal); font-style: normal; font-weight: 700;
+}
+.gp-row.gp-total-kz .gp-stat { font-weight: 700; }
+:root[data-theme="light"] .gp-row.gp-total-kz { background: rgba(47,86,127,0.10); }
+:root[data-theme="light"] .gp-row.gp-total-kz .gp-pay { color: var(--ac-blue); }
 .gp-hdr-row { border-bottom: 2px solid var(--bd-mid); margin-bottom: 1px; }
 .gp-grp-row {
   display: grid;
@@ -3159,6 +3170,21 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 }
 .pie3d-wrap:active { cursor: grabbing; }
 .table-section.is-fullscreen .pie3d-wrap { flex: 1; min-height: 0; height: auto; }
+
+/* Легенда 3D-пирога (левый нижний угол — правый занят панелью деталей) */
+.pie3d-legend {
+  position: absolute; left: 12px; bottom: 12px; z-index: 6;
+  background: var(--bg-card); border: 1px solid var(--bd-hi); border-radius: 8px;
+  padding: 8px 11px; box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+  display: flex; flex-direction: column; gap: 6px;
+  font-size: 0.72rem; color: var(--tx-sub); pointer-events: none; max-width: 280px;
+}
+.p3l-item { display: flex; align-items: center; gap: 7px; }
+.p3l-bar {
+  flex-shrink: 0; width: 10px; height: 15px; border-radius: 2px;
+  background: linear-gradient(180deg, #f875c3, #5b8af8);
+}
+.p3l-pie { flex-shrink: 0; width: 12px; text-align: center; color: var(--ac-teal); font-size: 0.95rem; line-height: 1; }
 .pie3d-empty {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   color: var(--tx-dim); font-size: 0.95rem;

@@ -981,6 +981,7 @@ async function showGeoSidePanel(geoId, geoName, isRaion) {
   layout.classList.add('map-drill-active');
   panel.innerHTML = '<div class="gp-main"><div class="gp-body"><div class="gp-title">Загрузка…</div></div></div>';
   _gsPayFilter = null; _gsGeoId = geoId; _gsGeoIsRaion = isRaion;
+  _geoSort['gs'] = { col: null, dir: 1 };   // сброс сортировки при смене гео
   if (map) { setTimeout(() => map.invalidateSize(), 60); setTimeout(() => map.invalidateSize(), 460); }
 
   try {
@@ -1540,18 +1541,18 @@ const _geoKpiCache = {};
 let _geoPanelActiveId = null;
 let gpSduChart = null;
 
-// ── Состояние сортировки для двух табличных вкладок ──────────────────────────
-const _gpSort  = { col: null, dir: 1 };   // Аналитика по МГП
+// ── Состояние сортировки таблиц видов помощи (по каждому префиксу отдельно) ──
+// pfx: 'mt' — вкладка видов помощи, 'gs' — боковая панель, 'gp' — панель страны/тултип
+const _geoSort = {};   // { [pfx]: {col, dir} }
+const _geoData = {};   // { [pfx]: {provided, stats, kpi, emptyMsg} } — кэш для пересортировки
 const _raSort  = { col: null, dir: 1 };   // Аналитика по регионам
 
-// Кешируем последние данные для перерисовки без повторного запроса
-let _lastGpProvided = [], _lastGpStats = {}, _lastGpPfx = 'mt';
 let _mtPayFilter = null; // pay_type_id выбранной строки в "Аналитика по МГП"
 let _gsPayFilter = null; _gsGeoId = null; _gsGeoIsRaion = false; // фильтр в левой боковой панели
 let _raGeoFilter = null; // raion_id выбранной строки в "Аналитика по регионам"
 let _lastRaRows = [], _lastRaIsRaion = false;
 // «Итого» кешируем отдельно, чтобы всегда вставлять первой
-let _lastGpTotal = '', _lastRaTotal = '';
+let _lastRaTotal = '';
 
 // Применить/инвертировать сортировку и перерисовать только строки (не «Итого»)
 function _tableGroupHdr() {
@@ -1563,13 +1564,17 @@ function _tableGroupHdr() {
     `</div>`;
 }
 
-function sortGpTable(col) {
-  if (_gpSort.col === col) _gpSort.dir *= -1; else { _gpSort.col = col; _gpSort.dir = 1; }
-  const listEl = document.getElementById('gp-sort-list');
-  if (!listEl) return;
+// Сортировка таблицы видов помощи по любому префиксу (mt / gs / gp)
+function sortGeoTable(pfx, col) {
+  const st = _geoSort[pfx] || (_geoSort[pfx] = { col: null, dir: 1 });
+  if (st.col === col) st.dir *= -1; else { st.col = col; st.dir = 1; }
+  const listEl = document.getElementById(`${pfx}-sort-list`);
+  const d = _geoData[pfx];
+  if (!listEl || !d) return;
   listEl.innerHTML = _tableGroupHdr() +
-    `<div class="gp-hdr-row" id="gp-sort-hdr">${_gpSortHdrInner()}</div>` +
-    _lastGpTotal + _buildGeoPanelHtml(_lastGpProvided, _lastGpStats, _lastGpPfx);
+    `<div class="gp-hdr-row" id="${pfx}-sort-hdr">${_geoSortHdrInner(pfx)}</div>` +
+    _buildGeoTotalRow(d.stats, d.kpi) +
+    _buildGeoPanelHtml(d.provided, d.stats, pfx, d.emptyMsg);
 }
 function sortRaTable(col) {
   if (_raSort.col === col) _raSort.dir *= -1; else { _raSort.col = col; _raSort.dir = 1; }
@@ -1583,13 +1588,14 @@ function sortRaTable(col) {
      '<div class="gp-empty" style="padding:8px 4px">Нет данных</div>');
 }
 
-function _gpSortHdrInner() {
-  return `<span class="gp-pay gp-hdr gp-sortable" onclick="sortGpTable('name')">Вид помощи</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('recipients')">Кол-во</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_dec')">Сумма</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('fact_recipients')">Кол-во</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_deliv')">Сумма</span>
-        <span class="gp-stat gp-hdr">Сумма</span>`;
+function _geoSortHdrInner(pfx) {
+  const q = c => `sortGeoTable('${pfx}','${c}')`;
+  return `<span class="gp-pay gp-hdr gp-sortable" onclick="${q('name')}">Вид помощи</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="${q('recipients')}">Кол-во</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="${q('total_dec')}">Сумма</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="${q('fact_recipients')}">Кол-во</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="${q('total_deliv')}">Сумма</span>
+        <span class="gp-stat gp-hdr gp-sortable" onclick="${q('budget')}">Сумма</span>`;
 }
 
 function _raSortHdrInner() {
@@ -1599,7 +1605,7 @@ function _raSortHdrInner() {
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_dec')">Сумма</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('fact_recipients')">Кол-во</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_deliv')">Сумма</span>
-        <span class="gp-stat gp-hdr">Сумма</span>`;
+        <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('budget')">Сумма</span>`;
 }
 
 function _makeRaComparator() {
@@ -1621,20 +1627,23 @@ function _buildGeoPanelHtml(provided, stats, pfx = 'gp', emptyMsg = 'Нет да
       fact_recipients: s ? (s.fact_recipients || 0) : 0,
       total_dec:       s ? (s.total_dec || 0) : 0,
       total_deliv:     s ? (s.total_deliv || 0) : 0,
+      budget:          s ? (s.budget || 0) : 0,   // пока нет данных по видам помощи → 0 (столбец «—»)
     };
   });
-  // Сортировка МГП-строк
-  const col = _gpSort.col, dir = _gpSort.dir;
+  // Сортировка строк по выбранной колонке (независимо для каждого префикса)
+  const st = _geoSort[pfx] || {};
+  const col = st.col, dir = st.dir || 1;
   if (col) {
     rows.sort((a, b) => col === 'name'
       ? dir * stripHelpPrefix(a.c.name).localeCompare(stripHelpPrefix(b.c.name), 'ru')
-      : dir * (a[col] - b[col]));
+      : dir * ((a[col] || 0) - (b[col] || 0)));
   }
-  return rows.map(({ c, recipients, fact_recipients, total_dec, total_deliv }) => {
+  return rows.map(({ c, recipients, fact_recipients, total_dec, total_deliv, budget }) => {
     const recip = formatInt(recipients);
     const fact  = formatInt(fact_recipients);
     const dec   = total_dec > 0 ? formatNum(total_dec) : '0';
     const deliv = total_deliv > 0 ? formatNum(total_deliv) : '0';
+    const budgetTxt = budget > 0 ? formatNum(budget) + ' ₸' : '—';
     const isActive = (pfx === 'mt' && _mtPayFilter === c.id) || (pfx === 'gs' && _gsPayFilter === c.id);
     const onclick  = pfx === 'mt' ? ` onclick="filterMtByPayType(${c.id}, this)"`
                    : pfx === 'gs' ? ` onclick="filterGsByPayType(${c.id}, this)"` : '';
@@ -1644,7 +1653,7 @@ function _buildGeoPanelHtml(provided, stats, pfx = 'gp', emptyMsg = 'Нет да
       <span class="gp-stat">${dec} ₸</span>
       <span class="gp-stat">${fact}</span>
       <span class="gp-stat">${deliv} ₸</span>
-      <span class="gp-stat gp-budget">—</span>
+      <span class="gp-stat gp-budget">${budgetTxt}</span>
     </div>`;
   }).join('');
 }
@@ -1713,8 +1722,8 @@ function _buildGeoTotalRow(stats, kpi) {
   const dec = k.total_dec_pay_sum != null ? formatCompact(k.total_dec_pay_sum) + ' ₸' : '—';
   const deliv = k.total_deliv_sum != null ? formatCompact(k.total_deliv_sum) + ' ₸' : '—';
   const budget = stats && stats._budget > 0 ? formatCompact(stats._budget) + ' ₸' : '—';
-  return `<div class="gp-row gp-budget-summary">
-      <span class="gp-pay">Итого</span>
+  return `<div class="gp-row gp-budget-summary gp-total-kz">
+      <span class="gp-pay">Республика Казахстан</span>
       <span class="gp-stat">${recip}</span>
       <span class="gp-stat">${dec}</span>
       <span class="gp-stat">${fact}</span>
@@ -1750,25 +1759,12 @@ function _buildGauge(deliv, dec) {
 // pfx — префикс id для канвасов (чтобы плавающий тултип и вкладка «Сводка» не конфликтовали).
 function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp', emptyMsg = 'Нет данных') {
   const k = kpi || {};
-  const isSortable = (pfx === 'mt');   // сортировка только во вкладке, не в плавающем тултипе
+  _geoData[pfx] = { provided, stats, kpi, emptyMsg };   // кэш для пересортировки по клику
   let hdr = '';
   if (provided.length) {
-    if (isSortable) {
-      hdr = `<div class="gp-hdr-row" id="gp-sort-hdr">${_gpSortHdrInner()}</div>`;
-    } else {
-      hdr = `<div class="gp-hdr-row">
-        <span class="gp-pay gp-hdr">Вид помощи</span>
-        <span class="gp-stat gp-hdr">Кол-во</span>
-        <span class="gp-stat gp-hdr">Сумма</span>
-        <span class="gp-stat gp-hdr">Кол-во</span>
-        <span class="gp-stat gp-hdr">Сумма</span>
-        <span class="gp-stat gp-hdr">Сумма</span>
-      </div>`;
-    }
+    hdr = `<div class="gp-hdr-row" id="${pfx}-sort-hdr">${_geoSortHdrInner(pfx)}</div>`;
   }
   const totalHtml = _buildGeoTotalRow(stats, kpi);
-  if (isSortable) _lastGpTotal = totalHtml;
-  const listId = isSortable ? ' id="gp-sort-list"' : '';
   const gaChartBox = `<div class="gp-chart-box">
             <div class="gp-chart-title">Пол / Возраст</div>
             <div id="${pfx}-ga-chart" class="ga-chart gp-ga"></div>
@@ -1778,7 +1774,7 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp', emptyMsg
   return `<div class="gp-main">
       <div class="gp-body">
         <div class="gp-title">${titleHtml}</div>
-        <div class="gp-list"${listId}>${hdr ? _tableGroupHdr() : ''}${hdr}${totalHtml}${_buildGeoPanelHtml(provided, stats, pfx, emptyMsg)}</div>
+        <div class="gp-list" id="${pfx}-sort-list">${hdr ? _tableGroupHdr() : ''}${hdr}${totalHtml}${_buildGeoPanelHtml(provided, stats, pfx, emptyMsg)}</div>
         <div class="gp-charts">
           <div class="gp-chart-box">
             <div class="gp-chart-title">Уровень благосостояния по ЦКС</div>
@@ -1797,7 +1793,7 @@ async function filterMtByPayType(payTypeId, rowEl) {
 
   // Подсветить активную строку
   const row = (rowEl && rowEl.closest) ? rowEl.closest('.gp-row') : rowEl;
-  document.querySelectorAll('#gp-sort-list .gp-row').forEach(r => r.classList.remove('gp-active'));
+  document.querySelectorAll('#mt-sort-list .gp-row').forEach(r => r.classList.remove('gp-active'));
   if (_mtPayFilter !== null && row) row.classList.add('gp-active');
 
   // Запросить KPI с фильтром по виду помощи
@@ -2118,8 +2114,7 @@ async function renderMapSummary() {
     let title = 'Республика Казахстан';
     if (currentRaion != null) title = _toTitleCase((raionStats[currentRaion]?.name) || row.name || 'Район');
     else if (currentRegion != null) title = _toTitleCase((regionStats[currentRegion]?.name) || row.name || 'Регион');
-    _lastGpProvided = provided; _lastGpStats = stats; _lastGpPfx = 'mt';
-    _gpSort.col = null; _mtPayFilter = null; // сброс при смене уровня
+    _geoSort['mt'] = { col: null, dir: 1 }; _mtPayFilter = null; // сброс сортировки/фильтра при смене уровня
     body.innerHTML = _buildGeoMainHtml(title, provided, stats, kpi, 'mt', _npaEmptyMsg(currentRegion));
     renderGeoPanelCharts(kpi, 'mt');
   } catch (e) {
