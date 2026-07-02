@@ -763,6 +763,8 @@ header h0 {
   background: rgba(106,136,200,0.07);
   padding: 2px 4px;
 }
+/* Групповая шапка над одиночным столбцом (Утвержденный бюджет) */
+.gp-grp-span.gp-grp-1 { grid-column: span 1; }
 :root[data-theme="light"] .gp-grp-span {
   color: var(--ac-blue);
   border-color: var(--ac-blue);
@@ -3495,6 +3497,68 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 
 #mtab-map { position: relative; }
 #mtab-map #map { flex: 1; min-height: 0; height: auto; }
+
+/* ── Переключатель 2D / 3D карты ── */
+.map-view-seg {
+  position: absolute; top: 10px; right: 140px; left: auto; transform: none;
+  z-index: 1000; display: flex; background: var(--bg-card);
+  border: 1px solid var(--bd-hi); border-radius: 8px; overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+}
+.mv-btn {
+  background: none; border: none; font-family: inherit; font-size: 0.78rem;
+  color: var(--tx-dim); padding: 6px 16px; cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.mv-btn + .mv-btn { border-left: 1px solid var(--bd-main); }
+.mv-btn:hover { color: var(--tx-sub); }
+.mv-btn.active { background: var(--ac-teal); color: #fff; font-weight: 600; }
+
+.map-view { display: none; flex: 1; min-height: 0; position: relative; }
+.map-view.active { display: flex; flex-direction: column; min-height: 0; }
+.map-view#map-view-2d.active #map { flex: 1; min-height: 0; height: auto; }
+
+.map3d-wrap {
+  position: relative; flex: 1; min-height: 0; height: auto;
+  border-radius: 10px; overflow: hidden; cursor: grab;
+  background: radial-gradient(120% 120% at 50% 0%, #1c2444 0%, #12162b 70%);
+}
+.map3d-wrap:active { cursor: grabbing; }
+.map3d-wrap canvas { display: block; width: 100% !important; height: 100% !important; }
+.map3d-wrap .cube3d-tip { z-index: 6; }
+.map3d-empty {
+  position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+  color: var(--tx-dim); font-size: 0.9rem;
+}
+/* Переключатель метрики в 3D — слева сверху (в 3D нет контрола зума, поэтому левее, чем в 2D) */
+.map3d-controls { left: 12px; z-index: 6; }
+
+.map3d-back {
+  position: absolute; top: 10px; right: 12px; left: auto; z-index: 6;
+  background: var(--bg-card); border: 1px solid var(--bd-hi); border-radius: 8px;
+  color: var(--tx-sub); font-family: inherit; font-size: 0.8rem; font-weight: 600;
+  padding: 7px 13px; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+  transition: background .15s, color .15s;
+}
+.map3d-back:hover { background: var(--ac-teal); color: #fff; border-color: var(--ac-teal); }
+
+/* Легенда 3D-карты (правый нижний угол) */
+.map3d-legend {
+  position: absolute; right: 12px; bottom: 12px; z-index: 6;
+  background: var(--bg-card); border: 1px solid var(--bd-hi); border-radius: 8px;
+  padding: 8px 11px; box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+  display: flex; flex-direction: column; gap: 6px;
+  font-size: 0.72rem; color: var(--tx-sub); pointer-events: none; max-width: 260px;
+}
+.m3l-item { display: flex; align-items: center; gap: 7px; }
+.m3l-bar {
+  flex-shrink: 0; width: 10px; height: 15px; border-radius: 2px;
+  background: linear-gradient(180deg, #f875c3, #5b8af8);
+}
+.m3l-cross { flex-shrink: 0; width: 10px; text-align: center; color: #ff4d4d; font-weight: 700; }
+:root[data-theme="light"] .map3d-wrap {
+  background: radial-gradient(120% 120% at 50% 0%, #eef2f9 0%, #dde3ee 70%);
+}
 
 .mtab-summary-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .mtab-summary-body .gp-main {

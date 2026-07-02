@@ -109,13 +109,13 @@ function ensureScene() {
     if (obj && tip) {
       const d = obj.userData.d;
       const vk = obj.userData.valKey || 'total_dec';
-      const label = vk === 'total_deliv' ? 'Факт выплачено' : 'Сумма заявок';
+      const label = vk === 'total_deliv' ? 'Сумма фактической выплаты' : 'Сумма принятых заявлений';
       tip.style.display = 'block';
       tip.style.left = (e.clientX - r.left + 14) + 'px';
       tip.style.top = (e.clientY - r.top + 14) + 'px';
       const dimLine = vk === 'total_deliv'
-        ? `Факт услугополучателей: ${formatInt(d.fact_recipients || 0)}`
-        : `Заявок: ${d.count}`;
+        ? `Количество услугополучателей: ${formatInt(d.fact_recipients || 0)}`
+        : `Количество заявлений: ${d.count}`;
       const pct = vk === 'total_deliv' ? d.pctRecip : d.pctCount;
       tip.innerHTML = `<b>${stripHelpPrefix(d.pay_type)}</b><br>${label}: ${fmtMoney(d[vk])} · ${pct}%<br>` +
         `<span class="cube3d-tip-dim">${dimLine}</span>`;
@@ -372,7 +372,7 @@ async function loadDetail() {
   const byRaion = eff != null;
   if (titleEl) titleEl.textContent = stripHelpPrefix(detail.payName);
   if (subEl) {
-    const metricLabel = _pieMode === 'deliv' ? 'Факт выплачено' : 'Сумма заявок';
+    const metricLabel = _pieMode === 'deliv' ? 'Сумма фактической выплаты' : 'Сумма принятых заявлений';
     subEl.textContent = byRaion
       ? (`${metricLabel} по районам` + (detail.region != null && detail.regionName ? ' — ' + stripHelpPrefix(detail.regionName) : ''))
       : `${metricLabel} по областям`;

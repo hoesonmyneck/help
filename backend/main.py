@@ -511,6 +511,7 @@ def raions(region_id: int = Query(...), sdu_filter: str = Query(None), gender_fi
 
 @app.get("/api/ranking")
 def ranking(region_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
+    from sqlalchemy import case as sa_case
     with Session(engine) as db:
         def _q(): return db.query(
             Payment.kato_region.label("id") if region_id is None else Payment.kato_raion.label("id"),
@@ -519,6 +520,7 @@ def ranking(region_id: int = Query(None), sdu_filter: str = Query(None), gender_
             func.count(Payment.dec_pay_sum).label("accepted"),
             func.count(distinct(Payment.sicid)).label("recipients"),
             func.sum(Payment.dec_pay_sum).label("total_dec"),
+            func.sum(sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)).label("total_deliv"),
         )
         if region_id is None:
             rows = apply_extra_filters(_q(), sdu_filter, gender_filter, age_group) \
@@ -539,6 +541,7 @@ def ranking(region_id: int = Query(None), sdu_filter: str = Query(None), gender_
                 "accepted": r.accepted,
                 "recipients": r.recipients,
                 "total_dec": round(total_dec, 2) if total_dec is not None else None,
+                "total_deliv": round(float(r.total_deliv or 0), 2),
             })
         return result
 

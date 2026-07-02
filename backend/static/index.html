@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ЕЦП "Анализ по дополнительным видам помощи МИО"</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="/style.css?v=54">
+  <link rel="stylesheet" href="/style.css?v=61">
 </head>
 <body>
 
@@ -67,14 +67,37 @@
       <button type="button" class="expand-btn map-expand" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
     </div>
     <div class="mtab-pane active" id="mtab-map">
-      <button type="button" class="expand-btn map-info" onclick="showCountryPanel(event)" title="Сводка по Казахстану">Казахстан</button>
-      <div class="map-controls-row">
-        <div class="map-color-modes">
-          <button type="button" class="mcm-btn active" data-mode="vidy" onclick="setMapColorMode('vidy')">По видам помощи</button>
-          <button type="button" class="mcm-btn" data-mode="pct" onclick="setMapColorMode('pct')">% выплат</button>
+      <div class="map-view-seg">
+        <button type="button" class="mv-btn active" data-mview="2d" onclick="switchMapView('2d')">2D</button>
+        <button type="button" class="mv-btn" data-mview="3d" onclick="switchMapView('3d')">3D</button>
+      </div>
+      <div class="map-view active" id="map-view-2d">
+        <button type="button" class="expand-btn map-info" onclick="showCountryPanel(event)" title="Сводка по Казахстану">Казахстан</button>
+        <div class="map-controls-row">
+          <div class="map-color-modes">
+            <button type="button" class="mcm-btn active" data-mode="vidy" onclick="setMapColorMode('vidy')">По видам помощи</button>
+            <button type="button" class="mcm-btn" data-mode="pct" onclick="setMapColorMode('pct')">% выплат</button>
+          </div>
+        </div>
+        <div id="map"></div>
+      </div>
+      <div class="map-view" id="map-view-3d">
+        <div id="map3d-wrap" class="map3d-wrap">
+          <div class="map-controls-row map3d-controls">
+            <div class="map-color-modes">
+              <button type="button" class="mcm-btn active" data-m3d="dec" onclick="setMap3DMetric('dec')">Принятые заявления</button>
+              <button type="button" class="mcm-btn" data-m3d="deliv" onclick="setMap3DMetric('deliv')">Фактическая выплата</button>
+            </div>
+          </div>
+          <button type="button" id="map3d-back" class="map3d-back" style="display:none" onclick="backFromRegion3D()">← Регионы</button>
+          <div id="map3d-legend" class="map3d-legend">
+            <div class="m3l-item"><span class="m3l-bar"></span><span id="map3d-legend-metric">Высота столбца = сумма принятых заявлений</span></div>
+            <div class="m3l-item"><span class="m3l-cross">✕</span>Сумма отсутствует</div>
+          </div>
+          <div id="map3d-tip" class="cube3d-tip" style="display:none"></div>
+          <div id="map3d-empty" class="map3d-empty" style="display:none">Нет данных</div>
         </div>
       </div>
-      <div id="map"></div>
     </div>
     <div class="mtab-pane" id="mtab-summary"><div id="mtab-summary-body" class="mtab-summary-body"></div></div>
     <div class="mtab-pane" id="mtab-regions"><div id="mtab-regions-body" class="mtab-summary-body"></div></div>
@@ -152,8 +175,8 @@
         </div>
         <div class="dyn-seg" id="dyn-metric-seg">
           <button class="dyn-seg-btn active" data-dmetric="count">Кол-во людей</button>
-          <button class="dyn-seg-btn" data-dmetric="deliv">Факт выплачено</button>
-          <button class="dyn-seg-btn" data-dmetric="dec">Сумма заявок</button>
+          <button class="dyn-seg-btn" data-dmetric="deliv">Факт. выплата</button>
+          <button class="dyn-seg-btn" data-dmetric="dec">Принятые заявления</button>
         </div>
       </div>
     </div>
@@ -355,7 +378,7 @@
 <div id="geo-panel" class="geo-panel"></div>
 <div id="pay-tooltip" class="pay-tooltip" style="display:none"></div>
 
-<script src="/app.js?v=36"></script>
+<script src="/app.js?v=44"></script>
 <script src="/kpifx.js?v=11"></script>
 
 <!-- Three.js (для 3D-пирога видов помощи) -->
@@ -368,5 +391,6 @@
 }
 </script>
 <script type="module" src="/pie3d.js?v=12"></script>
+<script type="module" src="/map3d.js?v=7"></script>
 </body>
 </html>

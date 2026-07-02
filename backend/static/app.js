@@ -687,7 +687,7 @@ function updateMapLegend() {
   if (!div) return;
   if (mapColorMode === 'pct') {
     div.innerHTML = `
-      <div class="ml-title">Факт выплачено / сумма заявок</div>
+      <div class="ml-title">Фактическая выплата / Принятые заявления</div>
       <div class="ml-item"><span class="ml-dot" style="background:#c0392b"></span>менее 10%</div>
       <div class="ml-item"><span class="ml-dot" style="background:#e67e22"></span>10–20%</div>
       <div class="ml-item"><span class="ml-dot" style="background:#27ae60"></span>20% и более</div>`;
@@ -910,6 +910,8 @@ function toggleTheme(isLight) {
     const body = document.getElementById(`gap-body-${i}`);
     if (body && body.style.display !== 'none') renderGapChart(i);
   });
+  window.refreshMap3DTheme?.();
+  refreshGpSduChartsTheme();
 }
 
 function goBack() {
@@ -1557,7 +1559,7 @@ function _tableGroupHdr() {
     `<span></span>` +
     `<span class="gp-grp-span">Принятые заявления</span>` +
     `<span class="gp-grp-span">Фактическая выплата</span>` +
-    `<span></span>` +
+    `<span class="gp-grp-span gp-grp-1">Утвержденный бюджет</span>` +
     `</div>`;
 }
 
@@ -1587,7 +1589,7 @@ function _gpSortHdrInner() {
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_dec')">Сумма</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('fact_recipients')">Кол-во</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortGpTable('total_deliv')">Сумма</span>
-        <span class="gp-stat gp-hdr">Утвержденный бюджет</span>`;
+        <span class="gp-stat gp-hdr">Сумма</span>`;
 }
 
 function _raSortHdrInner() {
@@ -1597,7 +1599,7 @@ function _raSortHdrInner() {
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_dec')">Сумма</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('fact_recipients')">Кол-во</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_deliv')">Сумма</span>
-        <span class="gp-stat gp-hdr">Утвержденный бюджет</span>`;
+        <span class="gp-stat gp-hdr">Сумма</span>`;
 }
 
 function _makeRaComparator() {
@@ -1760,7 +1762,7 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp', emptyMsg
         <span class="gp-stat gp-hdr">Сумма</span>
         <span class="gp-stat gp-hdr">Кол-во</span>
         <span class="gp-stat gp-hdr">Сумма</span>
-        <span class="gp-stat gp-hdr">Утвержденный бюджет</span>
+        <span class="gp-stat gp-hdr">Сумма</span>
       </div>`;
     }
   }
@@ -1849,9 +1851,17 @@ function renderGeoPanelCharts(kpi, pfx = 'gp') {
   renderGpGenderAge(kpi.male_count || 0, kpi.female_count || 0, kpi.age || {}, pfx);
 }
 
+const _lastSduByPfx = {};   // кэш данных СДУ по каждому графику — для перерисовки при смене темы
+function refreshGpSduChartsTheme() {
+  Object.keys(_lastSduByPfx).forEach(pfx => {
+    if (document.getElementById(`${pfx}-sdu-chart`)) renderGpSduChart(_lastSduByPfx[pfx], pfx);
+  });
+}
+
 function renderGpSduChart(sdu, pfx = 'gp') {
   const cv = document.getElementById(`${pfx}-sdu-chart`);
   if (!cv || !window.Chart) return;
+  _lastSduByPfx[pfx] = sdu;
   const keys = ['A', 'B', 'C', 'D', 'E'];
   const values = keys.map(k => sdu[k] || 0);
   const total = values.reduce((a, b) => a + b, 0);
@@ -1940,6 +1950,7 @@ function switchMapTab(name) {
   document.querySelectorAll('.map-tabs .mtab-btn').forEach(b => b.classList.toggle('active', b.dataset.mtab === name));
   document.querySelectorAll('.map-tabs .mtab-pane').forEach(p => p.classList.toggle('active', p.id === 'mtab-' + name));
   if (name === 'map') {
+    if (_mapView === '3d') renderMap3DTab();
     if (typeof map !== 'undefined' && map) setTimeout(() => {
       map.invalidateSize();
       if (_mapNeedsFit && raionsLayer) {
@@ -1967,12 +1978,120 @@ function refreshActiveMapTab() {
   const active = document.querySelector('.map-tabs .mtab-btn.active');
   if (!active) return;
   switch (active.dataset.mtab) {
+    case 'map': if (_mapView === '3d') renderMap3DTab(); break;
     case 'summary': renderMapSummary(); break;
     case 'regions': renderRegionAnalytics(); break;
     case 'dynamics': loadDynamics(); break;
     case 'pie': window.renderPie3D?.(currentRegion, currentRaion); break;
     case 'data': ensureDataTable(); break;
   }
+}
+
+// ── Переключатель 2D / 3D карты ──
+let _mapView = '2d';
+let _map3dMetric = 'dec';   // 'dec' — принятые заявления (сумма заявок), 'deliv' — фактическая выплата
+
+function setMap3DMetric(m) {
+  if (m === _map3dMetric) return;
+  _map3dMetric = m;
+  document.querySelectorAll('.map3d-controls .mcm-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.m3d === m));
+  renderMap3DTab();
+}
+function switchMapView(view) {
+  if (view === _mapView) return;
+  _mapView = view;
+  document.querySelectorAll('.map-view-seg .mv-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.mview === view));
+  document.getElementById('map-view-2d')?.classList.toggle('active', view === '2d');
+  document.getElementById('map-view-3d')?.classList.toggle('active', view === '3d');
+  if (view === '2d') {
+    // Пока 2D-подвид был скрыт, у #map был нулевой размер — любой fitBounds по нему
+    // (в т.ч. при 3D-drill) даёт кривой зум. Пересчитываем размер и заново подгоняем
+    // карту под текущий уровень (область → её границы, страна → общий вид).
+    if (typeof map !== 'undefined' && map) setTimeout(() => {
+      map.invalidateSize();
+      if (currentRegion != null && raionsLayer) {
+        try { map.fitBounds(raionsLayer.getBounds(), { padding: [20, 20] }); } catch (_) {}
+      } else {
+        map.setView([48, 68], 4);
+      }
+      _mapNeedsFit = false;
+    }, 60);
+  } else {
+    renderMap3DTab();
+  }
+}
+
+// Данные для 3D-карты: полигоны текущего уровня + столбцы (высота = сумма заявок)
+async function renderMap3DTab() {
+  if (!window.renderMap3D) return;
+  const isRaion = currentRegion != null;
+  let polygons, centroids, url;
+  if (isRaion) {
+    polygons = {
+      ...raionGeoJSON,
+      features: (raionGeoJSON?.features || []).filter(f => f.properties.id_reg == currentRegion),
+    };
+    centroids = raionCentroids;
+    url = `/api/ranking?region_id=${currentRegion}`;
+  } else {
+    polygons = regionGeoJSON;
+    centroids = regionCentroids;
+    url = '/api/ranking';
+  }
+  if (!polygons || !polygons.features) return;
+  let rows = [];
+  try { rows = await fetch(url).then(r => r.json()); }
+  catch (e) { console.error('map3d ranking', e); }
+  const rankMap = {};
+  rows.forEach(r => { rankMap[Math.round(r.id)] = r; });
+  // высота столбца: 'dec' — сумма принятых заявлений, 'deliv' — фактически выплачено
+  const valKey = _map3dMetric === 'deliv' ? 'total_deliv' : 'total_dec';
+  const metricLabel = _map3dMetric === 'deliv' ? 'Фактическая выплата' : 'Принятые заявления';
+  // строим по всем полигонам уровня: где нет заявок/сумма 0 — value=0 (модуль нарисует крестик)
+  const idKey = isRaion ? 'id_rai' : 'id_reg';
+  const units = {};
+  polygons.features.forEach(f => {
+    const id = Math.round(f.properties[idKey]);
+    const c = centroids[id];
+    if (!c || units[id]) return;
+    const r = rankMap[id];
+    units[id] = {
+      id,
+      name: r?.name || f.properties.raion || f.properties.region || '',
+      centroid: c,
+      value: r?.[valKey] || 0,
+      count: r?.count || 0,
+    };
+  });
+  // кнопка «назад» видна только когда мы внутри региона
+  const backBtn = document.getElementById('map3d-back');
+  if (backBtn) backBtn.style.display = isRaion ? '' : 'none';
+  // легенда: текст про столбец зависит от выбранной метрики
+  const legEl = document.getElementById('map3d-legend-metric');
+  if (legEl) legEl.textContent = 'Высота столбца = ' +
+    (_map3dMetric === 'deliv' ? 'сумма фактической выплаты' : 'сумма принятых заявлений');
+  window.renderMap3D({
+    polygons,
+    units,
+    idKey,
+    metricLabel,
+    level: isRaion ? 'raion' : 'region',
+    onDrill: isRaion ? null : enterRegion3D,   // проваливаемся только с уровня регионов
+  });
+}
+
+// Вход внутрь региона с 3D-карты: переиспользуем 2D-drill, затем перерисовываем 3D районами
+async function enterRegion3D(regionId) {
+  await drillRegion(regionId);
+  renderMap3DTab();
+}
+
+// Назад из региона на 3D-карте к общему виду регионов
+function backFromRegion3D() {
+  goBack();
+  renderMap3DTab();
 }
 
 // Вкладка «Сводка» — тот же контент, что во всплывающем тултипе, по текущему уровню (КЗ/регион/район)
