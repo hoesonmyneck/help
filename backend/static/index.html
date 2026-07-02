@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ЕЦП "Анализ по дополнительным видам помощи МИО"</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="/style.css?v=67">
+  <link rel="stylesheet" href="/style.css?v=69">
 </head>
 <body>
 
@@ -17,6 +17,7 @@
   <div class="breadcrumb" id="breadcrumb">
     <span onclick="goBack()">Казахстан</span>
   </div>
+  <button type="button" class="help-btn" onclick="openSupportModal()" title="Контакты поддержки" aria-label="Контакты поддержки">?</button>
   <label class="theme-toggle" title="Светлая / тёмная тема">
     <input type="checkbox" id="theme-switch" onchange="toggleTheme(this.checked)">
     <span class="toggle-slider"></span>
@@ -387,7 +388,24 @@
 <div id="geo-panel" class="geo-panel"></div>
 <div id="pay-tooltip" class="pay-tooltip" style="display:none"></div>
 
-<script src="/app.js?v=49"></script>
+<!-- Модальное окно контактов поддержки -->
+<div id="support-modal" class="support-overlay" style="display:none" onclick="closeSupportModal()">
+  <div class="support-card" onclick="event.stopPropagation()">
+    <button type="button" class="support-close" onclick="closeSupportModal()" aria-label="Закрыть">✕</button>
+    <div class="support-title">Техническая поддержка</div>
+    <img class="support-qr" src="/support-qr.jpg?v=1" alt="QR-код поддержки">
+    <div class="support-contacts">
+      <div class="support-row">
+        <span class="support-ic">✉</span><span>support_newesobes@enbek.kz</span>
+      </div>
+      <div class="support-row">
+        <span class="support-ic">☎</span><span>1414</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js?v=50"></script>
 <script src="/kpifx.js?v=11"></script>
 
 <!-- Three.js (для 3D-пирога видов помощи) -->

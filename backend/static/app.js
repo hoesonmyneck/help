@@ -159,6 +159,19 @@ async function logout() {
   location.reload();
 }
 
+// ── Модальное окно контактов поддержки ──
+function openSupportModal() {
+  const m = document.getElementById('support-modal');
+  if (m) m.style.display = 'flex';
+}
+function closeSupportModal() {
+  const m = document.getElementById('support-modal');
+  if (m) m.style.display = 'none';
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeSupportModal();
+});
+
 function showLogin() {
   const ov = document.createElement('div');
   ov.className = 'auth-overlay';

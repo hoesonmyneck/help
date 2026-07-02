@@ -143,6 +143,51 @@
 }
 .logout-btn:hover { background: var(--bd-hi); }
 
+/* Кнопка «?» — контакты поддержки */
+.help-btn {
+  width: 28px; height: 28px; flex-shrink: 0; margin-left: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--bg-deep); border: 1px solid var(--bd-hi); border-radius: 50%;
+  color: var(--tx-sub); font-size: 0.95rem; font-weight: 700; cursor: pointer;
+  font-family: inherit; transition: background 0.15s, color 0.15s;
+}
+.help-btn:hover { background: var(--ac-teal); color: #fff; border-color: var(--ac-teal); }
+
+/* Модальное окно контактов поддержки */
+.support-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.55); backdrop-filter: blur(2px);
+  animation: kpi-fade-in 0.18s ease;
+}
+.support-card {
+  position: relative; background: var(--bg-card);
+  border: 1px solid var(--bd-hi); border-radius: 14px;
+  padding: 26px 28px; width: min(340px, 90vw);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  text-align: center;
+}
+.support-close {
+  position: absolute; top: 10px; right: 12px;
+  background: none; border: none; color: var(--tx-dim);
+  font-size: 1.1rem; cursor: pointer; line-height: 1; padding: 4px;
+}
+.support-close:hover { color: var(--ac-teal); }
+.support-title { font-size: 1.05rem; font-weight: 700; color: var(--tx-main); }
+.support-qr {
+  width: 190px; height: 190px; object-fit: contain;
+  background: #fff; padding: 8px; border-radius: 10px;
+}
+.support-contacts { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.support-row {
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  color: var(--tx-main); font-size: 0.9rem;
+  padding: 8px 12px; border: 1px solid var(--bd-main); border-radius: 8px;
+  user-select: text;   /* некликабельно, но можно выделить/скопировать */
+}
+.support-ic { color: var(--ac-teal); font-size: 1.05rem; }
+
 @keyframes bg-drift {
   0%   { background-position: 0% 50%;   }
   50%  { background-position: 100% 50%; }
