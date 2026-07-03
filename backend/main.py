@@ -1680,6 +1680,7 @@ def geo_stats(region_id: int = Query(None), raion_id: int = Query(None)):
         pay_rows = (
             base.with_entities(
                 Payment.pay_type_id,
+                func.count(Payment.id).label('count'),
                 func.count(distinct(Payment.sicid)).label('recipients'),
                 func.count(distinct(
                     sa_case((Payment.app_status == 'Выполнено', Payment.sicid))
@@ -1698,6 +1699,7 @@ def geo_stats(region_id: int = Query(None), raion_id: int = Query(None)):
             if r.pay_type_id is None:
                 continue
             result[r.pay_type_id] = {
+                'count': r.count or 0,
                 'recipients': r.recipients or 0,
                 'fact_recipients': r.fact_recipients or 0,
                 'total_dec': float(r.total_dec or 0),
@@ -1780,6 +1782,7 @@ def ranking_oblasts(region_id: int = Query(None)):
                 db.query(
                     Payment.kato_raion.label('geo_id'),
                     Payment.kato_rainame.label('geo_name'),
+                    func.count(Payment.id).label('count'),
                     func.count(distinct(Payment.sicid)).label('recipients'),
                     func.count(distinct(
                         sa_case((Payment.app_status == 'Выполнено', Payment.sicid))
@@ -1801,6 +1804,7 @@ def ranking_oblasts(region_id: int = Query(None)):
                 result.append({
                     'id': r.geo_id,
                     'name': r.geo_name or f'Район {r.geo_id}',
+                    'count': r.count or 0,
                     'recipients': r.recipients or 0,
                     'fact_recipients': r.fact_recipients or 0,
                     'total_deliv': float(r.total_deliv or 0),
@@ -1812,6 +1816,7 @@ def ranking_oblasts(region_id: int = Query(None)):
                 db.query(
                     Payment.kato_region.label('geo_id'),
                     Payment.kato_regname.label('geo_name'),
+                    func.count(Payment.id).label('count'),
                     func.count(distinct(Payment.sicid)).label('recipients'),
                     func.count(distinct(
                         sa_case((Payment.app_status == 'Выполнено', Payment.sicid))
@@ -1834,6 +1839,7 @@ def ranking_oblasts(region_id: int = Query(None)):
                 result.append({
                     'id': r.geo_id,
                     'name': name,
+                    'count': r.count or 0,
                     'recipients': r.recipients or 0,
                     'fact_recipients': r.fact_recipients or 0,
                     'total_deliv': float(r.total_deliv or 0),
