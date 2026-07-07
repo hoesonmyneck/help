@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime, date
 from openpyxl import load_workbook
 from sqlalchemy import text
@@ -161,6 +162,31 @@ def parse_num(val, cast=float):
         return None
 
 
+def _fmt_geo_name(raw):
+    """Привести REG/DIS (ВЕРХНИЙ РЕГИСТР) к аккуратному виду для отображения.
+
+    «КАРАГАНДА Г.А.»          -> «г.Караганда»   (город-администрация)
+    «Г.АСТАНА» / «Г.КОСШЫ»    -> «г.Астана» / «г.Косшы»
+    «САРЫСУСКИЙ РАЙОН»        -> «Сарысуский район»
+    «КАРАГАНДИНСКАЯ ОБЛАСТЬ»  -> «Карагандинская область»
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    # заглавная первая буква и буквы после дефиса: «западно-казахстанская» -> «Западно-Казахстанская»
+    def _cap(x):
+        return re.sub(r'(^|-)([а-яёa-z])', lambda mm: mm.group(1) + mm.group(2).upper(), x.lower())
+    m = re.match(r'^(.*?)\s+г\.а\.?$', s, re.IGNORECASE)      # «X Г.А.»
+    if m:
+        return 'г.' + _cap(m.group(1).strip())
+    m = re.match(r'^г\.\s*(.+)$', s, re.IGNORECASE)           # «Г.X»
+    if m:
+        return 'г.' + _cap(m.group(1).strip())
+    return _cap(s)
+
+
 def parse_gender(val):
     """New data has gender as text МУЖСКОЙ/ЖЕНСКИЙ; map to 1/2."""
     if val is None:
@@ -191,14 +217,21 @@ def parse_payment_rows(ws) -> list:
     for row in ws.iter_rows(min_row=2, values_only=True):
         if row[b] is None:
             continue
+        # Регион/район определяем по KATO_REG/REG (кол. 6-7) и KATO_DIS/DIS (кол. 8-9),
+        # а НЕ по KATO_REGION/KATO_RAION (кол. 27-28): последние дробят города
+        # республиканского значения (Астана, Шымкент) на районы и иногда ошибочно
+        # приписывают чужие записи. KATO_REG (9 знаков) // 10_000_000 = 2-значный код
+        # региона; KATO_DIS // 100_000 = 4-значный код района.
+        _kreg = parse_num(row[b + 5], int)   # KATO_REG
+        _kdis = parse_num(row[b + 7], int)   # KATO_DIS
         rows_data.append(Payment(
             app_id=parse_num(row[b + 0], int),
             app_date=parse_date(row[b + 1]),
             app_date_close=parse_date(row[b + 2]),
             app_status=str(row[b + 3]).strip() if row[b + 3] else None,
             iin=str(row[b + 4]).strip() if row[b + 4] else None,
-            kato_reg=parse_num(row[b + 5], int),
-            kato_dis=parse_num(row[b + 7], int),
+            kato_reg=_kreg,
+            kato_dis=_kdis,
             pay_type_id=parse_num(row[b + 9], int),
             pay_type=str(row[b + 10]).strip() if row[b + 10] else None,
             cat_type_id=parse_num(row[b + 11], int),
@@ -216,10 +249,10 @@ def parse_payment_rows(ws) -> list:
             gender_id=parse_num(row[b + 23], int),
             vozrast=parse_num(row[b + 24], int),
             sdu_tzhs=str(row[b + 25]).strip() if row[b + 25] else None,
-            kato_region=parse_num(row[b + 26], int),
-            kato_raion=parse_num(row[b + 27], int),
-            kato_regname=str(row[b + 28]).strip() if row[b + 28] else None,
-            kato_rainame=str(row[b + 29]).strip() if row[b + 29] else None,
+            kato_region=(_kreg // 10_000_000) if _kreg is not None else None,
+            kato_raion=(_kdis // 100_000) if _kdis is not None else None,
+            kato_regname=_fmt_geo_name(row[b + 6]),
+            kato_rainame=_fmt_geo_name(row[b + 8]),
         ))
     return rows_data
 

@@ -676,8 +676,13 @@ function regionStyle(feature) {
 }
 
 function raionStyle(feature) {
+  // город-целиком (Астана/Шымкент): у полигона региона нет id_rai — красим по
+  // единственному «району» (7100/7900)
+  const id = REGIONS_NO_RAION.has(+currentRegion)
+    ? Number(Object.keys(raionStats)[0])
+    : feature.properties.id_rai;
   return {
-    fillColor: geoFill(feature.properties.id_rai),
+    fillColor: geoFill(id),
     weight: 1,
     color: '#3a5090',
     fillOpacity: 0.75,
@@ -740,6 +745,37 @@ function _toTitleCase(s) {
 
 const REGIONS_NO_NPA = new Set([10, 62]);
 
+// Города республиканского значения без районного деления: Астана (71), Шымкент (79).
+// При заходе в такой регион на карте не показываем районы, а рисуем регион целиком
+// одной фигурой. Алматы (75) сюда НЕ входит — у него районы есть.
+const REGIONS_NO_RAION = new Set([71, 79]);
+
+// Построить слой «районов» для 2D-drill. Для городов без районов (Астана/Шымкент)
+// берём цельный полигон региона и трактуем его как единственный «район» (7100/7900).
+function _buildDrillLayer(regionId) {
+  const whole = REGIONS_NO_RAION.has(+regionId);
+  const src = whole ? regionGeoJSON : raionGeoJSON;
+  const filtered = {
+    ...src,
+    features: src.features.filter(f => f.properties.id_reg == regionId),
+  };
+  const soleId = whole ? Number(Object.keys(raionStats)[0]) : null;   // 7100 / 7900
+  const idOf = f => whole ? soleId : f.properties.id_rai;
+  const layer = L.geoJSON(filtered, {
+    style: raionStyle,
+    onEachFeature(feature, lyr) {
+      lyr.bindTooltip(() => raionStats[idOf(feature)]?.name || _regionName(regionId),
+                      { sticky: true, className: 'map-name-tip' });
+      lyr.on({
+        mouseover(e) { e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 }); },
+        mouseout(e)  { layer.resetStyle(e.target); },
+        click()      { const id = idOf(feature); if (id != null) selectRaion(id); },
+      });
+    },
+  });
+  return layer;
+}
+
 function _npaEmptyMsg(regionId) {
   return REGIONS_NO_NPA.has(+regionId) ? 'Не предусмотрено в НПА' : 'Нет обращений';
 }
@@ -773,7 +809,10 @@ function renderRaionLabels() {
   clearLabels();
   labelsLayer = L.layerGroup();
   Object.entries(raionStats).forEach(([id, s]) => {
-    const c = raionCentroids[Math.round(id)];
+    // город-целиком (Астана/Шымкент): у единственного «района» нет своего центроида —
+    // берём центроид региона
+    let c = raionCentroids[Math.round(id)];
+    if (!c && REGIONS_NO_RAION.has(+currentRegion)) c = regionCentroids[currentRegion];
     if (!c) return;
     const label = entitledLabel(id) ?? `${s.pay_type_count ?? '?'}/${s.cat_type_count ?? '?'}`;
     labelsLayer.addLayer(addLabel([c[1], c[0]], label));
@@ -815,23 +854,9 @@ async function drillRegionFromRanking(regionId) {
   data.forEach(r => { raionStats[r.id_rai] = r; });
 
   // Update map layers silently (no fitBounds)
-  const filtered = {
-    ...raionGeoJSON,
-    features: raionGeoJSON.features.filter(f => f.properties.id_reg == regionId),
-  };
   if (regionsLayer) { map.removeLayer(regionsLayer); }
   if (raionsLayer) { map.removeLayer(raionsLayer); }
-  raionsLayer = L.geoJSON(filtered, {
-    style: raionStyle,
-    onEachFeature(feature, layer) {
-      layer.bindTooltip(() => raionStats[feature.properties.id_rai]?.name || '', { sticky: true, className: 'map-name-tip' });
-      layer.on({
-        mouseover(e) { e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 }); },
-        mouseout(e)  { raionsLayer.resetStyle(e.target); },
-        click()      { selectRaion(feature.properties.id_rai); },
-      });
-    },
-  }).addTo(map);
+  raionsLayer = _buildDrillLayer(regionId).addTo(map);
   renderRaionLabels();
 
   const regionName = _regionName(regionId);
@@ -854,25 +879,10 @@ async function drillRegion(regionId) {
   raionStats = {};
   data.forEach(r => { raionStats[r.id_rai] = r; });
 
-  const filtered = {
-    ...raionGeoJSON,
-    features: raionGeoJSON.features.filter(f => f.properties.id_reg === regionId || f.properties.id_reg == regionId),
-  };
-
   if (regionsLayer) { map.removeLayer(regionsLayer); }
   if (raionsLayer) { map.removeLayer(raionsLayer); }
 
-  raionsLayer = L.geoJSON(filtered, {
-    style: raionStyle,
-    onEachFeature(feature, layer) {
-      layer.bindTooltip(() => raionStats[feature.properties.id_rai]?.name || '', { sticky: true, className: 'map-name-tip' });
-      layer.on({
-        mouseover(e) { e.target.setStyle({ weight: 2, color: '#7090ff', fillOpacity: 0.9 }); },
-        mouseout(e)  { raionsLayer.resetStyle(e.target); },
-        click()      { selectRaion(feature.properties.id_rai); },
-      });
-    },
-  }).addTo(map);
+  raionsLayer = _buildDrillLayer(regionId).addTo(map);
 
   // Если блок карты сейчас показывает не вкладку «Карта» (нулевой размер
   // контейнера), откладываем fitBounds до момента открытия вкладки.
@@ -2066,30 +2076,53 @@ function switchMapView(view) {
 async function renderMap3DTab() {
   if (!window.renderMap3D) return;
   const isRaion = currentRegion != null;
-  let polygons, centroids, url;
-  if (isRaion) {
+  const wholeCity = isRaion && REGIONS_NO_RAION.has(+currentRegion);
+  let polygons, centroids, url, idKey;
+  if (wholeCity) {
+    // Астана/Шымкент: рисуем регион целиком одним столбцом, без районов
+    polygons = {
+      ...regionGeoJSON,
+      features: (regionGeoJSON?.features || []).filter(f => f.properties.id_reg == currentRegion),
+    };
+    centroids = regionCentroids;
+    url = `/api/ranking?region_id=${currentRegion}`;
+    idKey = 'id_reg';
+  } else if (isRaion) {
     polygons = {
       ...raionGeoJSON,
       features: (raionGeoJSON?.features || []).filter(f => f.properties.id_reg == currentRegion),
     };
     centroids = raionCentroids;
     url = `/api/ranking?region_id=${currentRegion}`;
+    idKey = 'id_rai';
   } else {
     polygons = regionGeoJSON;
     centroids = regionCentroids;
     url = '/api/ranking';
+    idKey = 'id_reg';
   }
   if (!polygons || !polygons.features) return;
   let rows = [];
   try { rows = await fetch(url).then(r => r.json()); }
   catch (e) { console.error('map3d ranking', e); }
   const rankMap = {};
-  rows.forEach(r => { rankMap[Math.round(r.id)] = r; });
+  if (wholeCity) {
+    // строки приходят по «районам» (обычно одна) — сводим в единицу региона
+    const agg = { name: '', total_dec: 0, total_deliv: 0, count: 0 };
+    rows.forEach(r => {
+      agg.total_dec += r.total_dec || 0;
+      agg.total_deliv += r.total_deliv || 0;
+      agg.count += r.count || 0;
+      agg.name = r.name || agg.name;
+    });
+    rankMap[Math.round(currentRegion)] = agg;
+  } else {
+    rows.forEach(r => { rankMap[Math.round(r.id)] = r; });
+  }
   // высота столбца: 'dec' — сумма принятых заявлений, 'deliv' — фактически выплачено
   const valKey = _map3dMetric === 'deliv' ? 'total_deliv' : 'total_dec';
   const metricLabel = _map3dMetric === 'deliv' ? 'Фактическая выплата' : 'Принятые заявления';
   // строим по всем полигонам уровня: где нет заявок/сумма 0 — value=0 (модуль нарисует крестик)
-  const idKey = isRaion ? 'id_rai' : 'id_reg';
   const units = {};
   polygons.features.forEach(f => {
     const id = Math.round(f.properties[idKey]);
