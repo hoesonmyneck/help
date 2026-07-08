@@ -1850,6 +1850,18 @@ function filterMtByPayType(payTypeId, rowEl) {
   _refreshAfterFilterChange();
 }
 
+// Клик по куску 3D-пирога = тот же глобальный фильтр по виду помощи.
+// Пирог не перестраиваем (иначе закроется деталь и пропадёт выбор) — только
+// перекрашиваем подсветку. Возвращаем новое значение фильтра в pie3d.js.
+let _pieSelfSelect = false;
+window.onPie3DSelectPayType = function (payTypeId) {
+  currentPayType = currentPayType === payTypeId ? null : payTypeId;
+  window.setPie3DSelected?.(currentPayType);   // мгновенная подсветка
+  _pieSelfSelect = true;
+  _refreshAfterFilterChange();
+  return currentPayType;
+};
+
 function _replaceGauge(selector, kpi) {
   const el = document.querySelector(selector + ' .gp-gauge');
   if (!el) return;
@@ -2008,6 +2020,7 @@ function switchMapTab(name) {
 
 // Перерисовать активную вкладку блока карты при смене региона/района
 function refreshActiveMapTab() {
+  const selfSel = _pieSelfSelect; _pieSelfSelect = false;   // одноразовый флаг
   const active = document.querySelector('.map-tabs .mtab-btn.active');
   if (!active) return;
   switch (active.dataset.mtab) {
@@ -2015,7 +2028,10 @@ function refreshActiveMapTab() {
     case 'summary': renderMapSummary(); break;
     case 'regions': renderRegionAnalytics(); break;
     case 'dynamics': loadDynamics(); break;
-    case 'pie': window.renderPie3D?.(currentRegion, currentRaion, currentPayType); break;
+    // клик пришёл из самого пирога → только подсветка, без перестройки
+    case 'pie': if (selfSel) window.setPie3DSelected?.(currentPayType);
+                else window.renderPie3D?.(currentRegion, currentRaion, currentPayType);
+                break;
     case 'data': ensureDataTable(); break;
   }
 }

@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 let S = null;
 let _pieMode = 'dec';   // 'dec' = сумма заявок, 'deliv' = факт выплачено
 let _lastRows = [];     // кешируем для перерисовки при смене режима
+let _selectedPay = null; // выбранный вид помощи (глобальный фильтр) — подсвечиваем кусок
 const SVGNS = 'http://www.w3.org/2000/svg';
 const PALETTE = [
   0x5b8af8, 0x4ecdc4, 0xf875c3, 0xffb454, 0x9b8cff, 0x63e6a0,
@@ -139,12 +140,30 @@ function ensureScene() {
     ptr.y = -((e.clientY - r.top) / r.height) * 2 + 1;
     ray.setFromCamera(ptr, camera);
     const hit = ray.intersectObjects(sliceGroup.children.filter(o => o.isMesh), false)[0];
-    if (hit && hit.object.userData.d.pay_type_id != null) {
-      openDetail(hit.object.userData.d, hit.object.userData.hex);
+    const d = hit?.object?.userData?.d;
+    if (d && d.pay_type_id != null) {
+      // Клик = выбор вида помощи: включаем глобальный фильтр (как в «Аналитике
+      // по видам помощи»). Повторный клик по тому же куску снимает фильтр.
+      const sel = window.onPie3DSelectPayType
+        ? window.onPie3DSelectPayType(d.pay_type_id)
+        : d.pay_type_id;
+      if (sel == null) closeDetail();
+      else openDetail(d, hit.object.userData.hex);
     }
   });
 
-  document.getElementById('pie3d-detail-close')?.addEventListener('click', closeDetail);
+  // Закрытие панели пользователем = снять выбор куска и глобальный фильтр.
+  // (внутренние вызовы closeDetail() выбор не трогают)
+  document.getElementById('pie3d-detail-close')?.addEventListener('click', () => {
+    closeDetail();
+    if (_selectedPay == null) return;
+    if (window.onPie3DSelectPayType) {
+      window.onPie3DSelectPayType(_selectedPay);   // тот же id → фильтр сбрасывается в null
+    } else {
+      _selectedPay = null;
+      applyPieSelection(S);
+    }
+  });
   document.getElementById('pie3d-detail-back')?.addEventListener('click', () => { detail.region = null; loadDetail(); });
 
   function resize() {
@@ -292,7 +311,41 @@ function buildPie(s, rows) {
     s.labels.push({ el, line, anchor, d, t0, delay: i * 0.07 });
     a += ang;
   });
+
+  applyPieSelection(s);
 }
+
+// Визуально отразить выбранный вид помощи: он яркий, остальные — приглушённые.
+// baseEmis обновляем, т.к. hover восстанавливает подсветку именно из него.
+function applyPieSelection(s) {
+  if (!s || !s.sliceGroup) return;
+  const sel = _selectedPay;
+  s.sliceGroup.children.forEach(m => {
+    if (!m.isMesh || !m.material) return;
+    const pid = m.userData?.d?.pay_type_id;
+    const isSel = sel != null && pid === sel;
+    const dim = sel != null && !isSel;
+    const emis = isSel ? 0.5 : (dim ? 0.04 : 0.14);
+    m.userData.baseEmis = emis;
+    m.material.emissiveIntensity = emis;
+    m.material.transparent = dim;
+    m.material.opacity = dim ? 0.25 : 1;
+    m.material.needsUpdate = true;
+  });
+  // подписи приглушаем в тон
+  (s.labels || []).forEach(L => {
+    const pid = L.d?.pay_type_id;
+    const dim = sel != null && pid !== sel;
+    L.el.style.opacity = dim ? '0.3' : '1';
+    L.line.style.opacity = dim ? '0.3' : '1';
+  });
+}
+
+// Вызывается из app.js, когда фильтр по виду помощи меняется вне пирога
+window.setPie3DSelected = function (payTypeId) {
+  _selectedPay = payTypeId != null ? payTypeId : null;
+  applyPieSelection(S);
+};
 
 // Раскладка HTML-подписей: проекция якоря → колонки слева/справа с защитой от наложения.
 function layoutLabels(s, t) {
@@ -500,12 +553,14 @@ window.renderPie3D = async function (regionId, raionId, payTypeId) {
   s.applyTheme();
   s.region = regionId != null ? regionId : null;
   s.raion  = raionId  != null ? raionId  : null;
-  s.payType = payTypeId != null ? payTypeId : null;
+  // Пирог — это СЕЛЕКТОР видов помощи: он всегда показывает все виды (иначе при
+  // выборе куска схлопнулся бы в один и выбор нельзя было бы сменить/снять).
+  // Выбранный вид лишь подсвечивается, а фильтр применяется к остальным вкладкам.
+  _selectedPay = payTypeId != null ? payTypeId : null;
   closeDetail();
   const p = new URLSearchParams();
   if (raionId) p.set('raion_id', raionId);
   else if (regionId) p.set('region_id', regionId);
-  if (payTypeId != null) p.set('pay_type_id', payTypeId);
   let rows = [];
   try { rows = await fetch('/api/pay-type-stats?' + p.toString()).then(r => r.json()); }
   catch (e) { console.error('pie3d fetch', e); }
