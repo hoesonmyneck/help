@@ -336,7 +336,9 @@ def _all_raions_for_region(region_id, db_katos: set[str]) -> list[str]:
     return sorted(combined, key=lambda k: (int(k) if k.isdigit() else 0, k))
 
 
-def apply_extra_filters(q, sdu_filter=None, gender_filter=None, age_group=None):
+def apply_extra_filters(q, sdu_filter=None, gender_filter=None, age_group=None, pay_type_id=None):
+    if pay_type_id is not None:
+        q = q.filter(Payment.pay_type_id == pay_type_id)
     if sdu_filter:
         q = q.filter(func.upper(Payment.sdu_tzhs) == sdu_filter.upper())
     if gender_filter:
@@ -353,12 +355,12 @@ def apply_extra_filters(q, sdu_filter=None, gender_filter=None, age_group=None):
     return q
 
 
-def build_filter(q, region_id, raion_id, sdu_filter=None, gender_filter=None, age_group=None):
+def build_filter(q, region_id, raion_id, sdu_filter=None, gender_filter=None, age_group=None, pay_type_id=None):
     if raion_id is not None:
         q = q.filter(Payment.kato_raion == raion_id)
     elif region_id is not None:
         q = q.filter(Payment.kato_region == region_id)
-    return apply_extra_filters(q, sdu_filter, gender_filter, age_group)
+    return apply_extra_filters(q, sdu_filter, gender_filter, age_group, pay_type_id)
 
 
 @app.get("/api/kpi")
@@ -510,7 +512,7 @@ def raions(region_id: int = Query(...), sdu_filter: str = Query(None), gender_fi
 
 
 @app.get("/api/ranking")
-def ranking(region_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
+def ranking(region_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None), pay_type_id: int = Query(None)):
     from sqlalchemy import case as sa_case
     with Session(engine) as db:
         def _q(): return db.query(
@@ -523,11 +525,11 @@ def ranking(region_id: int = Query(None), sdu_filter: str = Query(None), gender_
             func.sum(sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)).label("total_deliv"),
         )
         if region_id is None:
-            rows = apply_extra_filters(_q(), sdu_filter, gender_filter, age_group) \
+            rows = apply_extra_filters(_q(), sdu_filter, gender_filter, age_group, pay_type_id) \
                 .group_by(Payment.kato_region, Payment.kato_regname) \
                 .order_by(func.sum(Payment.dec_pay_sum).desc()).all()
         else:
-            rows = apply_extra_filters(_q().filter(Payment.kato_region == region_id), sdu_filter, gender_filter, age_group) \
+            rows = apply_extra_filters(_q().filter(Payment.kato_region == region_id), sdu_filter, gender_filter, age_group, pay_type_id) \
                 .group_by(Payment.kato_raion, Payment.kato_rainame) \
                 .order_by(func.sum(Payment.dec_pay_sum).desc()).all()
 
@@ -585,10 +587,11 @@ def table(
     sort_dir: str = Query('desc'),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
+    pay_type_id: int = Query(None),
 ):
     with Session(engine) as db:
         q = db.query(Payment)
-        q = build_filter(q, region_id, raion_id)
+        q = build_filter(q, region_id, raion_id, pay_type_id=pay_type_id)
 
         for key, val in request.query_params.items():
             if key.startswith('f_') and val:
@@ -1737,6 +1740,7 @@ def dynamics(
     sdu_filter: str = Query(None),
     gender_filter: str = Query(None),
     age_group: str = Query(None),
+    pay_type_id: int = Query(None),
 ):
     """Time series of application count and sum grouped by day or week (APP_DATE)."""
     from sqlalchemy import cast, Date as SADate
@@ -1757,7 +1761,7 @@ def dynamics(
                     sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)
                 ).label('total_deliv'),
             ).filter(Payment.app_date.isnot(None)),
-            region_id, raion_id, sdu_filter, gender_filter, age_group,
+            region_id, raion_id, sdu_filter, gender_filter, age_group, pay_type_id,
         )
         rows = q.group_by(date_expr).order_by(date_expr).all()
         return [
@@ -1773,12 +1777,12 @@ def dynamics(
 
 
 @app.get("/api/ranking-oblasts")
-def ranking_oblasts(region_id: int = Query(None)):
+def ranking_oblasts(region_id: int = Query(None), pay_type_id: int = Query(None)):
     """Regions (or raions of a region) ranked by actual paid sum and recipient count."""
     from sqlalchemy import case as sa_case
     with Session(engine) as db:
         if region_id is not None:
-            rows = (
+            q = (
                 db.query(
                     Payment.kato_raion.label('geo_id'),
                     Payment.kato_rainame.label('geo_name'),
@@ -1793,9 +1797,10 @@ def ranking_oblasts(region_id: int = Query(None)):
                     func.sum(Payment.dec_pay_sum).label('total_dec'),
                 )
                 .filter(Payment.kato_region == region_id)
-                .group_by(Payment.kato_raion, Payment.kato_rainame)
-                .all()
             )
+            if pay_type_id is not None:
+                q = q.filter(Payment.pay_type_id == pay_type_id)
+            rows = q.group_by(Payment.kato_raion, Payment.kato_rainame).all()
             budget_map = {}  # no raion-level budget in budget.xlsx
             result = []
             for r in rows:
@@ -1812,7 +1817,7 @@ def ranking_oblasts(region_id: int = Query(None)):
                     'budget': budget_map.get(r.geo_id, 0.0),
                 })
         else:
-            rows = (
+            q = (
                 db.query(
                     Payment.kato_region.label('geo_id'),
                     Payment.kato_regname.label('geo_name'),
@@ -1826,9 +1831,10 @@ def ranking_oblasts(region_id: int = Query(None)):
                     ).label('total_deliv'),
                     func.sum(Payment.dec_pay_sum).label('total_dec'),
                 )
-                .group_by(Payment.kato_region, Payment.kato_regname)
-                .all()
             )
+            if pay_type_id is not None:
+                q = q.filter(Payment.pay_type_id == pay_type_id)
+            rows = q.group_by(Payment.kato_region, Payment.kato_regname).all()
             bgt_rows = db.query(RegionBudget.kato_region, RegionBudget.budget).all()
             budget_map = {r[0]: float(r[1] or 0) for r in bgt_rows}
             result = []
@@ -1856,6 +1862,7 @@ def pay_type_stats(
     sdu_filter: str = Query(None),
     gender_filter: str = Query(None),
     age_group: str = Query(None),
+    pay_type_id: int = Query(None),
 ):
     """Per-pay-type totals: app count, budget, dec sum, delivered sum."""
     from sqlalchemy import case as sa_case
@@ -1874,7 +1881,7 @@ def pay_type_stats(
                         sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)
                     ).label('total_deliv'),
                 ),
-                region_id, raion_id,
+                region_id, raion_id, pay_type_id=pay_type_id,
             ),
             sdu_filter, gender_filter, age_group,
         ).group_by(Payment.pay_type_id, Payment.pay_type).all()

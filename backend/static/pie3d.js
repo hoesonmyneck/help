@@ -494,16 +494,18 @@ function drawBars(rows, hex, clickable) {
   } : null;
 }
 
-window.renderPie3D = async function (regionId, raionId) {
+window.renderPie3D = async function (regionId, raionId, payTypeId) {
   const s = ensureScene();
   if (!s) return;
   s.applyTheme();
   s.region = regionId != null ? regionId : null;
   s.raion  = raionId  != null ? raionId  : null;
+  s.payType = payTypeId != null ? payTypeId : null;
   closeDetail();
   const p = new URLSearchParams();
   if (raionId) p.set('raion_id', raionId);
   else if (regionId) p.set('region_id', regionId);
+  if (payTypeId != null) p.set('pay_type_id', payTypeId);
   let rows = [];
   try { rows = await fetch('/api/pay-type-stats?' + p.toString()).then(r => r.json()); }
   catch (e) { console.error('pie3d fetch', e); }

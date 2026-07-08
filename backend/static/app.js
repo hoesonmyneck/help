@@ -9,6 +9,7 @@ let currentRegion = null, currentRaion = null;
 let currentSdu = null;
 let currentGender = null;
 let currentAgeGroup = null;
+let currentPayType = null;   // pay_type_id выбранного вида помощи — глобальный фильтр
 let _sduSeq = 0;
 
 function buildFilterParams(geoMode = 'full') {
@@ -22,6 +23,7 @@ function buildFilterParams(geoMode = 'full') {
   if (currentSdu)      p.set('sdu_filter',   currentSdu);
   if (currentGender)   p.set('gender_filter', String(currentGender));
   if (currentAgeGroup) p.set('age_group',     currentAgeGroup);
+  if (currentPayType)  p.set('pay_type_id',   String(currentPayType));
   return p;
 }
 
@@ -1298,9 +1300,11 @@ async function refreshMapStats() {
 let _rankingData = null;
 
 async function loadRankingPanel() {
-  const url = currentRegion
-    ? `/api/ranking-oblasts?region_id=${currentRegion}`
-    : '/api/ranking-oblasts';
+  const parts = [
+    currentRegion ? `region_id=${currentRegion}` : '',
+    currentPayType ? `pay_type_id=${currentPayType}` : '',
+  ].filter(Boolean);
+  const url = '/api/ranking-oblasts' + (parts.length ? '?' + parts.join('&') : '');
   try {
     const r = await fetch(url, { credentials: 'include' });
     _rankingData = r.ok ? await r.json() : [];
@@ -1599,7 +1603,6 @@ const _geoSort = {};   // { [pfx]: {col, dir} }
 const _geoData = {};   // { [pfx]: {provided, stats, kpi, emptyMsg} } — кэш для пересортировки
 const _raSort  = { col: null, dir: 1 };   // Аналитика по регионам
 
-let _mtPayFilter = null; // pay_type_id выбранной строки в "Аналитика по МГП"
 let _gsPayFilter = null; _gsGeoId = null; _gsGeoIsRaion = false; // фильтр в левой боковой панели
 let _raGeoFilter = null; // raion_id выбранной строки в "Аналитика по регионам"
 let _lastRaRows = [], _lastRaIsRaion = false;
@@ -1697,7 +1700,7 @@ function _buildGeoPanelHtml(provided, stats, pfx = 'gp', emptyMsg = 'Нет да
     const dec   = total_dec > 0 ? formatNum(total_dec) : '0';
     const deliv = total_deliv > 0 ? formatNum(total_deliv) : '0';
     const budgetTxt = budget > 0 ? formatNum(budget) + ' ₸' : '—';
-    const isActive = (pfx === 'mt' && _mtPayFilter === c.id) || (pfx === 'gs' && _gsPayFilter === c.id);
+    const isActive = (pfx === 'mt' && currentPayType === c.id) || (pfx === 'gs' && _gsPayFilter === c.id);
     const onclick  = pfx === 'mt' ? ` onclick="filterMtByPayType(${c.id}, this)"`
                    : pfx === 'gs' ? ` onclick="filterGsByPayType(${c.id}, this)"` : '';
     return `<div class="gp-row gp-yes${isActive ? ' gp-active' : ''}"${onclick}>
@@ -1840,30 +1843,11 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp', emptyMsg
     </div>`;
 }
 
-async function filterMtByPayType(payTypeId, rowEl) {
-  // Повторный клик — снять фильтр
-  _mtPayFilter = _mtPayFilter === payTypeId ? null : payTypeId;
-
-  // Подсветить активную строку
-  const row = (rowEl && rowEl.closest) ? rowEl.closest('.gp-row') : rowEl;
-  document.querySelectorAll('#mt-sort-list .gp-row').forEach(r => r.classList.remove('gp-active'));
-  if (_mtPayFilter !== null && row) row.classList.add('gp-active');
-
-  // Запросить KPI с фильтром по виду помощи
-  const p = new URLSearchParams();
-  if (currentRaion != null)       p.set('raion_id',    currentRaion);
-  else if (currentRegion != null) p.set('region_id',   currentRegion);
-  if (_mtPayFilter !== null)      p.set('pay_type_id', _mtPayFilter);
-
-  try {
-    const kpi = await fetch(`/api/kpi?${p}`).then(r => r.json());
-    // Безопасно уничтожить старый chart перед пересозданием (проценты в замыкании плагина)
-    const cv = document.getElementById('mt-sdu-chart');
-    if (cv && window.Chart) { try { Chart.getChart(cv)?.destroy(); } catch(_) {} }
-    delete _gpSduCharts['mt'];
-    renderGpSduChart(kpi.sdu || {}, 'mt');
-    renderGpGenderAge(kpi.male_count || 0, kpi.female_count || 0, kpi.age || {}, 'mt');
-  } catch(e) { console.error('filterMtByPayType', e); }
+function filterMtByPayType(payTypeId, rowEl) {
+  // Повторный клик — снять фильтр. Это ГЛОБАЛЬНЫЙ фильтр по виду помощи:
+  // применяется ко всем вкладкам (регионы, динамика, 3D, данные) через buildFilterParams.
+  currentPayType = currentPayType === payTypeId ? null : payTypeId;
+  _refreshAfterFilterChange();
 }
 
 function _replaceGauge(selector, kpi) {
@@ -2018,7 +2002,7 @@ function switchMapTab(name) {
   else if (name === 'summary') renderMapSummary();
   else if (name === 'regions') renderRegionAnalytics();
   else if (name === 'dynamics') loadDynamics();
-  else if (name === 'pie') window.renderPie3D?.(currentRegion, currentRaion);
+  else if (name === 'pie') window.renderPie3D?.(currentRegion, currentRaion, currentPayType);
   else if (name === 'data') ensureDataTable();
 }
 
@@ -2031,7 +2015,7 @@ function refreshActiveMapTab() {
     case 'summary': renderMapSummary(); break;
     case 'regions': renderRegionAnalytics(); break;
     case 'dynamics': loadDynamics(); break;
-    case 'pie': window.renderPie3D?.(currentRegion, currentRaion); break;
+    case 'pie': window.renderPie3D?.(currentRegion, currentRaion, currentPayType); break;
     case 'data': ensureDataTable(); break;
   }
 }
@@ -2101,6 +2085,7 @@ async function renderMap3DTab() {
     url = '/api/ranking';
     idKey = 'id_reg';
   }
+  if (currentPayType) url += (url.includes('?') ? '&' : '?') + `pay_type_id=${currentPayType}`;
   if (!polygons || !polygons.features) return;
   let rows = [];
   try { rows = await fetch(url).then(r => r.json()); }
@@ -2174,7 +2159,10 @@ async function renderMapSummary() {
   const presParam = currentRegion != null ? `?region_id=${currentRegion}` : '';
   const geoQ = currentRaion != null ? `raion_id=${currentRaion}`
              : (currentRegion != null ? `region_id=${currentRegion}` : '');
-  const geoParam = geoQ ? ('?' + geoQ) : '';
+  // фильтр по виду помощи применяем к цифрам (geo-stats/kpi), но НЕ к матрице (help-presence)
+  const payQ = currentPayType ? `pay_type_id=${currentPayType}` : '';
+  const parts = [geoQ, payQ].filter(Boolean);
+  const geoParam = parts.length ? ('?' + parts.join('&')) : '';
   try {
     const [pres, stats, kpi] = await Promise.all([
       fetch('/api/help-presence' + presParam).then(r => r.json()),
@@ -2185,12 +2173,14 @@ async function renderMapSummary() {
     const row = currentRaion != null
       ? ((pres.rows || []).find(r => r.id === currentRaion) || {})
       : ((pres.rows || []).find(r => r.is_total) || {});
-    const provided = (columns.length && row.pay_cat_lists)
+    let provided = (columns.length && row.pay_cat_lists)
       ? columns.map((c, i) => ({ c, cnt: (row.pay_cat_lists[i] || []).length })).filter(e => e.cnt > 0) : [];
+    // выбран вид помощи → показываем только его, остальные строки скрываем
+    if (currentPayType) provided = provided.filter(e => e.c.id === currentPayType);
     let title = 'Республика Казахстан';
     if (currentRaion != null) title = _toTitleCase((raionStats[currentRaion]?.name) || row.name || 'Район');
     else if (currentRegion != null) title = _toTitleCase((regionStats[currentRegion]?.name) || row.name || 'Регион');
-    _geoSort['mt'] = { col: null, dir: 1 }; _mtPayFilter = null; // сброс сортировки/фильтра при смене уровня
+    _geoSort['mt'] = { col: null, dir: 1 };   // сброс сортировки при смене уровня
     body.innerHTML = _buildGeoMainHtml(title, provided, stats, kpi, 'mt', _npaEmptyMsg(currentRegion), title);
     renderGeoPanelCharts(kpi, 'mt');
   } catch (e) {
@@ -2256,7 +2246,11 @@ async function renderRegionAnalytics() {
   if (!body) return;
   body.innerHTML = '<div class="loading" style="padding:30px">Загрузка…</div>';
   const region = currentRegion;   // уровень синхронизирован с картой
-  const param = region != null ? `?region_id=${region}` : '';
+  const parts = [
+    region != null ? `region_id=${region}` : '',
+    currentPayType ? `pay_type_id=${currentPayType}` : '',
+  ].filter(Boolean);
+  const param = parts.length ? ('?' + parts.join('&')) : '';
   try {
     const [rows, stats, kpi] = await Promise.all([
       fetch('/api/ranking-oblasts' + param).then(r => r.json()),
@@ -2734,6 +2728,7 @@ async function loadTable(page) {
   else if (currentRegion) params.set('region_id', currentRegion);
   if (tableSortCol) { params.set('sort_col', tableSortCol); params.set('sort_dir', tableSortDir); }
   if (currentSdu) params.set('f_sdu_tzhs', currentSdu);
+  if (currentPayType) params.set('pay_type_id', String(currentPayType));
   Object.entries(tableFilters).forEach(([k, v]) => params.set(`f_${k}`, v));
 
   const tbody = document.getElementById('table-body');
@@ -3388,7 +3383,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (btn.dataset.tab === 'dynamics') loadDynamics();
       if (btn.dataset.tab === 'paytypes') loadPayTypes();
       if (btn.dataset.tab === 'ranking-recipients' || btn.dataset.tab === 'ranking-sum') loadRankingPanel();
-      if (btn.dataset.tab === 'pie3d') window.renderPie3D?.(currentRegion, currentRaion);
+      if (btn.dataset.tab === 'pie3d') window.renderPie3D?.(currentRegion, currentRaion, currentPayType);
     });
   });
 
