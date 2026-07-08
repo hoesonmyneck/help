@@ -16,7 +16,8 @@ function fmtInt(v) {
   return (v || 0).toLocaleString('ru-RU');
 }
 function stripRegionWord(s) {
-  return (s || '').replace(/\s*(область|обл\.?)\s*$/i, '').trim();
+  // имя уже переведено в app.js → убираем родовое слово на обоих языках
+  return (s || '').replace(/\s*(область|обл\.?|облысы|ауданы|қаласы)\s*$/i, '').trim();
 }
 
 function isLight() { return document.documentElement.dataset.theme === 'light'; }
@@ -128,9 +129,11 @@ function ensureScene() {
       tip.style.display = 'block';
       tip.style.left = (e.clientX - r.left + 14) + 'px';
       tip.style.top = (e.clientY - r.top + 14) + 'px';
-      const metricLabel = _lastPayload?.metricLabel || 'Принятые заявления';
+      const _t = window.t || (s => s);
+      const metricLabel = _lastPayload?.metricLabel || _t('Принятые заявления');
       tip.innerHTML = `<b>${stripRegionWord(u.name)}</b><br>${metricLabel}: ${fmtMoney(u.value)}<br>` +
-        `<span class="cube3d-tip-dim">Заявок: ${fmtInt(u.count)}${drillable ? ' · нажмите, чтобы войти' : ''}</span>`;
+        `<span class="cube3d-tip-dim">${_t('Заявок')}: ${fmtInt(u.count)}` +
+        `${drillable ? ' · ' + _t('нажмите, чтобы войти') : ''}</span>`;
     } else if (tip) { tip.style.display = 'none'; }
   });
   renderer.domElement.addEventListener('pointerleave', () => {

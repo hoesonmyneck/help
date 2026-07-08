@@ -40,6 +40,11 @@ let ageChart = null;
 
 function stripHelpPrefix(name) {
   if (!name) return name;
+  // на казахском: берём перевод полного названия и убираем хвост «әлеуметтік көмек»
+  if (window.LANG === 'kk') {
+    const kk = t(name);
+    if (kk !== name) return kk.replace(/\s*әлеуметтік көмек\s*$/i, '').trim() || kk;
+  }
   const s = name.replace(/^\s*СОЦИАЛЬНАЯ\s+ПОМОЩЬ\s+/i, '');
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 }
@@ -616,7 +621,7 @@ async function init() {
     const dd = String(d.getDate()).padStart(2, '0');
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const el = document.getElementById('header-date');
-    if (el) el.textContent = `данные актуализированы ${dd}.${mm}.${d.getFullYear()}`;
+    if (el) el.textContent = `${t('данные актуализированы')} ${dd}.${mm}.${d.getFullYear()}`;
   })();
 
   // Map legend
@@ -784,7 +789,7 @@ function _npaEmptyMsg(regionId) {
 
 function _regionName(id) {
   const n = regionStats[id]?.name || presenceById[Math.round(id)]?.name;
-  return n ? _toTitleCase(n) : `Регион ${id}`;
+  return n ? t(_toTitleCase(n)) : `Регион ${id}`;
 }
 
 // Label: виды помощи в регионе / общее число видов помощи (14)
@@ -942,6 +947,27 @@ function toggleTheme(isLight) {
   refreshGpSduChartsTheme();
 }
 
+/* Смена языка. Вызывается из i18n.js после перевода статики.
+ * Статику и уже отрисованный DOM i18n.js уже обработал; здесь пересобираем то,
+ * что «запекает» текст при рендере: Chart.js, шапку таблицы данных, 3D-сцены,
+ * хлебные крошки. */
+window.onLangChange = function () {
+  // шапка вкладки «Данные» строится один раз — пересобрать под новый язык
+  _dataTableInit = false;
+
+  // Chart.js запекает подписи при создании → уничтожаем, пересоздадутся
+  Object.values(_gapCharts).forEach(c => { try { c.destroy(); } catch (_) {} });
+  Object.keys(_gapCharts).forEach(k => delete _gapCharts[k]);
+
+  updateBreadcrumb(
+    currentRegion != null ? _regionName(currentRegion) : null,
+    currentRaion  != null ? (raionStats[currentRaion]?.name || null) : null
+  );
+
+  _refreshAfterFilterChange();   // внутри: refreshKPI → refreshActiveMapTab
+  if (currentRegion) renderRaionLabels(); else renderRegionLabels();
+};
+
 function goBack() {
   currentRegion = null;
   currentRaion = null;
@@ -976,11 +1002,12 @@ function goBackFromRanking() {
   requestAnimationFrame(() => window.scrollTo({ top: savedScroll, behavior: 'instant' }));
 }
 
+// сперва переводим (t() на русском — тождество), потом убираем родовое слово
 function _stripRegionWord(name) {
-  return (name || '').replace(/\s*(область|облысы)\s*/gi, ' ').trim();
+  return t(name || '').replace(/\s*(область|облысы)\s*/gi, ' ').trim();
 }
 function _stripRaionWord(name) {
-  return (name || '').replace(/\s*(район|ауданы)\s*/gi, ' ').trim();
+  return t(name || '').replace(/\s*(район|ауданы)\s*/gi, ' ').trim();
 }
 
 function updateBreadcrumb(region, raion) {
@@ -1236,7 +1263,7 @@ function renderSduChart(sdu) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            title: c => SDU_META[c[0].label]?.label || c[0].label,
+            title: c => t(SDU_META[c[0].label]?.label || c[0].label),
             label: c => ` ${formatInt(c.raw)}`,
           },
         },
@@ -1935,7 +1962,7 @@ function renderGpSduChart(sdu, pfx = 'gp') {
       responsive: true, maintainAspectRatio: false, layout: { padding: { top: 16 } },
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { title: c => SDU_META[c[0].label]?.label || c[0].label, label: c => ` ${formatInt(c.raw)}` } },
+        tooltip: { callbacks: { title: c => t(SDU_META[c[0].label]?.label || c[0].label), label: c => ` ${formatInt(c.raw)}` } },
       },
       scales: {
         x: { grid: { display: false }, ticks: { color: tickColor, font: { weight: '700' } } },
@@ -2122,7 +2149,7 @@ async function renderMap3DTab() {
   }
   // высота столбца: 'dec' — сумма принятых заявлений, 'deliv' — фактически выплачено
   const valKey = _map3dMetric === 'deliv' ? 'total_deliv' : 'total_dec';
-  const metricLabel = _map3dMetric === 'deliv' ? 'Фактическая выплата' : 'Принятые заявления';
+  const metricLabel = t(_map3dMetric === 'deliv' ? 'Фактическая выплата' : 'Принятые заявления');
   // строим по всем полигонам уровня: где нет заявок/сумма 0 — value=0 (модуль нарисует крестик)
   const units = {};
   polygons.features.forEach(f => {
@@ -2132,7 +2159,9 @@ async function renderMap3DTab() {
     const r = rankMap[id];
     units[id] = {
       id,
-      name: r?.name || f.properties.raion || f.properties.region || '',
+      // t() здесь обязателен: подписи 3D-карты рисуются на canvas и в тултип,
+      // авто-перевод DOM их не достанет
+      name: t(_toTitleCase(r?.name || f.properties.raion || f.properties.region || '')),
       centroid: c,
       value: r?.[valKey] || 0,
       count: r?.count || 0,
@@ -2143,8 +2172,10 @@ async function renderMap3DTab() {
   if (backBtn) backBtn.style.display = isRaion ? '' : 'none';
   // легенда: текст про столбец зависит от выбранной метрики
   const legEl = document.getElementById('map3d-legend-metric');
-  if (legEl) legEl.textContent = 'Высота столбца = ' +
-    (_map3dMetric === 'deliv' ? 'сумма фактической выплаты' : 'сумма принятых заявлений');
+  // textContent не создаёт узлов → авто-перевод не сработает, переводим фразу целиком
+  if (legEl) legEl.textContent = t(_map3dMetric === 'deliv'
+    ? 'Высота столбца = сумма фактической выплаты'
+    : 'Высота столбца = сумма принятых заявлений');
   window.renderMap3D({
     polygons,
     units,
@@ -2644,7 +2675,7 @@ async function loadSummary(sduSeq) {
   document.getElementById('coverage-body').innerHTML =
     '<tr><td colspan="6" class="loading">Загрузка...</td></tr>';
   const regionName = isRegionView ? (regionStats[currentRegion]?.name || '') : '';
-  setText('coverage-col-name', isRegionView ? `Район (${regionName})` : 'Регион');
+  setText('coverage-col-name', isRegionView ? `${t('Район')} (${regionName})` : t('Регион'));
   document.getElementById('coverage-btn-back').style.display = isRegionView ? 'inline-block' : 'none';
 
   const resp = await fetch(`/api/summary?${params}`).then(r => r.json());
@@ -2752,7 +2783,7 @@ async function loadTable(page) {
 
   const data = await fetch(`/api/table?${params}`).then(r => r.json());
 
-  setText('table-info', `Записей: ${data.total} | Страница ${data.page} из ${data.pages}`);
+  setText('table-info', `${t('Записей')}: ${data.total} | ${t('Страница')} ${data.page} ${t('из')} ${data.pages}`);
 
   const html = data.data.map(row =>
     `<tr>${TABLE_COLS.map(c => `<td>${fmtCell(c.key, row[c.key])}</td>`).join('')}</tr>`
@@ -3227,7 +3258,7 @@ function renderAnCks(rows, effRegionId, effRegionName) {
   if (effRegionId != null) {
     // show back button only when user explicitly drilled in, not just because map region is selected
     if (backBtn) backBtn.style.display = _anCksRegionId != null ? 'inline-block' : 'none';
-    if (geoCol)  geoCol.textContent = `Район (${(effRegionName || '').toUpperCase()})`;
+    if (geoCol)  geoCol.textContent = `${t('Район')} (${(effRegionName || '').toUpperCase()})`;
     if (!sorted.length) { _anEmpty(tbody, 6); return; }
     tbody.innerHTML = sorted.map(r => `<tr>
       <td class="geo-name">${r.raion || '—'}</td>
@@ -3239,7 +3270,7 @@ function renderAnCks(rows, effRegionId, effRegionName) {
     </tr>`).join('');
   } else {
     if (backBtn) backBtn.style.display = 'none';
-    if (geoCol)  geoCol.textContent = 'Регион';
+    if (geoCol)  geoCol.textContent = t('Регион');
     if (!sorted.length) { _anEmpty(tbody, 6); return; }
     tbody.innerHTML = sorted.map(r => `<tr class="coverage-row" style="cursor:pointer"
         onclick="anCksDrillRegion(${r.region_id}, '${(r.region || '').replace(/'/g, "\\'")}')">
@@ -3269,8 +3300,8 @@ function renderAnUtil(rows) {
 
   if (_anUtilRaionId != null) {
     // Уровень 3 — виды помощи района (контекст в заголовке колонки, как в матрице)
-    if (backBtn) { backBtn.style.display = 'inline-block'; backBtn.textContent = '← Районы'; }
-    if (geoCol)  geoCol.textContent = `Вид помощи (${(_anUtilRaionName || '').toUpperCase()})`;
+    if (backBtn) { backBtn.style.display = 'inline-block'; backBtn.textContent = t('← Районы'); }
+    if (geoCol)  geoCol.textContent = `${t('Вид помощи')} (${(_anUtilRaionName || '').toUpperCase()})`;
     if (!sorted.length) { _anEmpty(tbody, 5); return; }
     tbody.innerHTML = sorted.map(r => `<tr>
         <td>${_shortPayType(r.pay_type)}</td>
@@ -3278,8 +3309,8 @@ function renderAnUtil(rows) {
       </tr>`).join('');
   } else if (_anUtilRegionId != null) {
     // Уровень 2 — районы региона
-    if (backBtn) { backBtn.style.display = 'inline-block'; backBtn.textContent = '← Все регионы'; }
-    if (geoCol)  geoCol.textContent = `Район (${(_anUtilRegionName || '').toUpperCase()})`;
+    if (backBtn) { backBtn.style.display = 'inline-block'; backBtn.textContent = t('← Все регионы'); }
+    if (geoCol)  geoCol.textContent = `${t('Район')} (${(_anUtilRegionName || '').toUpperCase()})`;
     if (!sorted.length) { _anEmpty(tbody, 5); return; }
     tbody.innerHTML = sorted.map(r => `<tr class="coverage-row" style="cursor:pointer"
         onclick="anUtilDrillRaion(${r.raion_id}, '${(r.raion || '').replace(/'/g, "\\'")}')">
@@ -3289,7 +3320,7 @@ function renderAnUtil(rows) {
   } else {
     // Уровень 1 — регионы
     if (backBtn) backBtn.style.display = 'none';
-    if (geoCol)  geoCol.textContent = 'Регион';
+    if (geoCol)  geoCol.textContent = t('Регион');
     if (!sorted.length) { _anEmpty(tbody, 5); return; }
     tbody.innerHTML = sorted.map(r => {
       const rowCls    = r.clickable ? 'coverage-row' : '';

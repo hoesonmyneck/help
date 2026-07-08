@@ -5,6 +5,9 @@ let S = null;
 let _pieMode = 'dec';   // 'dec' = сумма заявок, 'deliv' = факт выплачено
 let _lastRows = [];     // кешируем для перерисовки при смене режима
 let _selectedPay = null; // выбранный вид помощи (глобальный фильтр) — подсвечиваем кусок
+// модуль не видит t() напрямую; строки ниже уходят в textContent/интерполяцию,
+// поэтому авто-перевод DOM их не достаёт — переводим явно
+const _t = s => (window.t ? window.t(s) : s);
 const SVGNS = 'http://www.w3.org/2000/svg';
 const PALETTE = [
   0x5b8af8, 0x4ecdc4, 0xf875c3, 0xffb454, 0x9b8cff, 0x63e6a0,
@@ -21,6 +24,11 @@ function fmtMoney(v) {
 }
 function stripHelpPrefix(name) {
   if (!name) return name;
+  // на казахском родовое слово стоит в конце: «… әлеуметтік көмек»
+  if (window.LANG === 'kk') {
+    const kk = _t(name);
+    if (kk !== name) return kk.replace(/\s*әлеуметтік көмек\s*$/i, '').trim() || kk;
+  }
   return name.replace(/^\s*СОЦИАЛЬНАЯ\s+ПОМОЩЬ\s+/i, '');
 }
 
@@ -110,13 +118,13 @@ function ensureScene() {
     if (obj && tip) {
       const d = obj.userData.d;
       const vk = obj.userData.valKey || 'total_dec';
-      const label = vk === 'total_deliv' ? 'Сумма фактической выплаты' : 'Сумма принятых заявлений';
+      const label = _t(vk === 'total_deliv' ? 'Сумма фактической выплаты' : 'Сумма принятых заявлений');
       tip.style.display = 'block';
       tip.style.left = (e.clientX - r.left + 14) + 'px';
       tip.style.top = (e.clientY - r.top + 14) + 'px';
       const dimLine = vk === 'total_deliv'
-        ? `Количество услугополучателей: ${formatInt(d.fact_recipients || 0)}`
-        : `Количество заявлений: ${d.count}`;
+        ? `${_t('Количество услугополучателей')}: ${formatInt(d.fact_recipients || 0)}`
+        : `${_t('Количество заявлений')}: ${d.count}`;
       const pct = vk === 'total_deliv' ? d.pctRecip : d.pctCount;
       tip.innerHTML = `<b>${stripHelpPrefix(d.pay_type)}</b><br>${label}: ${fmtMoney(d[vk])} · ${pct}%<br>` +
         `<span class="cube3d-tip-dim">${dimLine}</span>`;
@@ -212,8 +220,12 @@ function ensureScene() {
 function updatePieLegend(mode) {
   const h = document.getElementById('pie3d-legend-h');
   const a = document.getElementById('pie3d-legend-a');
-  if (h) h.textContent = 'Высота сектора = ' + (mode === 'deliv' ? 'сумма фактической выплаты' : 'сумма заявлений');
-  if (a) a.textContent = 'Угол сектора = ' + (mode === 'deliv' ? 'кол-во услугополучателей' : 'количество заявлений');
+  if (h) h.textContent = _t(mode === 'deliv'
+    ? 'Высота сектора = сумма фактической выплаты'
+    : 'Высота сектора = сумма заявлений');
+  if (a) a.textContent = _t(mode === 'deliv'
+    ? 'Угол сектора = кол-во услугополучателей'
+    : 'Угол сектора = количество заявлений');
 }
 
 function buildPie(s, rows) {
@@ -241,7 +253,7 @@ function buildPie(s, rows) {
     const top = data.slice(0, 11);
     const rest = data.slice(11);
     top.push({
-      pay_type:        `Прочие (${rest.length})`,
+      pay_type:        `${_t('Прочие')} (${rest.length})`,
       count:           rest.reduce((s, r) => s + (r.count           || 0), 0),
       fact_recipients: rest.reduce((s, r) => s + (r.fact_recipients || 0), 0),
       total_dec:       rest.reduce((s, r) => s + (r.total_dec       || 0), 0),
@@ -434,10 +446,10 @@ async function loadDetail() {
   const byRaion = eff != null;
   if (titleEl) titleEl.textContent = stripHelpPrefix(detail.payName);
   if (subEl) {
-    const metricLabel = _pieMode === 'deliv' ? 'Сумма фактической выплаты' : 'Сумма принятых заявлений';
+    const metricLabel = _t(_pieMode === 'deliv' ? 'Сумма фактической выплаты' : 'Сумма принятых заявлений');
     subEl.textContent = byRaion
-      ? (`${metricLabel} по районам` + (detail.region != null && detail.regionName ? ' — ' + stripHelpPrefix(detail.regionName) : ''))
-      : `${metricLabel} по областям`;
+      ? (`${metricLabel} ${_t('по районам')}` + (detail.region != null && detail.regionName ? ' — ' + _t(detail.regionName) : ''))
+      : `${metricLabel} ${_t('по областям')}`;
   }
   // «назад» доступно только когда мы провалились в область из общего вида
   if (backBtn) backBtn.style.display = (detail.baseRegion == null && detail.region != null) ? '' : 'none';

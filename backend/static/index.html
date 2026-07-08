@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ЕЦП "Анализ по дополнительным видам помощи МИО"</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="/style.css?v=69">
+  <link rel="stylesheet" href="/style.css?v=70">
 </head>
 <body>
 
@@ -18,10 +18,16 @@
     <span onclick="goBack()">Казахстан</span>
   </div>
   <button type="button" class="help-btn" onclick="openSupportModal()" title="Контакты поддержки" aria-label="Контакты поддержки">?</button>
-  <label class="theme-toggle" title="Светлая / тёмная тема">
-    <input type="checkbox" id="theme-switch" onchange="toggleTheme(this.checked)">
-    <span class="toggle-slider"></span>
-  </label>
+  <div class="header-toggles">
+    <label class="theme-toggle" title="Светлая / тёмная тема">
+      <input type="checkbox" id="theme-switch" onchange="toggleTheme(this.checked)">
+      <span class="toggle-slider"></span>
+    </label>
+    <div class="lang-switch" role="group" aria-label="Тіл / Язык">
+      <button type="button" class="lang-btn active" data-lang="ru" onclick="setLang('ru')">РУС</button>
+      <button type="button" class="lang-btn" data-lang="kk" onclick="setLang('kk')">ҚАЗ</button>
+    </div>
+  </div>
   <button type="button" class="logout-btn" onclick="logout()" title="Выйти">Выйти</button>
 </header>
 
@@ -346,7 +352,8 @@
       <div class="table-wrap data-table-wrap">
         <table>
           <thead id="table-head"></thead>
-          <tbody id="table-body"><tr><td colspan="16" class="loading">Загрузка...</td></tr></tbody>
+          <!-- data-no-i18n: содержимое вкладки «Данные» не переводим, только заголовки столбцов -->
+          <tbody id="table-body" data-no-i18n><tr><td colspan="16" class="loading">Загрузка...</td></tr></tbody>
         </table>
       </div>
       <div class="pagination">
@@ -405,7 +412,9 @@
   </div>
 </div>
 
-<script src="/app.js?v=55"></script>
+<script src="/i18n-raions.js?v=1"></script>
+<script src="/i18n.js?v=5"></script>
+<script src="/app.js?v=57"></script>
 <script src="/kpifx.js?v=11"></script>
 
 <!-- Three.js (для 3D-пирога видов помощи) -->
@@ -417,7 +426,7 @@
   }
 }
 </script>
-<script type="module" src="/pie3d.js?v=18"></script>
-<script type="module" src="/map3d.js?v=11"></script>
+<script type="module" src="/pie3d.js?v=19"></script>
+<script type="module" src="/map3d.js?v=12"></script>
 </body>
 </html>

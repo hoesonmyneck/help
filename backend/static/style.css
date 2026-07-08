@@ -4057,3 +4057,40 @@ header { flex-shrink: 0; }
   align-self: flex-start;
 }
 .kpi-card-expandable.expanded .kpi-help-close { display: inline-flex; }
+
+/* ── Переключатели в шапке: тема сверху, язык снизу ────────── */
+.header-toggles {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-left: 14px;
+  flex-shrink: 0;
+}
+.header-toggles .theme-toggle { margin-left: 0; }
+
+.lang-switch {
+  display: inline-flex;
+  border: 1px solid var(--bd-hi);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+.lang-btn {
+  background: transparent;
+  border: 0;
+  color: var(--tx-sub);
+  font-family: inherit;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 3px 7px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.lang-btn + .lang-btn { border-left: 1px solid var(--bd-hi); }
+.lang-btn:hover { color: var(--tx-main); }
+.lang-btn.active {
+  background: var(--bd-hi);
+  color: #fff;
+}
