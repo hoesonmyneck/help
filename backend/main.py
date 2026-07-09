@@ -374,14 +374,15 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
         total_max = base.with_entities(func.sum(Payment.max_pay_sum)).scalar() or 0
         total_dec = base.with_entities(func.sum(Payment.dec_pay_sum)).scalar() or 0
         app_count = base.with_entities(func.count(Payment.id)).scalar() or 0
-        # «Фактические» метрики — только по реально выполненным выплатам (статус 'Выполнено')
+        # «Фактические» метрики — по реально выплаченным суммам (DELIV_SUM > 0),
+        # независимо от статуса заявки (по решению руководства)
         fact_help_type_count = (
-            base.filter(Payment.app_status == 'Выполнено')
+            base.filter(Payment.deliv_sum > 0)
             .with_entities(func.count(distinct(Payment.pay_type_id)))
             .scalar() or 0
         )
         fact_recipients = (
-            base.filter(Payment.app_status == 'Выполнено')
+            base.filter(Payment.deliv_sum > 0)
             .with_entities(func.count(distinct(Payment.sicid)))
             .scalar() or 0
         )
@@ -425,10 +426,9 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
             geo = settings_rows
         people_cat_count = len({r[4] for r in geo if r[5] is not None})
 
-        # Фактически выплачено: DELIV_SUM for rows where APP_STATUS = 'Выполнено'
+        # Фактически выплачено: сумма всех DELIV_SUM независимо от статуса заявки
         deliv_total = (
-            base.filter(Payment.app_status == 'Выполнено')
-            .with_entities(func.sum(Payment.deliv_sum))
+            base.with_entities(func.sum(Payment.deliv_sum))
             .scalar() or 0
         )
 
@@ -522,7 +522,7 @@ def ranking(region_id: int = Query(None), sdu_filter: str = Query(None), gender_
             func.count(Payment.dec_pay_sum).label("accepted"),
             func.count(distinct(Payment.sicid)).label("recipients"),
             func.sum(Payment.dec_pay_sum).label("total_dec"),
-            func.sum(sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)).label("total_deliv"),
+            func.sum(Payment.deliv_sum).label("total_deliv"),
         )
         if region_id is None:
             rows = apply_extra_filters(_q(), sdu_filter, gender_filter, age_group, pay_type_id) \
@@ -865,7 +865,7 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
             pay_rows = af(db.query(Payment.kato_region,
                                 func.count(distinct(Payment.sicid)),
                                 func.sum(Payment.dec_pay_sum),
-                                func.sum(sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0))
+                                func.sum(Payment.deliv_sum)
                                 )).group_by(Payment.kato_region).all()
             geo_people = {str(r[0]): r[1] for r in pay_rows}
             geo_sum = {str(r[0]): float(r[2] or 0) for r in pay_rows}
@@ -874,7 +874,7 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
                         for r in db.query(Payment.kato_region, Payment.kato_regname).distinct().all()}
             nat_people = af(db.query(func.count(distinct(Payment.sicid)))).scalar() or 0
             nat_sum = float(af(db.query(func.sum(Payment.dec_pay_sum))).scalar() or 0)
-            nat_deliv = float(af(db.query(func.sum(sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)))).scalar() or 0)
+            nat_deliv = float(af(db.query(func.sum(Payment.deliv_sum))).scalar() or 0)
 
             # Budget per region from budget.xlsx
             bgt_rows = db.query(RegionBudget.kato_region, RegionBudget.budget).all()
@@ -949,7 +949,7 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
         pay_rows = af(db.query(Payment.kato_raion, Payment.kato_rainame,
                             func.count(distinct(Payment.sicid)),
                             func.sum(Payment.dec_pay_sum),
-                            func.sum(sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0))
+                            func.sum(Payment.deliv_sum)
                             ) \
                      .filter(Payment.kato_region == region_id)) \
                      .group_by(Payment.kato_raion, Payment.kato_rainame).all()
@@ -964,7 +964,7 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
                        .filter(Payment.kato_region == region_id)).scalar() or 0
         reg_sum = float(af(db.query(func.sum(Payment.dec_pay_sum))
                         .filter(Payment.kato_region == region_id)).scalar() or 0)
-        reg_deliv = float(af(db.query(func.sum(sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)))
+        reg_deliv = float(af(db.query(func.sum(Payment.deliv_sum))
                         .filter(Payment.kato_region == region_id)).scalar() or 0)
 
         # Budget from budget.xlsx — region total only, no raion breakdown
@@ -1686,11 +1686,11 @@ def geo_stats(region_id: int = Query(None), raion_id: int = Query(None)):
                 func.count(Payment.id).label('count'),
                 func.count(distinct(Payment.sicid)).label('recipients'),
                 func.count(distinct(
-                    sa_case((Payment.app_status == 'Выполнено', Payment.sicid))
+                    sa_case((Payment.deliv_sum > 0, Payment.sicid))
                 )).label('fact_recipients'),
                 func.sum(Payment.dec_pay_sum).label('total_dec'),
                 func.sum(
-                    sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)
+                    Payment.deliv_sum
                 ).label('total_deliv'),
             )
             .group_by(Payment.pay_type_id)
@@ -1760,7 +1760,7 @@ def dynamics(
                 func.sum(Payment.dec_pay_sum).label('total_dec'),
                 func.sum(Payment.max_pay_sum).label('total_max'),
                 func.sum(
-                    sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)
+                    Payment.deliv_sum
                 ).label('total_deliv'),
             ).filter(Payment.app_date.isnot(None)),
             region_id, raion_id, sdu_filter, gender_filter, age_group, pay_type_id,
@@ -1795,10 +1795,10 @@ def ranking_oblasts(region_id: int = Query(None), pay_type_id: int = Query(None)
                     func.count(Payment.id).label('count'),
                     func.count(distinct(Payment.sicid)).label('recipients'),
                     func.count(distinct(
-                        sa_case((Payment.app_status == 'Выполнено', Payment.sicid))
+                        sa_case((Payment.deliv_sum > 0, Payment.sicid))
                     )).label('fact_recipients'),
                     func.sum(
-                        sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)
+                        Payment.deliv_sum
                     ).label('total_deliv'),
                     func.sum(Payment.dec_pay_sum).label('total_dec'),
                 )
@@ -1830,10 +1830,10 @@ def ranking_oblasts(region_id: int = Query(None), pay_type_id: int = Query(None)
                     func.count(Payment.id).label('count'),
                     func.count(distinct(Payment.sicid)).label('recipients'),
                     func.count(distinct(
-                        sa_case((Payment.app_status == 'Выполнено', Payment.sicid))
+                        sa_case((Payment.deliv_sum > 0, Payment.sicid))
                     )).label('fact_recipients'),
                     func.sum(
-                        sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)
+                        Payment.deliv_sum
                     ).label('total_deliv'),
                     func.sum(Payment.dec_pay_sum).label('total_dec'),
                 )
@@ -1880,11 +1880,11 @@ def pay_type_stats(
                     Payment.pay_type,
                     func.count(Payment.id).label('cnt'),
                     func.count(distinct(
-                        sa_case((Payment.app_status == 'Выполнено', Payment.sicid))
+                        sa_case((Payment.deliv_sum > 0, Payment.sicid))
                     )).label('fact_recipients'),
                     func.sum(Payment.dec_pay_sum).label('total_dec'),
                     func.sum(
-                        sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)
+                        Payment.deliv_sum
                     ).label('total_deliv'),
                 ),
                 region_id, raion_id, pay_type_id=pay_type_id,
@@ -1927,14 +1927,14 @@ def paytype_geo(pay_type_id: int = Query(...), region_id: int = Query(None)):
             rows = db.query(
                 Payment.kato_raion, Payment.kato_rainame,
                 func.sum(Payment.dec_pay_sum),
-                func.sum(sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)),
+                func.sum(Payment.deliv_sum),
             ).filter(Payment.pay_type_id == pay_type_id, Payment.kato_region == region_id)\
              .group_by(Payment.kato_raion, Payment.kato_rainame).all()
         else:
             rows = db.query(
                 Payment.kato_region, Payment.kato_regname,
                 func.sum(Payment.dec_pay_sum),
-                func.sum(sa_case((Payment.app_status == 'Выполнено', Payment.deliv_sum), else_=0)),
+                func.sum(Payment.deliv_sum),
             ).filter(Payment.pay_type_id == pay_type_id)\
              .group_by(Payment.kato_region, Payment.kato_regname).all()
         result = [{"id": r[0], "name": r[1] or '—',
