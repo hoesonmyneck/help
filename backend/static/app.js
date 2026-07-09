@@ -2135,6 +2135,7 @@ function setupMapTabs() {
     if (src && dst) while (src.firstChild) dst.appendChild(src.firstChild);
   };
   move('tab-dynamics', 'mtab-dynamics');   // перенос динамики
+  move('tab-presence', 'mtab-presence');   // перенос матрицы видов помощи
   move('antab-data', 'mtab-data');         // перенос таблицы «Данные»
   const pie = document.getElementById('pie3d-wrap');
   const pieDst = document.getElementById('mtab-pie');
@@ -2166,6 +2167,7 @@ function switchMapTab(name) {
   else if (name === 'regions') renderRegionAnalytics();
   else if (name === 'dynamics') loadDynamics();
   else if (name === 'pie') window.renderPie3D?.(currentRegion, currentRaion, currentPayType);
+  else if (name === 'presence') { if (presenceRows && presenceRows.length) renderHelpPresence(); else loadHelpPresence(); }
   else if (name === 'data') ensureDataTable();
 }
 
@@ -2183,6 +2185,7 @@ function refreshActiveMapTab() {
     case 'pie': if (selfSel) window.setPie3DSelected?.(currentPayType);
                 else window.renderPie3D?.(currentRegion, currentRaion, currentPayType);
                 break;
+    case 'presence': loadHelpPresence(); break;
     case 'data': ensureDataTable(); break;
   }
 }
@@ -3475,7 +3478,7 @@ function initPayTooltip() {
   const tip = document.getElementById('pay-tooltip');
   if (!tip) return;
   let active = false;
-  document.getElementById('tab-presence')?.addEventListener('mouseover', e => {
+  document.getElementById('mtab-presence')?.addEventListener('mouseover', e => {
     const th = e.target.closest('[data-pay-desc]');
     if (!th) { if (active) { tip.style.display = 'none'; active = false; } return; }
     const rawDesc = th.dataset.payDesc.replace(/^МИО предоставляют?\s*/i, '');
@@ -3484,7 +3487,7 @@ function initPayTooltip() {
     tip.style.display = 'block';
     active = true;
   });
-  document.getElementById('tab-presence')?.addEventListener('mousemove', e => {
+  document.getElementById('mtab-presence')?.addEventListener('mousemove', e => {
     if (!active) return;
     tip.style.left = (e.clientX + 18) + 'px';
     tip.style.top  = (e.clientY + 18) + 'px';
@@ -3492,7 +3495,7 @@ function initPayTooltip() {
     if (r.right  > window.innerWidth  - 8) tip.style.left = (e.clientX - r.width  - 8) + 'px';
     if (r.bottom > window.innerHeight - 8) tip.style.top  = (e.clientY - r.height - 8) + 'px';
   });
-  document.getElementById('tab-presence')?.addEventListener('mouseout', e => {
+  document.getElementById('mtab-presence')?.addEventListener('mouseout', e => {
     if (!e.target.closest('[data-pay-desc]')) return;
     tip.style.display = 'none';
     active = false;
