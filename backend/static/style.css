@@ -188,6 +188,108 @@
 }
 .support-ic { color: var(--ac-teal); font-size: 1.05rem; }
 
+/* ── Шапка: стек кнопок (Аккаунты сверху / Планы развития снизу) ── */
+.header-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.header-actions .logout-btn { width: 100%; white-space: nowrap; }
+.plans-btn {
+  background: var(--ac-teal) !important;
+  color: #fff !important;
+  border-color: var(--ac-teal) !important;
+}
+.plans-btn:hover { filter: brightness(1.08); }
+
+/* ── Модалка «Планы развития» ── */
+.plans-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.55); backdrop-filter: blur(2px);
+  animation: kpi-fade-in 0.18s ease;
+}
+.plans-card {
+  position: relative; background: var(--bg-card);
+  border: 1px solid var(--bd-hi); border-radius: 16px;
+  padding: 24px 26px; width: min(560px, 92vw);
+  max-height: 88vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.plans-head { margin-bottom: 18px; padding-right: 26px; }
+.plans-title { font-size: 1.15rem; font-weight: 800; color: var(--tx-main); }
+.plans-sub { font-size: 0.8rem; color: var(--tx-dim); margin-top: 3px; }
+
+.plans-timeline { position: relative; display: flex; flex-direction: column; gap: 18px; }
+.plan-item { display: flex; gap: 16px; }
+.plan-rail { position: relative; flex: 0 0 34px; display: flex; justify-content: center; }
+/* соединительная пунктирная линия таймлайна */
+.plan-item:not(:last-child) .plan-rail::after {
+  content: ''; position: absolute; top: 38px; bottom: -22px; left: 50%;
+  transform: translateX(-50%); width: 0; border-left: 2px dashed var(--bd-hi);
+}
+.plan-node {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.95rem; font-weight: 800; color: var(--ac-teal);
+  background: var(--bg-deep);
+  border: 2px dashed var(--ac-teal); z-index: 1;
+}
+.plan-content {
+  flex: 1; min-width: 0;
+  border: 1px dashed var(--bd-hi); border-radius: 12px;
+  padding: 12px 14px; background: color-mix(in srgb, var(--ac-teal) 5%, transparent);
+}
+.plan-badges { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.plan-date { font-size: 0.72rem; font-weight: 700; color: var(--ac-teal); letter-spacing: 0.3px; }
+.plan-status {
+  font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--tx-dim); border: 1px solid var(--bd-main); border-radius: 20px;
+  padding: 2px 8px; background: var(--bg-deep);
+}
+.plan-name { font-size: 0.9rem; font-weight: 700; color: var(--tx-main); line-height: 1.3; }
+.plan-desc { font-size: 0.78rem; color: var(--tx-dim); margin-top: 4px; line-height: 1.35; }
+
+/* мини-визуализации «будущих» дашбордов */
+.plan-viz { margin-top: 12px; height: 44px; opacity: 0.9; }
+.plan-viz-bars { display: flex; align-items: flex-end; gap: 6px; height: 44px; }
+.plan-viz-bars span {
+  flex: 1; height: var(--h); min-height: 6px; border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, var(--ac-teal), color-mix(in srgb, var(--ac-teal) 35%, transparent));
+  animation: plan-bar-rise 0.7s ease both;
+  transform-origin: bottom;
+}
+.plan-viz-bars span:nth-child(2){animation-delay:.06s}
+.plan-viz-bars span:nth-child(3){animation-delay:.12s}
+.plan-viz-bars span:nth-child(4){animation-delay:.18s}
+.plan-viz-bars span:nth-child(5){animation-delay:.24s}
+.plan-viz-bars span:nth-child(6){animation-delay:.30s}
+@keyframes plan-bar-rise { from { transform: scaleY(0); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
+
+.plan-viz-donut { display: flex; align-items: center; gap: 12px; }
+.plan-donut {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: conic-gradient(var(--ac-teal) 0 42%, #f4a63b 42% 68%, #7b8cff 68% 100%);
+  -webkit-mask: radial-gradient(circle 11px at center, transparent 98%, #000 100%);
+          mask: radial-gradient(circle 11px at center, transparent 98%, #000 100%);
+  animation: plan-donut-spin 0.8s ease both;
+}
+@keyframes plan-donut-spin { from { transform: rotate(-90deg) scale(0.6); opacity: 0; } to { transform: rotate(0) scale(1); opacity: 1; } }
+
+.plan-viz-line svg { width: 100%; height: 44px; display: block; }
+.plan-viz-line .pl-area { fill: color-mix(in srgb, var(--ac-teal) 18%, transparent); stroke: none; }
+.plan-viz-line .pl-line {
+  fill: none; stroke: var(--ac-teal); stroke-width: 2;
+  stroke-linejoin: round; stroke-linecap: round;
+  stroke-dasharray: 260; stroke-dashoffset: 260;
+  animation: plan-line-draw 1s ease forwards;
+}
+@keyframes plan-line-draw { to { stroke-dashoffset: 0; } }
+
+:root[data-theme="light"] .plans-card { background: #fff; }
+:root[data-theme="light"] .plan-node { background: #f1f3f8; }
+:root[data-theme="light"] .plan-status { background: #f1f3f8; }
+
 @keyframes bg-drift {
   0%   { background-position: 0% 50%;   }
   50%  { background-position: 100% 50%; }

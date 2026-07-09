@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ЕЦП "Анализ по дополнительным видам помощи МИО"</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="/style.css?v=72">
+  <link rel="stylesheet" href="/style.css?v=74">
 </head>
 <body>
 
@@ -27,6 +27,9 @@
       <button type="button" class="lang-btn active" data-lang="ru" onclick="setLang('ru')">РУС</button>
       <button type="button" class="lang-btn" data-lang="kk" onclick="setLang('kk')">ҚАЗ</button>
     </div>
+  </div>
+  <div class="header-actions" id="header-actions">
+    <button type="button" class="logout-btn plans-btn" onclick="openPlansModal()" title="Планы развития">Планы развития</button>
   </div>
   <button type="button" class="logout-btn" onclick="logout()" title="Выйти">Выйти</button>
 </header>
@@ -435,9 +438,71 @@
   </div>
 </div>
 
+<!-- Модальное окно «Планы развития» -->
+<div id="plans-modal" class="plans-overlay" style="display:none" onclick="closePlansModal()">
+  <div class="plans-card" onclick="event.stopPropagation()">
+    <button type="button" class="support-close" onclick="closePlansModal()" aria-label="Закрыть">✕</button>
+    <div class="plans-head">
+      <div class="plans-title">Планы развития</div>
+      <div class="plans-sub">Дорожная карта будущих дашбордов</div>
+    </div>
+    <div class="plans-timeline">
+
+      <div class="plan-item">
+        <div class="plan-rail"><span class="plan-node">1</span></div>
+        <div class="plan-content">
+          <div class="plan-badges">
+            <span class="plan-date">Август 2026</span>
+            <span class="plan-status">Планируется</span>
+          </div>
+          <div class="plan-name">Дашборд по мерам социальной поддержки в рамках всеобуча</div>
+          <div class="plan-desc">Визуализация охвата и объёма оказываемых мер.</div>
+          <div class="plan-viz plan-viz-bars" aria-hidden="true">
+            <span style="--h:38%"></span><span style="--h:62%"></span><span style="--h:50%"></span><span style="--h:82%"></span><span style="--h:70%"></span><span style="--h:95%"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="plan-item">
+        <div class="plan-rail"><span class="plan-node">2</span></div>
+        <div class="plan-content">
+          <div class="plan-badges">
+            <span class="plan-date">Сентябрь 2026</span>
+            <span class="plan-status">Планируется</span>
+          </div>
+          <div class="plan-name">Дашборд по выплатам к праздничным и памятным датам</div>
+          <div class="plan-desc">Учёт и аналитика начислений.</div>
+          <div class="plan-viz plan-viz-donut" aria-hidden="true">
+            <div class="plan-donut"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="plan-item">
+        <div class="plan-rail"><span class="plan-node">3</span></div>
+        <div class="plan-content">
+          <div class="plan-badges">
+            <span class="plan-date">Январь 2027</span>
+            <span class="plan-status">Планируется</span>
+          </div>
+          <div class="plan-name">Дашборд по выплатам и пособиям из республиканского бюджета</div>
+          <div class="plan-desc">Сводная отчётность по бюджетным выплатам.</div>
+          <div class="plan-viz plan-viz-line" aria-hidden="true">
+            <svg viewBox="0 0 120 44" preserveAspectRatio="none">
+              <polyline class="pl-area" points="0,40 20,32 40,34 60,22 80,26 100,12 120,6 120,44 0,44"></polyline>
+              <polyline class="pl-line" points="0,40 20,32 40,34 60,22 80,26 100,12 120,6"></polyline>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <script src="/i18n-raions.js?v=1"></script>
-<script src="/i18n.js?v=7"></script>
-<script src="/app.js?v=61"></script>
+<script src="/i18n.js?v=8"></script>
+<script src="/app.js?v=62"></script>
 <script src="/kpifx.js?v=11"></script>
 
 <!-- Three.js (для 3D-пирога видов помощи) -->

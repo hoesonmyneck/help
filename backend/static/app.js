@@ -175,8 +175,16 @@ function closeSupportModal() {
   const m = document.getElementById('support-modal');
   if (m) m.style.display = 'none';
 }
+function openPlansModal() {
+  const m = document.getElementById('plans-modal');
+  if (m) m.style.display = 'flex';
+}
+function closePlansModal() {
+  const m = document.getElementById('plans-modal');
+  if (m) m.style.display = 'none';
+}
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeSupportModal();
+  if (e.key === 'Escape') { closeSupportModal(); closePlansModal(); }
 });
 
 function showLogin() {
@@ -324,7 +332,10 @@ function setupAdminPanel() {
     btn.title = 'Управление аккаунтами';
     btn.textContent = 'Аккаунты';
     btn.onclick = openAdminPanel;
-    header.insertBefore(btn, logoutBtn || null);
+    // «Аккаунты» — верхний ряд стека, «Планы развития» — нижний
+    const actions = document.getElementById('header-actions');
+    if (actions) actions.insertBefore(btn, actions.firstChild);
+    else header.insertBefore(btn, logoutBtn || null);
   }
   // Модалка
   if (!document.getElementById('admin-modal')) {
