@@ -1741,6 +1741,8 @@ def dynamics(
     gender_filter: str = Query(None),
     age_group: str = Query(None),
     pay_type_id: int = Query(None),
+    date_from: str = Query(None),
+    date_to: str = Query(None),
 ):
     """Time series of application count and sum grouped by day or week (APP_DATE)."""
     from sqlalchemy import cast, Date as SADate
@@ -1763,6 +1765,10 @@ def dynamics(
             ).filter(Payment.app_date.isnot(None)),
             region_id, raion_id, sdu_filter, gender_filter, age_group, pay_type_id,
         )
+        if date_from:
+            q = q.filter(Payment.app_date >= date_from)
+        if date_to:
+            q = q.filter(Payment.app_date <= date_to)
         rows = q.group_by(date_expr).order_by(date_expr).all()
         return [
             {

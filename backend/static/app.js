@@ -966,6 +966,11 @@ window.onLangChange = function () {
 
   _refreshAfterFilterChange();   // внутри: refreshKPI → refreshActiveMapTab
   if (currentRegion) renderRaionLabels(); else renderRegionLabels();
+
+  // календарь диапазона: обновить текст поля и, если открыт, названия месяцев/дней
+  _updateDynDateUI();
+  const _cp = document.getElementById('dyn-cal-pop');
+  if (_cp && !_cp.hidden) _renderDynCal();
 };
 
 function goBack() {
@@ -1371,15 +1376,134 @@ let _dynChart = null;
 let _dynPeriod = 'week';
 let _dynMetric = 'count';
 let _dynData   = null;
+let _dynFrom   = null;   // 'YYYY-MM-DD' или null
+let _dynTo     = null;
+let _dynBounds = null;   // {min, max} — доступный диапазон дат из данных без фильтра
 
 async function loadDynamics() {
   const fp = buildFilterParams('full');
   fp.set('period', _dynPeriod);
+  if (_dynFrom) fp.set('date_from', _dynFrom);
+  if (_dynTo)   fp.set('date_to', _dynTo);
   try {
     const r = await fetch(`/api/dynamics?${fp}`, { credentials: 'include' });
     _dynData = r.ok ? await r.json() : [];
   } catch { _dynData = []; }
+  _updateDynDateUI();
   renderDynamics(_dynData);
+}
+
+// ── Range-календарь (один попап: клик — начало, клик — конец) ──────
+const _CAL_MONTHS = {
+  ru: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'],
+  kk: ['Қаңтар','Ақпан','Наурыз','Сәуір','Мамыр','Маусым','Шілде','Тамыз','Қыркүйек','Қазан','Қараша','Желтоқсан'],
+};
+const _CAL_DOW = {
+  ru: ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'],
+  kk: ['Дс','Сс','Ср','Бс','Жм','Сб','Жс'],
+};
+let _dynCalView = null;   // {y, m} — отображаемый месяц (m 0-based)
+let _dynSelFrom = null;   // выбор в процессе (первый клик)
+let _dynSelTo   = null;
+let _dynHover   = null;   // предпросмотр диапазона при наведении
+
+const _calLang = () => (window.LANG === 'kk' ? 'kk' : 'ru');
+const _isoYMD  = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+function _fmtShort(iso) {           // '2026-06-01' → '01.06.26'
+  const [y, m, d] = iso.split('-');
+  return `${d}.${m}.${y.slice(2)}`;
+}
+
+// Обновляет текст поля/кнопку сброса и держит границы диапазона данных.
+function _updateDynDateUI() {
+  if (!_dynFrom && !_dynTo && _dynData && _dynData.length) {
+    _dynBounds = { min: _dynData[0].period, max: _dynData[_dynData.length - 1].period };
+  }
+  const txt   = document.getElementById('dyn-dr-text');
+  const reset = document.getElementById('dyn-date-reset');
+  if (txt) {
+    txt.textContent = (_dynFrom && _dynTo)
+      ? `${_fmtShort(_dynFrom)} – ${_fmtShort(_dynTo)}`
+      : t('Весь период');
+  }
+  if (reset) reset.hidden = !(_dynFrom || _dynTo);
+}
+
+function _openDynCal() {
+  const pop = document.getElementById('dyn-cal-pop');
+  const field = document.getElementById('dyn-dr-field');
+  if (!pop) return;
+  _dynSelFrom = _dynFrom; _dynSelTo = _dynTo; _dynHover = null;
+  const anchor = _dynFrom || (_dynBounds ? _dynBounds.max : null);
+  if (anchor) { const [y, m] = anchor.split('-'); _dynCalView = { y: +y, m: +m - 1 }; }
+  else { const n = new Date(); _dynCalView = { y: n.getFullYear(), m: n.getMonth() }; }
+  pop.hidden = false;
+  if (field) field.setAttribute('aria-expanded', 'true');
+  _renderDynCal();
+}
+function _closeDynCal() {
+  const pop = document.getElementById('dyn-cal-pop');
+  const field = document.getElementById('dyn-dr-field');
+  if (pop) pop.hidden = true;
+  if (field) field.setAttribute('aria-expanded', 'false');
+}
+
+function _renderDynCal() {
+  const grid  = document.getElementById('dyn-cal-grid');
+  const dow   = document.getElementById('dyn-cal-dow');
+  const title = document.getElementById('dyn-cal-title');
+  const rangeEl = document.getElementById('dyn-cal-range');
+  if (!grid || !_dynCalView) return;
+  const lang = _calLang();
+  const { y, m } = _dynCalView;
+  if (title) title.textContent = `${_CAL_MONTHS[lang][m]} ${y}`;
+  if (dow) dow.innerHTML = _CAL_DOW[lang].map(d => `<span>${d}</span>`).join('');
+
+  // конец предполагаемого диапазона (для подсветки при наведении)
+  let a = _dynSelFrom, b = _dynSelTo;
+  if (a && !b && _dynHover) { b = _dynHover; if (b < a) { const t2 = a; a = b; b = t2; } }
+
+  const firstDow = (new Date(y, m, 1).getDay() + 6) % 7;   // Пн = 0
+  const daysIn   = new Date(y, m + 1, 0).getDate();
+  const min = _dynBounds ? _dynBounds.min : null;
+  const max = _dynBounds ? _dynBounds.max : null;
+  let html = '';
+  for (let i = 0; i < firstDow; i++) html += '<span class="dc-cell dc-empty"></span>';
+  for (let d = 1; d <= daysIn; d++) {
+    const iso = _isoYMD(y, m, d);
+    const disabled = (min && iso < min) || (max && iso > max);
+    const cls = ['dc-cell'];
+    if (disabled) cls.push('dc-disabled');
+    if (iso === _dynSelFrom || iso === _dynSelTo) cls.push('dc-sel');
+    if (a && b && iso >= a && iso <= b) {
+      cls.push('dc-in');
+      if (iso === a) cls.push('dc-start');
+      if (iso === b) cls.push('dc-end');
+    }
+    html += `<span class="${cls.join(' ')}" ${disabled ? '' : `data-d="${iso}"`}>${d}</span>`;
+  }
+  grid.innerHTML = html;
+  if (rangeEl) {
+    rangeEl.textContent = (_dynSelFrom && _dynSelTo)
+      ? `${_fmtShort(_dynSelFrom)} – ${_fmtShort(_dynSelTo)}`
+      : (_dynSelFrom ? `${_fmtShort(_dynSelFrom)} – …` : '');
+  }
+}
+
+function _pickDynDay(iso) {
+  if (!_dynSelFrom || (_dynSelFrom && _dynSelTo)) {
+    // начинаем новый диапазон
+    _dynSelFrom = iso; _dynSelTo = null; _dynHover = null;
+    _renderDynCal();
+  } else {
+    // второй клик — фиксируем диапазон
+    let a = _dynSelFrom, b = iso;
+    if (b < a) { const t2 = a; a = b; b = t2; }
+    _dynSelFrom = a; _dynSelTo = b;
+    _dynFrom = a; _dynTo = b;
+    _renderDynCal();
+    loadDynamics();          // применяем фильтр, попап оставляем открытым (диапазон закрашен)
+  }
 }
 
 function renderDynamics(rows) {
@@ -3472,6 +3596,55 @@ document.addEventListener('DOMContentLoaded', async () => {
       renderDynamics(_dynData);
     });
   });
+
+  const dynField   = document.getElementById('dyn-dr-field');
+  const dynResetEl = document.getElementById('dyn-date-reset');
+  const dynPop     = document.getElementById('dyn-cal-pop');
+  if (dynField) dynField.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const pop = document.getElementById('dyn-cal-pop');
+    if (pop && pop.hidden) _openDynCal(); else _closeDynCal();
+  });
+  if (dynPop) {
+    dynPop.addEventListener('click', (e) => e.stopPropagation());
+    dynPop.addEventListener('mouseover', (e) => {
+      const c = e.target.closest('[data-d]');
+      // перерисовываем только при реальной смене дня — иначе пересборка сетки
+      // под курсором снова триггерит mouseover и зацикливает рендер, «съедая» клик
+      if (c && _dynSelFrom && !_dynSelTo && _dynHover !== c.dataset.d) {
+        _dynHover = c.dataset.d;
+        _renderDynCal();
+      }
+    });
+    dynPop.addEventListener('click', (e) => {
+      const c = e.target.closest('[data-d]');
+      if (c) _pickDynDay(c.dataset.d);
+    });
+    document.getElementById('dyn-cal-prev')?.addEventListener('click', () => {
+      if (!_dynCalView) return;
+      _dynCalView.m--; if (_dynCalView.m < 0) { _dynCalView.m = 11; _dynCalView.y--; }
+      _renderDynCal();
+    });
+    document.getElementById('dyn-cal-next')?.addEventListener('click', () => {
+      if (!_dynCalView) return;
+      _dynCalView.m++; if (_dynCalView.m > 11) { _dynCalView.m = 0; _dynCalView.y++; }
+      _renderDynCal();
+    });
+    document.getElementById('dyn-cal-clear')?.addEventListener('click', () => {
+      _dynSelFrom = null; _dynSelTo = null; _dynHover = null;
+      _dynFrom = null; _dynTo = null;
+      _renderDynCal();
+      loadDynamics();
+    });
+  }
+  if (dynResetEl) dynResetEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    _dynFrom = null; _dynTo = null; _dynSelFrom = null; _dynSelTo = null;
+    _closeDynCal();
+    loadDynamics();
+  });
+  document.addEventListener('click', () => _closeDynCal());
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') _closeDynCal(); });
 
   document.querySelectorAll('.ranking-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
