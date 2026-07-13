@@ -18,3 +18,11 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# SSL: приватные ключи и сертификаты — НИКОГДА не коммитим
+certs/
+_.enbek.kz_*/
+*.key
+*.pem
+*.crt
+*.csr

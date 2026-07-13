@@ -40,6 +40,7 @@ services:
       - "8443:443"    # https → https://interaction.enbek.kz:8443 (для ЭЦП/NCALayer)
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./certs:/etc/caddy/certs:ro   # боевой сертификат *.enbek.kz (в git не хранится)
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

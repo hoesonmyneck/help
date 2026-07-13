@@ -522,14 +522,29 @@ function toggleFullscreen(btn) {
 // вся страна (не вошли в регион/район). При выходе — возвращаем обратно.
 let _fsZoomBoost = false;
 let _mapNeedsFit = false;   // отложенный fitBounds, если карта drill'илась в скрытой вкладке
+
+// Единый вид «вся страна»: инициализация, возврат из региона (goBack),
+// кнопка «дом» и возврат из 3D в 2D. Дробный зум работает за счёт zoomSnap: 0.5.
+const KZ_VIEW = { center: [48, 67], zoom: 4.5 };
+
+// Целевой зум страны С УЧЁТОМ полноэкранного буста (+1). Любой жёсткий сброс вида
+// (goBack, кнопка «дом», возврат из 3D) обязан его учитывать, иначе флаг
+// _fsZoomBoost рассинхронизируется с реальным зумом и при выходе из фуллскрина
+// единица вычтется «вхолостую» (баг: 4.5 → 3.5).
+const _kzZoom = () => KZ_VIEW.zoom + (_fsZoomBoost ? 1 : 0);
 function applyFsZoom(fs) {
   if (!map) return;
-  if (fs && !_fsZoomBoost && currentRegion == null && currentRaion == null) {
+  const atCountry = currentRegion == null && currentRaion == null;
+  if (fs && !_fsZoomBoost && atCountry) {
     _fsZoomBoost = true;
     setTimeout(() => { try { map.setZoom(map.getZoom() + 1); } catch (_) {} }, 120);
   } else if (!fs && _fsZoomBoost) {
     _fsZoomBoost = false;
-    setTimeout(() => { try { map.setZoom(map.getZoom() - 1); } catch (_) {} }, 120);
+    // Снимаем буст только если он реально «сидит» в текущем зуме. Если пользователь
+    // ушёл в регион, зум задан fitBounds'ом — вычитать из него единицу нельзя.
+    if (atCountry) {
+      setTimeout(() => { try { map.setZoom(map.getZoom() - 1); } catch (_) {} }, 120);
+    }
   }
 }
 
@@ -583,7 +598,8 @@ let tableFilters = {};
 async function init() {
   setupMapTabs();   // перенести Динамику / 3D-пирог / Данные в блок карты
   // zoomSnap: 0.5 — иначе Leaflet округляет зум до целых и дробный 4.5 не удержится
-  map = L.map('map', { zoomControl: true, attributionControl: false, zoomSnap: 0.5 }).setView([48, 67], 4.5);
+  map = L.map('map', { zoomControl: true, attributionControl: false, zoomSnap: 0.5 })
+    .setView(KZ_VIEW.center, KZ_VIEW.zoom);
 
   // Home button — resets view smoothly via flyTo
   new (L.Control.extend({
@@ -598,7 +614,7 @@ async function init() {
       L.DomEvent.on(a, 'click', e => {
         L.DomEvent.stopPropagation(e);
         L.DomEvent.preventDefault(e);
-        m.flyTo([48, 68], 4, { duration: 0.7 });
+        m.flyTo(KZ_VIEW.center, _kzZoom(), { duration: 0.7 });
       });
       return div;
     }
@@ -994,7 +1010,12 @@ function goBack() {
   updateBreadcrumb(null, null);
   clearLabels();
   renderRegions();
-  map.setView([48, 67], 4.5);
+  map.setView(KZ_VIEW.center, _kzZoom());
+  // hideGeoSidePanel() закрывает drill-панель CSS-анимацией (~420мс) и дёргает
+  // invalidateSize() на 60/460мс — уже ПОСЛЕ этого setView. Пока контейнер меняет
+  // ширину, вид успевает съехать, поэтому переустанавливаем его, когда карта
+  // приняла финальный размер.
+  setTimeout(() => { try { map.setView(KZ_VIEW.center, _kzZoom()); } catch (_) {} }, 500);
   refreshKPI();
   loadSummary();
   loadHelpPresence();
@@ -2268,7 +2289,7 @@ function switchMapView(view) {
       if (currentRegion != null && raionsLayer) {
         try { map.fitBounds(raionsLayer.getBounds(), { padding: [20, 20] }); } catch (_) {}
       } else {
-        map.setView([48, 67], 4.5);
+        map.setView(KZ_VIEW.center, _kzZoom());
       }
       _mapNeedsFit = false;
     }, 60);

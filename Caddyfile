@@ -1,6 +1,6 @@
 {
-	# disable_redirects: отключает только HTTP→HTTPS редирект,
-	# но ОСТАВЛЯЕТ internal CA (tls internal). НЕ ставить "auto_https off" — сломает tls internal.
+	# disable_redirects: отключает только HTTP→HTTPS редирект (HTTP отдаётся на 8083).
+	# auto_https НЕ выключаем: иначе сломается TLS у сайтов ниже.
 	auto_https disable_redirects
 }
 
@@ -9,9 +9,16 @@
 	reverse_proxy backend:8000
 }
 
-# HTTPS (container :443 → host 8443) — нужен для ЭЦП через NCALayer (wss).
-# Хосты перечислены ЯВНО, иначе tls internal не знает, на какое имя выпускать серт.
-interaction.enbek.kz, localhost {
+# HTTPS (container :443 → host 8443) — боевой wildcard-сертификат *.enbek.kz (GoGetSSL).
+# fullchain.pem = сертификат + промежуточные CA; монтируется из ./certs (см. docker-compose).
+interaction.enbek.kz {
+	tls /etc/caddy/certs/fullchain.pem /etc/caddy/certs/privkey.pem
+	reverse_proxy backend:8000
+}
+
+# Локальная разработка: wildcard *.enbek.kz на localhost не действует,
+# поэтому здесь остаётся самоподписанный сертификат Caddy.
+localhost {
 	tls internal
 	reverse_proxy backend:8000
 }
