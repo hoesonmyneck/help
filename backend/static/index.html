@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ЕЦП "Анализ по дополнительным видам помощи МИО"</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="/style.css?v=74">
+  <link rel="stylesheet" href="/style.css?v=75">
 </head>
 <body>
 
@@ -72,7 +72,7 @@
         <button type="button" class="mtab-btn" data-mtab="dynamics" onclick="switchMapTab('dynamics')">Динамика</button>
         <button type="button" class="mtab-btn" data-mtab="pie" onclick="switchMapTab('pie')">3D</button>
         <button type="button" class="mtab-btn" data-mtab="presence" onclick="switchMapTab('presence')">Матрица видов помощи</button>
-        <button type="button" class="mtab-btn" data-mtab="data" onclick="switchMapTab('data')">Данные</button>
+        <button type="button" class="mtab-btn" data-mtab="data" onclick="switchMapTab('data')" style="display:none">Данные</button>
       </div>
       <div class="breadcrumb map-fs-crumb" id="map-fs-breadcrumb"><span onclick="goBack()">Казахстан</span></div>
       <button type="button" class="expand-btn map-expand" onclick="toggleFullscreen(this)" title="Во весь экран">⛶</button>
@@ -501,8 +501,8 @@
 </div>
 
 <script src="/i18n-raions.js?v=1"></script>
-<script src="/i18n.js?v=8"></script>
-<script src="/app.js?v=62"></script>
+<script src="/i18n.js?v=9"></script>
+<script src="/app.js?v=66"></script>
 <script src="/kpifx.js?v=11"></script>
 
 <!-- Three.js (для 3D-пирога видов помощи) -->

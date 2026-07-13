@@ -582,7 +582,8 @@ let tableFilters = {};
 
 async function init() {
   setupMapTabs();   // перенести Динамику / 3D-пирог / Данные в блок карты
-  map = L.map('map', { zoomControl: true, attributionControl: false }).setView([48, 68], 4);
+  // zoomSnap: 0.5 — иначе Leaflet округляет зум до целых и дробный 4.5 не удержится
+  map = L.map('map', { zoomControl: true, attributionControl: false, zoomSnap: 0.5 }).setView([48, 67], 4.5);
 
   // Home button — resets view smoothly via flyTo
   new (L.Control.extend({
@@ -993,7 +994,7 @@ function goBack() {
   updateBreadcrumb(null, null);
   clearLabels();
   renderRegions();
-  map.setView([48, 68], 4);
+  map.setView([48, 67], 4.5);
   refreshKPI();
   loadSummary();
   loadHelpPresence();
@@ -1068,8 +1069,9 @@ async function showGeoSidePanel(geoId, geoName, isRaion) {
     const presRow = isRaion
       ? ((pres.rows || []).find(r => r.id === geoId) || (pres.rows || [])[0] || {})
       : ((pres.rows || []).find(r => r.is_total) || {});
-    const provided = (columns.length && presRow.pay_cat_lists)
-      ? columns.map((c, i) => ({ c, cnt: (presRow.pay_cat_lists[i] || []).length })).filter(e => e.cnt > 0)
+    // Показываем ВСЕ виды помощи (даже с нулями)
+    const provided = columns.length
+      ? columns.map((c, i) => ({ c, cnt: (presRow.pay_cat_lists?.[i] || []).length }))
       : [];
 
     const backLabel = isRaion
@@ -1790,7 +1792,7 @@ function sortGeoTable(pfx, col) {
   if (!listEl || !d) return;
   listEl.innerHTML = _tableGroupHdr() +
     `<div class="gp-hdr-row" id="${pfx}-sort-hdr">${_geoSortHdrInner(pfx)}</div>` +
-    _buildGeoTotalRow(d.stats, d.kpi, d.totalLabel) +
+    _buildGeoTotalRow(d.stats, d.kpi, d.totalLabel, true) +
     _buildGeoPanelHtml(d.provided, d.stats, pfx, d.emptyMsg);
 }
 function sortRaTable(col) {
@@ -1801,13 +1803,14 @@ function sortRaTable(col) {
   listEl.innerHTML = _tableGroupHdr() +
     `<div class="gp-hdr-row" id="ra-sort-hdr">${_raSortHdrInner()}</div>` +
     _lastRaTotal +
-    (sorted.map(r => _buildRegionRow(r, !_lastRaIsRaion, _lastRaIsRaion)).join('') ||
+    (sorted.map((r, i) => _buildRegionRow(r, !_lastRaIsRaion, _lastRaIsRaion, i + 1)).join('') ||
      '<div class="gp-empty" style="padding:8px 4px">Нет данных</div>');
 }
 
 function _geoSortHdrInner(pfx) {
   const q = c => `sortGeoTable('${pfx}','${c}')`;
-  return `<span class="gp-pay gp-hdr gp-sortable" onclick="${q('name')}">Вид помощи</span>
+  const numHdr = `<span class="gp-rownum gp-rownum-hdr">№</span>`;
+  return `<span class="gp-pay gp-hdr gp-sortable" onclick="${q('name')}">${numHdr}Вид помощи</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="${q('count')}">Кол-во</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="${q('total_dec')}">Сумма</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="${q('fact_recipients')}">Кол-во</span>
@@ -1817,7 +1820,7 @@ function _geoSortHdrInner(pfx) {
 
 function _raSortHdrInner() {
   const col = _lastRaIsRaion ? 'Район' : 'Регион';
-  return `<span class="gp-pay gp-hdr gp-sortable" onclick="sortRaTable('name')">${col}</span>
+  return `<span class="gp-pay gp-hdr gp-sortable" onclick="sortRaTable('name')"><span class="gp-rownum gp-rownum-hdr">№</span>${col}</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('count')">Кол-во</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('total_dec')">Сумма</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="sortRaTable('fact_recipients')">Кол-во</span>
@@ -1856,7 +1859,7 @@ function _buildGeoPanelHtml(provided, stats, pfx = 'gp', emptyMsg = 'Нет да
       ? dir * stripHelpPrefix(a.c.name).localeCompare(stripHelpPrefix(b.c.name), 'ru')
       : dir * ((a[col] || 0) - (b[col] || 0)));
   }
-  return rows.map(({ c, count, fact_recipients, total_dec, total_deliv, budget }) => {
+  return rows.map(({ c, count, fact_recipients, total_dec, total_deliv, budget }, idx) => {
     const cnt   = formatInt(count);
     const fact  = formatInt(fact_recipients);
     const dec   = total_dec > 0 ? formatNum(total_dec) : '0';
@@ -1865,8 +1868,9 @@ function _buildGeoPanelHtml(provided, stats, pfx = 'gp', emptyMsg = 'Нет да
     const isActive = (pfx === 'mt' && currentPayType === c.id) || (pfx === 'gs' && _gsPayFilter === c.id);
     const onclick  = pfx === 'mt' ? ` onclick="filterMtByPayType(${c.id}, this)"`
                    : pfx === 'gs' ? ` onclick="filterGsByPayType(${c.id}, this)"` : '';
+    const numHtml = `<span class="gp-rownum">${idx + 1}</span>`;
     return `<div class="gp-row gp-yes${isActive ? ' gp-active' : ''}"${onclick}>
-      <span class="gp-pay" title="${stripHelpPrefix(c.name)}">${stripHelpPrefix(c.name)}</span>
+      <span class="gp-pay" title="${stripHelpPrefix(c.name)}">${numHtml}${stripHelpPrefix(c.name)}</span>
       <span class="gp-stat">${cnt}</span>
       <span class="gp-stat">${dec} ₸</span>
       <span class="gp-stat">${fact}</span>
@@ -1933,15 +1937,16 @@ async function showGeoPanel(id, name, ev) {
 }
 
 // Строка «Итого»: услугополучатели (уник.), сумма заявок, факт выплачено, бюджет
-function _buildGeoTotalRow(stats, kpi, label = 'Республика Казахстан') {
+function _buildGeoTotalRow(stats, kpi, label = 'Республика Казахстан', numbered = false) {
   const k = kpi || {};
   const recip = k.app_count != null ? formatInt(k.app_count) : '—';   // число заявлений (совпадает с KPI)
   const fact = k.fact_recipients != null ? formatInt(k.fact_recipients) : '—';
   const dec = k.total_dec_pay_sum != null ? formatCompact(k.total_dec_pay_sum) + ' ₸' : '—';
   const deliv = k.total_deliv_sum != null ? formatCompact(k.total_deliv_sum) + ' ₸' : '—';
   const budget = stats && stats._budget > 0 ? formatCompact(stats._budget) + ' ₸' : '—';
+  const numHtml = numbered ? `<span class="gp-rownum"></span>` : '';
   return `<div class="gp-row gp-budget-summary gp-total-kz">
-      <span class="gp-pay">${label}</span>
+      <span class="gp-pay">${numHtml}${label}</span>
       <span class="gp-stat">${recip}</span>
       <span class="gp-stat">${dec}</span>
       <span class="gp-stat">${fact}</span>
@@ -1982,7 +1987,7 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp', emptyMsg
   if (provided.length) {
     hdr = `<div class="gp-hdr-row" id="${pfx}-sort-hdr">${_geoSortHdrInner(pfx)}</div>`;
   }
-  const totalHtml = _buildGeoTotalRow(stats, kpi, totalLabel);
+  const totalHtml = _buildGeoTotalRow(stats, kpi, totalLabel, true);
   const gaChartBox = `<div class="gp-chart-box">
             <div class="gp-chart-title">Пол / Возраст</div>
             <div id="${pfx}-ga-chart" class="ga-chart gp-ga"></div>
@@ -2046,16 +2051,16 @@ async function filterGsByPayType(payTypeId, rowEl) {
     const cv = document.getElementById('gs-sdu-chart');
     if (cv && window.Chart) { try { Chart.getChart(cv)?.destroy(); } catch(_) {} }
     delete _gpSduCharts['gs'];
-    renderGpSduChart(kpi.sdu || {}, 'gs');
-    renderGpGenderAge(kpi.male_count || 0, kpi.female_count || 0, kpi.age || {}, 'gs');
+    renderGpSduChart(kpi.sdu_gender || {}, 'gs');
+    renderGpGenderAge(kpi.male_count || 0, kpi.female_count || 0, kpi.age || {}, 'gs', kpi.age_gender || {});
     _replaceGauge('#kpi-geo-side', kpi);
   } catch(e) { console.error('filterGsByPayType', e); }
 }
 
 const _gpSduCharts = {};
 function renderGeoPanelCharts(kpi, pfx = 'gp') {
-  renderGpSduChart(kpi.sdu || {}, pfx);
-  renderGpGenderAge(kpi.male_count || 0, kpi.female_count || 0, kpi.age || {}, pfx);
+  renderGpSduChart(kpi.sdu_gender || {}, pfx);
+  renderGpGenderAge(kpi.male_count || 0, kpi.female_count || 0, kpi.age || {}, pfx, kpi.age_gender || {});
 }
 
 const _lastSduByPfx = {};   // кэш данных СДУ по каждому графику — для перерисовки при смене темы
@@ -2065,14 +2070,18 @@ function refreshGpSduChartsTheme() {
   });
 }
 
-function renderGpSduChart(sdu, pfx = 'gp') {
+// ЦКС (уровень благосостояния) — стек-бар с разбивкой по полу (муж/жен).
+// sduG: { A:{m,f}, B:{m,f}, ... }
+function renderGpSduChart(sduG, pfx = 'gp') {
   const cv = document.getElementById(`${pfx}-sdu-chart`);
   if (!cv || !window.Chart) return;
-  _lastSduByPfx[pfx] = sdu;
+  _lastSduByPfx[pfx] = sduG;
   const keys = ['A', 'B', 'C', 'D', 'E'];
-  const values = keys.map(k => sdu[k] || 0);
-  const total = values.reduce((a, b) => a + b, 0);
-  const pcts = values.map(v => total ? Math.round(v / total * 100) : 0);
+  const males   = keys.map(k => (sduG[k]?.m) || 0);
+  const females = keys.map(k => (sduG[k]?.f) || 0);
+  const totals  = keys.map((_, i) => males[i] + females[i]);
+  const grand = totals.reduce((a, b) => a + b, 0);
+  const pcts = totals.map(v => grand ? Math.round(v / grand * 100) : 0);
   const isLight = document.documentElement.dataset.theme === 'light';
   const tickColor = isLight ? '#202124' : '#ffffff';
   const axisColor = isLight ? '#5f6368' : '#aaaaaa';
@@ -2080,34 +2089,56 @@ function renderGpSduChart(sdu, pfx = 'gp') {
   const pctLabels = {
     id: 'gpSduPct',
     afterDatasetsDraw(chart) {
-      const { ctx } = chart; const meta = chart.getDatasetMeta(0);
+      const meta = chart.getDatasetMeta(1);   // верхний сегмент (женщины) = верх стека
+      if (!meta) return;
+      const { ctx } = chart;
       ctx.save();
       ctx.font = "700 10px 'Roboto', sans-serif";
       ctx.fillStyle = tickColor; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-      meta.data.forEach((bar, i) => ctx.fillText(pcts[i] + '%', bar.x, bar.y - 3));
+      meta.data.forEach((bar, i) => { if (totals[i] > 0) ctx.fillText(pcts[i] + '%', bar.x, bar.y - 3); });
       ctx.restore();
     },
   };
   if (_gpSduCharts[pfx]) _gpSduCharts[pfx].destroy();
   _gpSduCharts[pfx] = new Chart(cv.getContext('2d'), {
     type: 'bar',
-    data: { labels: keys, datasets: [{ data: values, backgroundColor: keys.map(k => SDU_META[k].color), borderRadius: 4 }] },
+    data: {
+      labels: keys,
+      datasets: [
+        { label: 'Мужчины', data: males,   backgroundColor: '#5b8af8', stack: 's', borderRadius: { topLeft: 0, topRight: 0 } },
+        { label: 'Женщины', data: females, backgroundColor: '#f875c3', stack: 's', borderRadius: 3 },
+      ],
+    },
     plugins: [pctLabels],
     options: {
       responsive: true, maintainAspectRatio: false, layout: { padding: { top: 16 } },
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { title: c => t(SDU_META[c[0].label]?.label || c[0].label), label: c => ` ${formatInt(c.raw)}` } },
+        tooltip: {
+          callbacks: {
+            title: items => {
+              const i = items[0].dataIndex;
+              return [t(SDU_META[keys[i]]?.label || keys[i]), `${t('Всего')}: ${formatInt(totals[i])}`];
+            },
+            label: c => {
+              const i = c.dataIndex, tot = totals[i] || 0, val = c.parsed.y;
+              const pct = tot ? Math.round(val / tot * 100) : 0;
+              const who = c.datasetIndex === 0 ? t('Мужчины') : t('Женщины');
+              return ` ${who}: ${formatInt(val)} (${pct}%)`;
+            },
+          },
+        },
       },
       scales: {
-        x: { grid: { display: false }, ticks: { color: tickColor, font: { weight: '700' } } },
-        y: { grid: { color: gridColor }, ticks: { color: axisColor, callback: v => fmtCompact(v) || String(v) } },
+        x: { stacked: true, grid: { display: false }, ticks: { color: tickColor, font: { weight: '700' } } },
+        y: { stacked: true, grid: { color: gridColor }, ticks: { color: axisColor, callback: v => fmtCompact(v) || String(v) } },
       },
     },
   });
 }
 
-function renderGpGenderAge(male, female, age, pfx = 'gp') {
+function renderGpGenderAge(male, female, age, pfx = 'gp', ageG = {}) {
   const el = document.getElementById(`${pfx}-ga-chart`);
   if (!el) return;
   const total = male + female;
@@ -2131,9 +2162,18 @@ function renderGpGenderAge(male, female, age, pfx = 'gp') {
     ${GA_AGE_META.map(m => {
       const cnt = age[m.key] || 0;
       const pct = ageTotal > 0 ? Math.round(cnt / ageTotal * 100) : 0;
-      return `<div class="ga-age-row" title="${m.label}: ${formatInt(cnt)} (${pct}%)">
+      const gm = ageG[m.key]?.m || 0, gf = ageG[m.key]?.f || 0;
+      const gTot = gm + gf;
+      const mPct = gTot ? Math.round(gm / gTot * 100) : 0;
+      const fPct = gTot ? 100 - mPct : 0;
+      const mW = gTot ? (gm / gTot * 100) : 0;
+      const fW = gTot ? (gf / gTot * 100) : 0;
+      const tip = `${t(m.label)}: ${formatInt(cnt)}  •  ${t('Мужчины')}: ${formatInt(gm)} (${mPct}%)  •  ${t('Женщины')}: ${formatInt(gf)} (${fPct}%)`;
+      return `<div class="ga-age-row" title="${tip}">
         <span class="ga-age-lbl">${m.label}</span>
-        <div class="ga-age-bar-wrap"><div class="ga-age-bar" style="width:${pct}%;background:${m.color}"></div></div>
+        <div class="ga-age-bar-wrap"><div class="ga-age-split" style="width:${pct}%">
+          <div class="ga-seg-m" style="width:${mW}%"></div><div class="ga-seg-f" style="width:${fW}%"></div>
+        </div></div>
         <span class="ga-age-pct">${pct}%</span>
       </div>`;
     }).join('')}`;
@@ -2228,7 +2268,7 @@ function switchMapView(view) {
       if (currentRegion != null && raionsLayer) {
         try { map.fitBounds(raionsLayer.getBounds(), { padding: [20, 20] }); } catch (_) {}
       } else {
-        map.setView([48, 68], 4);
+        map.setView([48, 67], 4.5);
       }
       _mapNeedsFit = false;
     }, 60);
@@ -2358,8 +2398,9 @@ async function renderMapSummary() {
     const row = currentRaion != null
       ? ((pres.rows || []).find(r => r.id === currentRaion) || {})
       : ((pres.rows || []).find(r => r.is_total) || {});
-    let provided = (columns.length && row.pay_cat_lists)
-      ? columns.map((c, i) => ({ c, cnt: (row.pay_cat_lists[i] || []).length })).filter(e => e.cnt > 0) : [];
+    // Показываем ВСЕ виды помощи (даже с нулями), а не только те, где cnt > 0
+    let provided = columns.length
+      ? columns.map((c, i) => ({ c, cnt: (row.pay_cat_lists?.[i] || []).length })) : [];
     // выбран вид помощи → показываем только его, остальные строки скрываем
     if (currentPayType) provided = provided.filter(e => e.c.id === currentPayType);
     let title = 'Республика Казахстан';
@@ -2378,7 +2419,7 @@ async function renderMapSummary() {
 // Синхронизирована с картой: уровень определяется глобальным currentRegion.
 // Клик по региону drill'ит карту, кнопка «Все регионы» — возврат к стране.
 
-function _buildRegionRow(r, clickable, isRaionRow) {
+function _buildRegionRow(r, clickable, isRaionRow, num) {
   const cnt    = formatInt(r.count || 0);
   const fact   = formatInt(r.fact_recipients || 0);
   const dec    = r.total_dec > 0 ? formatCompact(r.total_dec) + ' ₸' : '0';
@@ -2388,8 +2429,9 @@ function _buildRegionRow(r, clickable, isRaionRow) {
   const cls = (clickable || isRaionRow) ? `gp-row gp-yes${isActive ? ' gp-active' : ''}` : 'gp-row';
   const onclick = clickable  ? ` onclick="drillRegion(${r.id})"`
                : isRaionRow ? ` onclick="filterRaByRaion(${r.id}, this)"` : '';
+  const numHtml = num != null ? `<span class="gp-rownum">${num}</span>` : '';
   return `<div class="${cls}"${onclick}>
-      <span class="gp-pay">${r.name || '—'}</span>
+      <span class="gp-pay">${numHtml}${r.name || '—'}</span>
       <span class="gp-stat">${cnt}</span>
       <span class="gp-stat">${dec}</span>
       <span class="gp-stat">${fact}</span>
@@ -2403,9 +2445,9 @@ function _buildRegionAnalyticsHtml(titleHtml, rows, stats, kpi, isRaion, totalLa
   _lastRaIsRaion = isRaion;
   const sorted = _raSort.col ? [...rows].sort(_makeRaComparator()) : rows;
   const hdr = `<div class="gp-hdr-row" id="ra-sort-hdr">${_raSortHdrInner()}</div>`;
-  const list = sorted.map(r => _buildRegionRow(r, !isRaion, isRaion)).join('') ||
+  const list = sorted.map((r, i) => _buildRegionRow(r, !isRaion, isRaion, i + 1)).join('') ||
     '<div class="gp-empty" style="padding:8px 4px">Нет данных</div>';
-  const totalHtml = _buildGeoTotalRow(stats, kpi, totalLabel);
+  const totalHtml = _buildGeoTotalRow(stats, kpi, totalLabel, true);
   _lastRaTotal = totalHtml;
   return `<div class="gp-main">
       <div class="gp-body">
@@ -2475,8 +2517,8 @@ async function filterRaByRaion(raionId, rowEl) {
     const cv = document.getElementById('ra-sdu-chart');
     if (cv && window.Chart) { try { Chart.getChart(cv)?.destroy(); } catch(_) {} }
     delete _gpSduCharts['ra'];
-    renderGpSduChart(kpi.sdu || {}, 'ra');
-    renderGpGenderAge(kpi.male_count || 0, kpi.female_count || 0, kpi.age || {}, 'ra');
+    renderGpSduChart(kpi.sdu_gender || {}, 'ra');
+    renderGpGenderAge(kpi.male_count || 0, kpi.female_count || 0, kpi.age || {}, 'ra', kpi.age_gender || {});
     _replaceGauge('#mtab-regions-body', kpi);
   } catch(e) { console.error('filterRaByRaion', e); }
 }

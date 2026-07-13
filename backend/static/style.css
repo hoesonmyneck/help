@@ -1073,6 +1073,18 @@ header h0 {
 .gp-row:last-child { border-bottom: none; }
 .gp-hdr { font-size: 0.7rem; color: var(--tx-dim); font-weight: 600; }
 .gp-pay { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Колонка нумерации (вкладки «Аналитика по видам помощи» и «по регионам») */
+.gp-rownum {
+  display: inline-block;
+  min-width: 20px;
+  margin-right: 9px;
+  text-align: right;
+  color: var(--tx-dim);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.gp-rownum-hdr { color: var(--tx-dim); }
 .gp-stat { text-align: right; white-space: nowrap; flex-shrink: 0; }
 .gp-yes .gp-pay { color: #2ecc71; }
 .gp-yes { cursor: pointer; }
@@ -2412,6 +2424,16 @@ th.sort-active { color: #8ab4ff !important; }
   border-radius: 5px;
   transition: width 0.5s ease;
 }
+/* Возрастной бар с разбивкой по полу: синий (муж) + розовый (жен) */
+.ga-age-split {
+  height: 100%;
+  display: flex;
+  border-radius: 5px;
+  overflow: hidden;
+  transition: width 0.5s ease;
+}
+.ga-seg-m { height: 100%; background: linear-gradient(90deg, #5b8af8, #4ecdc4); }
+.ga-seg-f { height: 100%; background: linear-gradient(90deg, #d63af9, #f875c3); }
 .ga-age-pct {
   flex: 0 0 26px;
   text-align: right;

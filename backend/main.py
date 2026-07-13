@@ -390,12 +390,19 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
         male_count = base.filter(Payment.gender_id == 1).with_entities(func.count(distinct(Payment.sicid))).scalar() or 0
         female_count = base.filter(Payment.gender_id == 2).with_entities(func.count(distinct(Payment.sicid))).scalar() or 0
 
+        # ЦКС (уровень благосостояния) — с разбивкой по полу (gender_id 1=муж, 2=жен)
         sdu_rows = (
-            base.with_entities(func.upper(Payment.sdu_tzhs), func.count(Payment.id))
-            .group_by(func.upper(Payment.sdu_tzhs))
+            base.with_entities(func.upper(Payment.sdu_tzhs), Payment.gender_id, func.count(Payment.id))
+            .group_by(func.upper(Payment.sdu_tzhs), Payment.gender_id)
             .all()
         )
-        sdu = {(cat or '?').upper(): cnt for cat, cnt in sdu_rows}
+        sdu, sdu_gender = {}, {}
+        for cat, gid, cnt in sdu_rows:
+            key = (cat or '?').upper()
+            sdu[key] = sdu.get(key, 0) + cnt
+            g = sdu_gender.setdefault(key, {'m': 0, 'f': 0})
+            if gid == 1:   g['m'] += cnt
+            elif gid == 2: g['f'] += cnt
 
         from sqlalchemy import case as sa_case
         age_group = sa_case(
@@ -404,12 +411,18 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
             (Payment.vozrast < 60, '40-59'),
             else_='60+'
         )
+        # Возрастные группы — тоже с разбивкой по полу
         age_rows = (
-            base.with_entities(age_group, func.count(Payment.id))
-            .group_by(age_group)
+            base.with_entities(age_group, Payment.gender_id, func.count(Payment.id))
+            .group_by(age_group, Payment.gender_id)
             .all()
         )
-        age = {grp: cnt for grp, cnt in age_rows}
+        age, age_gender = {}, {}
+        for grp, gid, cnt in age_rows:
+            age[grp] = age.get(grp, 0) + cnt
+            g = age_gender.setdefault(grp, {'m': 0, 'f': 0})
+            if gid == 1:   g['m'] += cnt
+            elif gid == 2: g['f'] += cnt
 
         # help_type_count: for all KZ = 13 (from settings); otherwise count distinct pay_type_id from Payment
         if raion_id is None and region_id is None:
@@ -453,7 +466,9 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
             "male_count": male_count,
             "female_count": female_count,
             "sdu": sdu,
+            "sdu_gender": sdu_gender,
             "age": age,
+            "age_gender": age_gender,
             "help_type_count": help_type_count,
             "people_cat_count": people_cat_count,
         }
