@@ -337,21 +337,30 @@ def _all_raions_for_region(region_id, db_katos: set[str]) -> list[str]:
 
 
 def apply_extra_filters(q, sdu_filter=None, gender_filter=None, age_group=None, pay_type_id=None):
+    from sqlalchemy import or_, and_
     if pay_type_id is not None:
         q = q.filter(Payment.pay_type_id == pay_type_id)
+    # sdu_filter / age_group поддерживают мультивыбор: значения через запятую (A,B,...)
     if sdu_filter:
-        q = q.filter(func.upper(Payment.sdu_tzhs) == sdu_filter.upper())
+        vals = [s.strip().upper() for s in str(sdu_filter).split(',') if s.strip()]
+        if vals:
+            q = q.filter(func.upper(Payment.sdu_tzhs).in_(vals))
     if gender_filter:
         q = q.filter(Payment.gender_id == int(gender_filter))
     if age_group:
-        if age_group == 'до18':
-            q = q.filter(Payment.vozrast < 18)
-        elif age_group == '18-39':
-            q = q.filter(Payment.vozrast >= 18, Payment.vozrast < 40)
-        elif age_group == '40-59':
-            q = q.filter(Payment.vozrast >= 40, Payment.vozrast < 60)
-        elif age_group == '60+':
-            q = q.filter(Payment.vozrast >= 60)
+        groups = [g.strip() for g in str(age_group).split(',') if g.strip()]
+        conds = []
+        for g in groups:
+            if g in ('до18', 'до 18'):
+                conds.append(Payment.vozrast < 18)
+            elif g == '18-39':
+                conds.append(and_(Payment.vozrast >= 18, Payment.vozrast < 40))
+            elif g == '40-59':
+                conds.append(and_(Payment.vozrast >= 40, Payment.vozrast < 60))
+            elif g == '60+':
+                conds.append(Payment.vozrast >= 60)
+        if conds:
+            q = q.filter(or_(*conds))
     return q
 
 
@@ -366,10 +375,20 @@ def build_filter(q, region_id, raion_id, sdu_filter=None, gender_filter=None, ag
 @app.get("/api/kpi")
 def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None), pay_type_id: int = Query(None)):
     with Session(engine) as db:
-        base = db.query(Payment)
-        base = build_filter(base, region_id, raion_id, sdu_filter, gender_filter, age_group)
-        if pay_type_id is not None:
-            base = base.filter(Payment.pay_type_id == pay_type_id)
+        # base — со ВСЕМИ фильтрами (для верхних KPI-чисел).
+        # Графики-распределения (ЦКС / возраст / пол) строятся как кросс-фильтр:
+        # каждый применяет все фильтры, КРОМЕ своего измерения, — иначе выбор одной
+        # категории обнулял бы остальные столбцы и не давал выбрать вторую.
+        def _mk(sdu, gender, age):
+            q = build_filter(db.query(Payment), region_id, raion_id, sdu, gender, age)
+            if pay_type_id is not None:
+                q = q.filter(Payment.pay_type_id == pay_type_id)
+            return q
+
+        base           = _mk(sdu_filter, gender_filter, age_group)
+        base_no_sdu    = _mk(None,       gender_filter, age_group)   # для графика ЦКС
+        base_no_age    = _mk(sdu_filter, gender_filter, None)        # для графика возрастов
+        base_no_gender = _mk(sdu_filter, None,          age_group)   # для гендер-бара
 
         total_max = base.with_entities(func.sum(Payment.max_pay_sum)).scalar() or 0
         total_dec = base.with_entities(func.sum(Payment.dec_pay_sum)).scalar() or 0
@@ -387,12 +406,14 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
             .scalar() or 0
         )
         unique_recipients = base.with_entities(func.count(distinct(Payment.sicid))).scalar() or 0
-        male_count = base.filter(Payment.gender_id == 1).with_entities(func.count(distinct(Payment.sicid))).scalar() or 0
-        female_count = base.filter(Payment.gender_id == 2).with_entities(func.count(distinct(Payment.sicid))).scalar() or 0
+        # пол — без фильтра по полу (иначе один пол обнуляется и его не выбрать)
+        male_count = base_no_gender.filter(Payment.gender_id == 1).with_entities(func.count(distinct(Payment.sicid))).scalar() or 0
+        female_count = base_no_gender.filter(Payment.gender_id == 2).with_entities(func.count(distinct(Payment.sicid))).scalar() or 0
 
-        # ЦКС (уровень благосостояния) — с разбивкой по полу (gender_id 1=муж, 2=жен)
+        # ЦКС (уровень благосостояния) — с разбивкой по полу (gender_id 1=муж, 2=жен).
+        # Без фильтра по ЦКС: показываем все уровни, чтобы можно было выбрать несколько.
         sdu_rows = (
-            base.with_entities(func.upper(Payment.sdu_tzhs), Payment.gender_id, func.count(Payment.id))
+            base_no_sdu.with_entities(func.upper(Payment.sdu_tzhs), Payment.gender_id, func.count(Payment.id))
             .group_by(func.upper(Payment.sdu_tzhs), Payment.gender_id)
             .all()
         )
@@ -411,9 +432,10 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
             (Payment.vozrast < 60, '40-59'),
             else_='60+'
         )
-        # Возрастные группы — тоже с разбивкой по полу
+        # Возрастные группы — тоже с разбивкой по полу.
+        # Без фильтра по возрасту: показываем все группы (для мультивыбора).
         age_rows = (
-            base.with_entities(age_group, Payment.gender_id, func.count(Payment.id))
+            base_no_age.with_entities(age_group, Payment.gender_id, func.count(Payment.id))
             .group_by(age_group, Payment.gender_id)
             .all()
         )
@@ -1683,7 +1705,8 @@ def anomalies_pay_gap(sdu_filter: str = Query(None), gender_filter: str = Query(
 
 
 @app.get("/api/geo-stats")
-def geo_stats(region_id: int = Query(None), raion_id: int = Query(None)):
+def geo_stats(region_id: int = Query(None), raion_id: int = Query(None),
+              sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
     """Per-help-type stats for a geo unit: recipients, total_dec, budget.
     Без параметров — сводка по всей стране."""
     with Session(engine) as db:
@@ -1693,6 +1716,7 @@ def geo_stats(region_id: int = Query(None), raion_id: int = Query(None)):
         elif region_id is not None:
             base = base.filter(Payment.kato_region == region_id)
         # иначе — без фильтра (вся страна)
+        base = apply_extra_filters(base, sdu_filter, gender_filter, age_group)
 
         from sqlalchemy import case as sa_case
         pay_rows = (
@@ -1798,7 +1822,8 @@ def dynamics(
 
 
 @app.get("/api/ranking-oblasts")
-def ranking_oblasts(region_id: int = Query(None), pay_type_id: int = Query(None)):
+def ranking_oblasts(region_id: int = Query(None), pay_type_id: int = Query(None),
+                    sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None)):
     """Regions (or raions of a region) ranked by actual paid sum and recipient count."""
     from sqlalchemy import case as sa_case
     with Session(engine) as db:
@@ -1819,8 +1844,7 @@ def ranking_oblasts(region_id: int = Query(None), pay_type_id: int = Query(None)
                 )
                 .filter(Payment.kato_region == region_id)
             )
-            if pay_type_id is not None:
-                q = q.filter(Payment.pay_type_id == pay_type_id)
+            q = apply_extra_filters(q, sdu_filter, gender_filter, age_group, pay_type_id)
             rows = q.group_by(Payment.kato_raion, Payment.kato_rainame).all()
             budget_map = {}  # no raion-level budget in budget.xlsx
             result = []
@@ -1853,8 +1877,7 @@ def ranking_oblasts(region_id: int = Query(None), pay_type_id: int = Query(None)
                     func.sum(Payment.dec_pay_sum).label('total_dec'),
                 )
             )
-            if pay_type_id is not None:
-                q = q.filter(Payment.pay_type_id == pay_type_id)
+            q = apply_extra_filters(q, sdu_filter, gender_filter, age_group, pay_type_id)
             rows = q.group_by(Payment.kato_region, Payment.kato_regname).all()
             bgt_rows = db.query(RegionBudget.kato_region, RegionBudget.budget).all()
             budget_map = {r[0]: float(r[1] or 0) for r in bgt_rows}

@@ -6,11 +6,28 @@ let regionGeoJSON = null, raionGeoJSON = null;
 let regionCentroids = {}, raionCentroids = {};
 let regionStats = {}, raionStats = {};
 let currentRegion = null, currentRaion = null;
-let currentSdu = null;
+let currentSduSet = [];      // мультивыбор уровней благосостояния ЦКС (A/B/C/D/E)
 let currentGender = null;
-let currentAgeGroup = null;
+let currentAgeSet = [];      // мультивыбор возрастных групп (до 18 / 18-39 / 40-59 / 60+)
 let currentPayType = null;   // pay_type_id выбранного вида помощи — глобальный фильтр
 let _sduSeq = 0;
+
+// переключатель значения в массиве-фильтре (мультивыбор)
+function _toggleInArr(arr, v) {
+  const i = arr.indexOf(v);
+  if (i < 0) arr.push(v); else arr.splice(i, 1);
+  return arr;
+}
+// добавляет демографические фильтры (ЦКС/пол/возраст) в URLSearchParams
+function _applyDemoFilters(p) {
+  if (currentSduSet.length) p.set('sdu_filter',   currentSduSet.join(','));
+  if (currentGender)        p.set('gender_filter', String(currentGender));
+  if (currentAgeSet.length) p.set('age_group',     currentAgeSet.join(','));
+  return p;
+}
+function _demoQS() { return _applyDemoFilters(new URLSearchParams()).toString(); }
+// собирает URL из непустых query-фрагментов ('a=1', '', 'b=2') → path?a=1&b=2
+function _url(path, ...q) { const s = q.filter(Boolean).join('&'); return s ? `${path}?${s}` : path; }
 
 function buildFilterParams(geoMode = 'full') {
   const p = new URLSearchParams();
@@ -20,11 +37,8 @@ function buildFilterParams(geoMode = 'full') {
   } else if (geoMode === 'region' && currentRegion) {
     p.set('region_id', currentRegion);
   }
-  if (currentSdu)      p.set('sdu_filter',   currentSdu);
-  if (currentGender)   p.set('gender_filter', String(currentGender));
-  if (currentAgeGroup) p.set('age_group',     currentAgeGroup);
-  if (currentPayType)  p.set('pay_type_id',   String(currentPayType));
-  return p;
+  if (currentPayType)  p.set('pay_type_id', String(currentPayType));
+  return _applyDemoFilters(p);
 }
 
 function setGenderFilter(g) {
@@ -32,7 +46,7 @@ function setGenderFilter(g) {
   _refreshAfterFilterChange();
 }
 function setAgeFilter(key) {
-  currentAgeGroup = (currentAgeGroup === key) ? null : key;
+  _toggleInArr(currentAgeSet, key);
   _refreshAfterFilterChange();
 }
 let currentPage = 1;
@@ -1073,17 +1087,18 @@ async function showGeoSidePanel(geoId, geoName, isRaion) {
   if (!panel || !layout) return;
   layout.classList.add('map-drill-active');
   panel.innerHTML = '<div class="gp-main"><div class="gp-body"><div class="gp-title">Загрузка…</div></div></div>';
-  _gsPayFilter = null; _gsGeoId = geoId; _gsGeoIsRaion = isRaion;
+  _gsPayFilter = null; _gsGeoId = geoId; _gsGeoIsRaion = isRaion; _gsGeoName = geoName;
   _geoSort['gs'] = { col: null, dir: 1 };   // сброс сортировки при смене гео
   if (map) { setTimeout(() => map.invalidateSize(), 60); setTimeout(() => map.invalidateSize(), 460); }
 
   try {
     const geoParam  = isRaion ? `raion_id=${geoId}` : `region_id=${geoId}`;
-    const presParam = isRaion ? `?region_id=${currentRegion}` : `?region_id=${geoId}`;
+    const presParam = isRaion ? `region_id=${currentRegion}` : `region_id=${geoId}`;
+    const demo = _demoQS();
     const [stats, kpi, pres] = await Promise.all([
-      fetch(`/api/geo-stats?${geoParam}`).then(r => r.json()),
-      fetch(`/api/kpi?${geoParam}`).then(r => r.json()),
-      fetch(`/api/help-presence${presParam}`).then(r => r.json()),
+      fetch(_url('/api/geo-stats', geoParam, demo)).then(r => r.json()),
+      fetch(_url('/api/kpi', geoParam, demo)).then(r => r.json()),
+      fetch(_url('/api/help-presence', presParam, demo)).then(r => r.json()),
     ]);
 
     const columns = pres.columns || [];
@@ -1254,7 +1269,7 @@ function renderSduChart(sdu) {
 
   // Show/hide clear button
   const clearBtn = document.getElementById('sdu-clear-btn');
-  if (clearBtn) clearBtn.style.display = currentSdu ? 'inline-flex' : 'none';
+  if (clearBtn) clearBtn.style.display = currentSduSet.length ? 'inline-flex' : 'none';
 
   const isLight = document.documentElement.dataset.theme === 'light';
   const tickColor = isLight ? '#202124' : '#ffffff';
@@ -1287,8 +1302,8 @@ function renderSduChart(sdu) {
       labels: keys,
       datasets: [{
         data: values,
-        backgroundColor: keys.map(k => SDU_META[k].color + (currentSdu && currentSdu !== k ? '66' : '')),
-        borderColor: keys.map(k => currentSdu === k ? (isLight ? '#202124' : '#fff') : 'transparent'),
+        backgroundColor: keys.map(k => SDU_META[k].color + (currentSduSet.length && !currentSduSet.includes(k) ? '66' : '')),
+        borderColor: keys.map(k => currentSduSet.includes(k) ? (isLight ? '#202124' : '#fff') : 'transparent'),
         borderWidth: 2,
         borderRadius: 4,
       }],
@@ -1318,10 +1333,7 @@ function renderSduChart(sdu) {
         },
       },
       onClick(e, elements) {
-        if (elements.length) {
-          const k = keys[elements[0].index];
-          if (currentSdu === k) clearSduFilter(); else setSduFilter(k);
-        }
+        if (elements.length) toggleSduFilter(keys[elements[0].index]);
       },
       onHover(_e, elements, chart) {
         chart.canvas.style.cursor = elements.length ? 'pointer' : 'default';
@@ -1330,14 +1342,13 @@ function renderSduChart(sdu) {
   });
 }
 
-function setSduFilter(k) {
-  if (currentSdu === k) return;
-  currentSdu = k;
+function toggleSduFilter(k) {
+  _toggleInArr(currentSduSet, k);
   _refreshAfterFilterChange();
 }
 
 function clearSduFilter() {
-  currentSdu = null;
+  currentSduSet = [];
   _refreshAfterFilterChange();
 }
 
@@ -1366,11 +1377,10 @@ async function refreshMapStats() {
 let _rankingData = null;
 
 async function loadRankingPanel() {
-  const parts = [
+  const url = _url('/api/ranking-oblasts',
     currentRegion ? `region_id=${currentRegion}` : '',
     currentPayType ? `pay_type_id=${currentPayType}` : '',
-  ].filter(Boolean);
-  const url = '/api/ranking-oblasts' + (parts.length ? '?' + parts.join('&') : '');
+    _demoQS());
   try {
     const r = await fetch(url, { credentials: 'include' });
     _rankingData = r.ok ? await r.json() : [];
@@ -1665,6 +1675,26 @@ function _refreshAfterFilterChange() {
 
   const activeAntab = document.querySelector('.antab-btn.active');
   if (activeAntab) loadAnomalyTab(activeAntab.dataset.antab);
+
+  // активная вкладка центрального блока (Сводка/По регионам/Матрица) и открытые гео-панели
+  refreshActiveMapTab();
+  _refreshOpenGeoPanels();
+}
+
+// Перерисовывает открытые контекстные панели (боковую гео и попап страны)
+// с учётом текущих демографических фильтров.
+function _refreshOpenGeoPanels() {
+  const layout = document.querySelector('.main-layout');
+  if (layout?.classList.contains('map-drill-active') && _gsGeoId != null) {
+    showGeoSidePanel(_gsGeoId, _gsGeoName, _gsGeoIsRaion);
+  }
+  const gp = document.getElementById('geo-panel');
+  if (gp?.classList.contains('visible') && gp.classList.contains('country-mode')) {
+    _countryCache = null;              // сбрасываем кэш — данные зависят от фильтра
+    showCountryPanel(null, true);
+  } else {
+    _countryCache = null;              // при следующем открытии подтянутся с фильтром
+  }
 }
 
 const AGE_META = [
@@ -1749,7 +1779,7 @@ function renderGenderAgeBar(male, female, age) {
     ${GA_AGE_META.map(m => {
       const cnt = age[m.key] || 0;
       const pct = ageTotal > 0 ? Math.round(cnt / ageTotal * 100) : 0;
-      const isActive = currentAgeGroup === m.key;
+      const isActive = currentAgeSet.includes(m.key);
       return `<div class="ga-age-row ga-clickable${isActive ? ' ga-filter-active' : ''}" onclick="setAgeFilter('${m.key}')" title="${m.label}: ${formatInt(cnt)} (${pct}%)">
         <span class="ga-age-lbl">${m.label}</span>
         <div class="ga-age-bar-wrap"><div class="ga-age-bar" style="width:${pct}%;background:${m.color}"></div></div>
@@ -1788,7 +1818,7 @@ const _geoSort = {};   // { [pfx]: {col, dir} }
 const _geoData = {};   // { [pfx]: {provided, stats, kpi, emptyMsg} } — кэш для пересортировки
 const _raSort  = { col: null, dir: 1 };   // Аналитика по регионам
 
-let _gsPayFilter = null; _gsGeoId = null; _gsGeoIsRaion = false; // фильтр в левой боковой панели
+let _gsPayFilter = null; _gsGeoId = null; _gsGeoIsRaion = false; _gsGeoName = null; // фильтр в левой боковой панели
 let _raGeoFilter = null; // raion_id выбранной строки в "Аналитика по регионам"
 let _lastRaRows = [], _lastRaIsRaion = false;
 // «Итого» кешируем отдельно, чтобы всегда вставлять первой
@@ -2067,6 +2097,7 @@ async function filterGsByPayType(payTypeId, rowEl) {
   if (_gsGeoIsRaion) p.set('raion_id', _gsGeoId);
   else               p.set('region_id', _gsGeoId);
   if (_gsPayFilter !== null) p.set('pay_type_id', _gsPayFilter);
+  _applyDemoFilters(p);
   try {
     const kpi = await fetch(`/api/kpi?${p}`).then(r => r.json());
     const cv = document.getElementById('gs-sdu-chart');
@@ -2120,20 +2151,31 @@ function renderGpSduChart(sduG, pfx = 'gp') {
       ctx.restore();
     },
   };
+  // подсветка мультивыбора: невыбранные приглушаем, выбранные обводим
+  const sel = currentSduSet;
+  const dimM = keys.map(k => (sel.length && !sel.includes(k)) ? '#5b8af855' : '#5b8af8');
+  const dimF = keys.map(k => (sel.length && !sel.includes(k)) ? '#f875c355' : '#f875c3');
+  const selBorder = keys.map(k => sel.includes(k) ? (isLight ? '#202124' : '#fff') : 'transparent');
   if (_gpSduCharts[pfx]) _gpSduCharts[pfx].destroy();
   _gpSduCharts[pfx] = new Chart(cv.getContext('2d'), {
     type: 'bar',
     data: {
       labels: keys,
       datasets: [
-        { label: 'Мужчины', data: males,   backgroundColor: '#5b8af8', stack: 's', borderRadius: { topLeft: 0, topRight: 0 } },
-        { label: 'Женщины', data: females, backgroundColor: '#f875c3', stack: 's', borderRadius: 3 },
+        { label: 'Мужчины', data: males,   backgroundColor: dimM, stack: 's', borderColor: selBorder, borderWidth: 2, borderSkipped: false, borderRadius: { topLeft: 0, topRight: 0 } },
+        { label: 'Женщины', data: females, backgroundColor: dimF, stack: 's', borderColor: selBorder, borderWidth: 2, borderSkipped: false, borderRadius: 3 },
       ],
     },
     plugins: [pctLabels],
     options: {
       responsive: true, maintainAspectRatio: false, layout: { padding: { top: 16 } },
       interaction: { mode: 'index', intersect: false },
+      onClick(e, elements) {
+        if (elements.length) toggleSduFilter(keys[elements[0].index]);
+      },
+      onHover(_e, elements, chart) {
+        chart.canvas.style.cursor = elements.length ? 'pointer' : 'default';
+      },
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -2166,18 +2208,20 @@ function renderGpGenderAge(male, female, age, pfx = 'gp', ageG = {}) {
   const fPct = total > 0 ? Math.round(female / total * 100) : 50;
   const mPct = 100 - fPct;
   const ageTotal = GA_AGE_META.reduce((s, m) => s + (age[m.key] || 0), 0);
+  const gfA = currentGender === 2 ? ' ga-filter-active' : '';
+  const gmA = currentGender === 1 ? ' ga-filter-active' : '';
   el.innerHTML = `
     <div class="ga-gender-labels">
-      <span class="ga-female-txt">Женщины</span>
-      <span class="ga-male-txt">Мужчины</span>
+      <span class="ga-female-txt ga-clickable${gfA}" onclick="setGenderFilter(2)">Женщины</span>
+      <span class="ga-male-txt ga-clickable${gmA}" onclick="setGenderFilter(1)">Мужчины</span>
     </div>
     <div class="ga-gender-bar-outer">
-      <div class="ga-bar-f" style="width:${fPct}%" title="Женщины: ${formatInt(female)} (${fPct}%)"></div>
-      <div class="ga-bar-m" style="width:${mPct}%" title="Мужчины: ${formatInt(male)} (${mPct}%)"></div>
+      <div class="ga-bar-f${gfA}" style="width:${fPct}%" onclick="setGenderFilter(2)" title="Женщины: ${formatInt(female)} (${fPct}%)"></div>
+      <div class="ga-bar-m${gmA}" style="width:${mPct}%" onclick="setGenderFilter(1)" title="Мужчины: ${formatInt(male)} (${mPct}%)"></div>
     </div>
     <div class="ga-gender-pcts">
-      <span class="ga-female-txt">${fPct}%</span>
-      <span class="ga-male-txt">${mPct}%</span>
+      <span class="ga-female-txt ga-clickable${gfA}" onclick="setGenderFilter(2)">${fPct}%</span>
+      <span class="ga-male-txt ga-clickable${gmA}" onclick="setGenderFilter(1)">${mPct}%</span>
     </div>
     <div class="ga-age-hdr">Возрастные группы</div>
     ${GA_AGE_META.map(m => {
@@ -2189,8 +2233,9 @@ function renderGpGenderAge(male, female, age, pfx = 'gp', ageG = {}) {
       const fPct = gTot ? 100 - mPct : 0;
       const mW = gTot ? (gm / gTot * 100) : 0;
       const fW = gTot ? (gf / gTot * 100) : 0;
+      const isActive = currentAgeSet.includes(m.key);
       const tip = `${t(m.label)}: ${formatInt(cnt)}  •  ${t('Мужчины')}: ${formatInt(gm)} (${mPct}%)  •  ${t('Женщины')}: ${formatInt(gf)} (${fPct}%)`;
-      return `<div class="ga-age-row" title="${tip}">
+      return `<div class="ga-age-row ga-clickable${isActive ? ' ga-filter-active' : ''}" onclick="setAgeFilter('${m.key}')" title="${tip}">
         <span class="ga-age-lbl">${m.label}</span>
         <div class="ga-age-bar-wrap"><div class="ga-age-split" style="width:${pct}%">
           <div class="ga-seg-m" style="width:${mW}%"></div><div class="ga-seg-f" style="width:${fW}%"></div>
@@ -2402,18 +2447,17 @@ async function renderMapSummary() {
   const body = document.getElementById('mtab-summary-body');
   if (!body) return;
   body.innerHTML = '<div class="loading" style="padding:30px">Загрузка…</div>';
-  const presParam = currentRegion != null ? `?region_id=${currentRegion}` : '';
   const geoQ = currentRaion != null ? `raion_id=${currentRaion}`
              : (currentRegion != null ? `region_id=${currentRegion}` : '');
   // фильтр по виду помощи применяем к цифрам (geo-stats/kpi), но НЕ к матрице (help-presence)
   const payQ = currentPayType ? `pay_type_id=${currentPayType}` : '';
-  const parts = [geoQ, payQ].filter(Boolean);
-  const geoParam = parts.length ? ('?' + parts.join('&')) : '';
+  const demo = _demoQS();
+  const presQ = currentRegion != null ? `region_id=${currentRegion}` : '';
   try {
     const [pres, stats, kpi] = await Promise.all([
-      fetch('/api/help-presence' + presParam).then(r => r.json()),
-      fetch('/api/geo-stats' + geoParam).then(r => r.json()),
-      fetch('/api/kpi' + geoParam).then(r => r.json()),
+      fetch(_url('/api/help-presence', presQ, demo)).then(r => r.json()),
+      fetch(_url('/api/geo-stats', geoQ, payQ, demo)).then(r => r.json()),
+      fetch(_url('/api/kpi', geoQ, payQ, demo)).then(r => r.json()),
     ]);
     const columns = pres.columns || [];
     const row = currentRaion != null
@@ -2494,16 +2538,14 @@ async function renderRegionAnalytics() {
   if (!body) return;
   body.innerHTML = '<div class="loading" style="padding:30px">Загрузка…</div>';
   const region = currentRegion;   // уровень синхронизирован с картой
-  const parts = [
-    region != null ? `region_id=${region}` : '',
-    currentPayType ? `pay_type_id=${currentPayType}` : '',
-  ].filter(Boolean);
-  const param = parts.length ? ('?' + parts.join('&')) : '';
+  const geoQ = region != null ? `region_id=${region}` : '';
+  const payQ = currentPayType ? `pay_type_id=${currentPayType}` : '';
+  const demo = _demoQS();
   try {
     const [rows, stats, kpi] = await Promise.all([
-      fetch('/api/ranking-oblasts' + param).then(r => r.json()),
-      fetch('/api/geo-stats' + param).then(r => r.json()),
-      fetch('/api/kpi' + param).then(r => r.json()),
+      fetch(_url('/api/ranking-oblasts', geoQ, payQ, demo)).then(r => r.json()),
+      fetch(_url('/api/geo-stats', geoQ, payQ, demo)).then(r => r.json()),
+      fetch(_url('/api/kpi', geoQ, payQ, demo)).then(r => r.json()),
     ]);
     _lastRaRows = rows;
     _raGeoFilter = null;  // сброс фильтра по району при смене уровня
@@ -2533,6 +2575,7 @@ async function filterRaByRaion(raionId, rowEl) {
   const p = new URLSearchParams();
   if (currentRegion != null) p.set('region_id', currentRegion);
   if (_raGeoFilter !== null) p.set('raion_id', _raGeoFilter);
+  _applyDemoFilters(p);
   try {
     const kpi = await fetch(`/api/kpi?${p}`).then(r => r.json());
     const cv = document.getElementById('ra-sdu-chart');
@@ -2545,12 +2588,12 @@ async function filterRaByRaion(raionId, rowEl) {
 }
 
 let _countryCache = null;
-async function showCountryPanel(ev) {
+async function showCountryPanel(ev, force = false) {
   if (ev) { ev.stopPropagation(); }
   const panel = document.getElementById('geo-panel');
   if (!panel) return;
-  // повторный клик по кнопке — закрыть
-  if (panel.classList.contains('visible') && panel.classList.contains('country-mode')) {
+  // повторный клик по кнопке — закрыть (при force — перерисовка, без закрытия)
+  if (!force && panel.classList.contains('visible') && panel.classList.contains('country-mode')) {
     panel.classList.remove('visible', 'country-mode');
     return;
   }
@@ -2571,14 +2614,15 @@ async function showCountryPanel(ev) {
     if (kpi) renderGeoPanelCharts(kpi);
   };
 
-  if (_countryCache) { draw(_countryCache); return; }
+  if (_countryCache && !force) { draw(_countryCache); return; }
 
-  draw({ pres: {}, stats: {}, kpi: {} });   // мгновенный каркас
+  draw(_countryCache || { pres: {}, stats: {}, kpi: {} });   // мгновенный каркас/старые данные
   try {
+    const demo = _demoQS();
     const [pres, stats, kpi] = await Promise.all([
-      fetch('/api/help-presence').then(r => r.json()),
-      fetch('/api/geo-stats').then(r => r.json()),
-      fetch('/api/kpi').then(r => r.json()),
+      fetch(_url('/api/help-presence', demo)).then(r => r.json()),
+      fetch(_url('/api/geo-stats', demo)).then(r => r.json()),
+      fetch(_url('/api/kpi', demo)).then(r => r.json()),
     ]);
     _countryCache = { pres, stats, kpi };
   } catch { _countryCache = { pres: {}, stats: {}, kpi: {} }; }
@@ -2975,7 +3019,7 @@ async function loadTable(page) {
   if (currentRaion) params.set('raion_id', currentRaion);
   else if (currentRegion) params.set('region_id', currentRegion);
   if (tableSortCol) { params.set('sort_col', tableSortCol); params.set('sort_dir', tableSortDir); }
-  if (currentSdu) params.set('f_sdu_tzhs', currentSdu);
+  if (currentSduSet.length) params.set('f_sdu_tzhs', currentSduSet.join(','));
   if (currentPayType) params.set('pay_type_id', String(currentPayType));
   Object.entries(tableFilters).forEach(([k, v]) => params.set(`f_${k}`, v));
 
