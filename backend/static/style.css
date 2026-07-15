@@ -3578,6 +3578,19 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
   font-size: 0.72rem; color: var(--tx-dim); font-weight: 700;
   margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.03em;
 }
+/* Шапка блока «Пол / Возраст» с кнопкой сброса фильтров справа */
+.gp-chart-title-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.ga-clear-btn {
+  font: inherit; font-size: 0.62rem; font-weight: 700;
+  text-transform: none; letter-spacing: 0; white-space: nowrap;
+  color: #e74c3c; background: rgba(231,76,60,0.12);
+  border: 1px solid rgba(231,76,60,0.4); border-radius: 5px;
+  padding: 2px 8px; cursor: pointer; transition: background .15s, border-color .15s;
+}
+.ga-clear-btn:hover { background: rgba(231,76,60,0.28); border-color: rgba(231,76,60,0.65); }
+.ga-clear-hidden { display: none; }
 .gp-sdu-wrap { position: relative; height: 165px; }
 
 /* ── Кнопка «Сводка по КЗ» на карте ── */

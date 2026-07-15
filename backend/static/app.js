@@ -1352,6 +1352,21 @@ function clearSduFilter() {
   _refreshAfterFilterChange();
 }
 
+// Сброс всех демографических фильтров (ЦКС + пол + возраст) разом
+function clearAllFilters() {
+  currentSduSet = [];
+  currentGender = null;
+  currentAgeSet = [];
+  _refreshAfterFilterChange();
+}
+function _anyDemoFilter() {
+  return currentSduSet.length > 0 || currentGender != null || currentAgeSet.length > 0;
+}
+// Кнопка «Снять фильтры» в шапке блока «Пол / Возраст» (видна только при активных фильтрах)
+function _clearFiltersBtn() {
+  return `<button type="button" class="ga-clear-btn${_anyDemoFilter() ? '' : ' ga-clear-hidden'}" onclick="clearAllFilters()">Снять фильтры</button>`;
+}
+
 function _invalidateAnomCaches() {
   Object.keys(_anTabCache).forEach(k => delete _anTabCache[k]);
   Object.keys(_anUtilCache).forEach(k => delete _anUtilCache[k]);
@@ -2040,7 +2055,7 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp', emptyMsg
   }
   const totalHtml = _buildGeoTotalRow(stats, kpi, totalLabel, true);
   const gaChartBox = `<div class="gp-chart-box">
-            <div class="gp-chart-title">Пол / Возраст</div>
+            <div class="gp-chart-title gp-chart-title-row"><span>Пол / Возраст</span>${_clearFiltersBtn()}</div>
             <div id="${pfx}-ga-chart" class="ga-chart gp-ga"></div>
           </div>`;
   const gaugeHtml = _buildGauge(k.total_deliv_sum || 0, k.total_dec_pay_sum || 0);
@@ -2524,7 +2539,7 @@ function _buildRegionAnalyticsHtml(titleHtml, rows, stats, kpi, isRaion, totalLa
             <div class="gp-sdu-wrap"><canvas id="ra-sdu-chart"></canvas></div>
           </div>
           <div class="gp-chart-box">
-            <div class="gp-chart-title">Пол / Возраст</div>
+            <div class="gp-chart-title gp-chart-title-row"><span>Пол / Возраст</span>${_clearFiltersBtn()}</div>
             <div id="ra-ga-chart" class="ga-chart gp-ga"></div>
           </div>
         </div>

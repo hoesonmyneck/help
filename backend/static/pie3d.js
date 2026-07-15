@@ -573,6 +573,8 @@ window.renderPie3D = async function (regionId, raionId, payTypeId) {
   const p = new URLSearchParams();
   if (raionId) p.set('raion_id', raionId);
   else if (regionId) p.set('region_id', regionId);
+  // демографические фильтры (ЦКС/пол/возраст) — размеры кусков реагируют на них
+  if (typeof _applyDemoFilters === 'function') _applyDemoFilters(p);
   let rows = [];
   try { rows = await fetch('/api/pay-type-stats?' + p.toString()).then(r => r.json()); }
   catch (e) { console.error('pie3d fetch', e); }
