@@ -1061,14 +1061,10 @@ header h0 {
   border-color: var(--ac-blue);
   background: rgba(47,86,127,0.08);
 }
-/* Боковые обводки для ячеек сгруппированных колонок */
-.gp-hdr-row > :nth-child(2), .gp-row > :nth-child(2),
-.gp-hdr-row > :nth-child(4), .gp-row > :nth-child(4) {
+/* Вертикальные разделители между всеми столбцами (кроме первого — названия) */
+.gp-hdr-row > :not(:first-child),
+.gp-row    > :not(:first-child) {
   border-left: 1px solid var(--bd-mid);
-}
-.gp-hdr-row > :nth-child(3), .gp-row > :nth-child(3),
-.gp-hdr-row > :nth-child(5), .gp-row > :nth-child(5) {
-  border-right: 1px solid var(--bd-mid);
 }
 .gp-row:last-child { border-bottom: none; }
 .gp-hdr { font-size: 0.7rem; color: var(--tx-dim); font-weight: 600; }
@@ -3927,13 +3923,13 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 .mtab-summary-body .gp-grp-row {
   width: 100%;
   min-width: min-content;
-  grid-template-columns: minmax(150px, 1fr) 70px 120px 70px 110px 190px;
+  grid-template-columns: minmax(150px, 1fr) 70px 120px 70px 120px 190px;
 }
 .mtab-summary-body .gp-hdr-row,
 .mtab-summary-body .gp-row {
   width: 100%;
   min-width: min-content;
-  grid-template-columns: minmax(150px, 1fr) 70px 120px 70px 110px 190px;
+  grid-template-columns: minmax(150px, 1fr) 70px 120px 70px 120px 190px;
 }
 .mtab-summary-body .gp-row > *:nth-child(even),
 .mtab-summary-body .gp-hdr-row > *:nth-child(even) {
