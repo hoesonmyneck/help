@@ -1691,8 +1691,9 @@ function _refreshAfterFilterChange() {
   const activeAntab = document.querySelector('.antab-btn.active');
   if (activeAntab) loadAnomalyTab(activeAntab.dataset.antab);
 
-  // активная вкладка центрального блока (Сводка/По регионам/Матрица) и открытые гео-панели
-  refreshActiveMapTab();
+  // Активную вкладку центрального блока перерисовывает refreshKPI() в конце —
+  // второй вызов здесь «съедал» одноразовый флаг _pieSelfSelect, и пирог
+  // перестраивался, закрывая только что открытую панель детали.
   _refreshOpenGeoPanels();
 }
 
