@@ -4258,10 +4258,21 @@ header { flex-shrink: 0; }
   justify-content: flex-start;
   align-items: flex-start !important;
   text-align: left !important;
-  overflow-x: hidden;
-  overflow-y: auto;
+  /* Скроллится только список (см. ниже), а не вся карточка — иначе вращающаяся
+     рамка ::before (inset:0) прокручивалась бы вместе с контентом и обрывалась,
+     а крупная цифра сверху обрезалась. */
+  overflow: hidden;
   cursor: default;
   animation: kpi-fade-in 0.25s ease forwards;
+}
+/* Шапка раскрытой карточки (заголовок + крупное значение) — фиксирована сверху */
+.kpi-card-expandable.expanded > .label { flex: 0 0 auto; }
+.kpi-card-expandable.expanded > .value {
+  flex: 0 0 auto;
+  overflow: visible;
+  font-size: clamp(1.15rem, 3.2vw, 1.7rem);
+  line-height: 1.2;
+  margin-bottom: 4px;
 }
 .kpi-card-expandable.closing {
   animation: kpi-fade-out 0.22s ease forwards;
@@ -4287,7 +4298,13 @@ header { flex-shrink: 0; }
   width: 100%;
   margin-top: 8px;
 }
-.kpi-card-expandable.expanded .kpi-help-list { display: block; }
+.kpi-card-expandable.expanded .kpi-help-list {
+  display: block;
+  flex: 1 1 auto;      /* занимает остаток высоты карточки */
+  min-height: 0;       /* иначе flex-элемент не даёт внутреннего скролла */
+  overflow-y: auto;    /* прокручивается только список */
+  overflow-x: hidden;
+}
 
 .kpi-help-item {
   display: flex;
