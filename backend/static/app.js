@@ -2511,8 +2511,11 @@ function _buildRegionRow(r, clickable, isRaionRow, num) {
   const onclick = clickable  ? ` onclick="drillRegion(${r.id})"`
                : isRaionRow ? ` onclick="filterRaByRaion(${r.id}, this)"` : '';
   const numHtml = num != null ? `<span class="gp-rownum">${num}</span>` : '';
+  // имена из справочника приходят КАПСОМ — приводим к обычному регистру
+  // (первая заглавная, остальное строчное) и для регионов, и для районов
+  const nm = _toTitleCase(r.name) || '—';
   return `<div class="${cls}"${onclick}>
-      <span class="gp-pay">${numHtml}${r.name || '—'}</span>
+      <span class="gp-pay">${numHtml}${nm}</span>
       <span class="gp-stat">${cnt}</span>
       <span class="gp-stat">${dec}</span>
       <span class="gp-stat">${fact}</span>

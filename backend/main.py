@@ -1846,20 +1846,22 @@ def ranking_oblasts(region_id: int = Query(None), pay_type_id: int = Query(None)
             )
             q = apply_extra_filters(q, sdu_filter, gender_filter, age_group, pay_type_id)
             rows = q.group_by(Payment.kato_raion, Payment.kato_rainame).all()
-            budget_map = {}  # no raion-level budget in budget.xlsx
+            db_dict = {str(r.geo_id): r for r in rows if r.geo_id is not None}
+            # показываем ВСЕ районы региона (справочник RAION.xlsx ∪ данные), даже нулевые
+            all_dis = _all_raions_for_region(region_id, set(db_dict.keys()))
             result = []
-            for r in rows:
-                if r.geo_id is None:
-                    continue
+            for d in all_dis:
+                r = db_dict.get(d)
+                name = (r.geo_name if (r and r.geo_name) else raion_names_ref.get(d) or f'Район {d}')
                 result.append({
-                    'id': r.geo_id,
-                    'name': r.geo_name or f'Район {r.geo_id}',
-                    'count': r.count or 0,
-                    'recipients': r.recipients or 0,
-                    'fact_recipients': r.fact_recipients or 0,
-                    'total_deliv': float(r.total_deliv or 0),
-                    'total_dec': float(r.total_dec or 0),
-                    'budget': budget_map.get(r.geo_id, 0.0),
+                    'id': int(d) if d.isdigit() else d,
+                    'name': name,
+                    'count': (r.count or 0) if r else 0,
+                    'recipients': (r.recipients or 0) if r else 0,
+                    'fact_recipients': (r.fact_recipients or 0) if r else 0,
+                    'total_deliv': float(r.total_deliv or 0) if r else 0.0,
+                    'total_dec': float(r.total_dec or 0) if r else 0.0,
+                    'budget': 0.0,   # районного бюджета в budget.xlsx нет
                 })
         else:
             q = (
@@ -1880,21 +1882,24 @@ def ranking_oblasts(region_id: int = Query(None), pay_type_id: int = Query(None)
             q = apply_extra_filters(q, sdu_filter, gender_filter, age_group, pay_type_id)
             rows = q.group_by(Payment.kato_region, Payment.kato_regname).all()
             bgt_rows = db.query(RegionBudget.kato_region, RegionBudget.budget).all()
-            budget_map = {r[0]: float(r[1] or 0) for r in bgt_rows}
+            budget_map = {str(r[0]): float(r[1] or 0) for r in bgt_rows}
+            db_dict = {str(r.geo_id): r for r in rows if r.geo_id is not None}
+            name_map = {str(r.kato_region): r.kato_regname
+                        for r in db.query(Payment.kato_region, Payment.kato_regname).distinct().all()}
             result = []
-            for r in rows:
-                if r.geo_id is None:
-                    continue
-                name = r.geo_name or REGION_NAMES.get(str(r.geo_id), str(r.geo_id))
+            # показываем ВСЕ регионы (канонический список КАТО), даже нулевые
+            for kato in all_region_katos:
+                r = db_dict.get(kato)
+                name = (r.geo_name if (r and r.geo_name) else name_map.get(kato) or REGION_NAMES.get(kato, kato))
                 result.append({
-                    'id': r.geo_id,
+                    'id': (r.geo_id if r else (int(kato) if kato.isdigit() else kato)),
                     'name': name,
-                    'count': r.count or 0,
-                    'recipients': r.recipients or 0,
-                    'fact_recipients': r.fact_recipients or 0,
-                    'total_deliv': float(r.total_deliv or 0),
-                    'total_dec': float(r.total_dec or 0),
-                    'budget': budget_map.get(r.geo_id, 0.0),
+                    'count': (r.count or 0) if r else 0,
+                    'recipients': (r.recipients or 0) if r else 0,
+                    'fact_recipients': (r.fact_recipients or 0) if r else 0,
+                    'total_deliv': float(r.total_deliv or 0) if r else 0.0,
+                    'total_dec': float(r.total_dec or 0) if r else 0.0,
+                    'budget': budget_map.get(kato, 0.0),
                 })
         return result
 
