@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import func, distinct
 from sqlalchemy.orm import Session
-from database import engine, Payment, User, BudgetItem, RegionBudget, AllowedIin
+from database import engine, Payment, User, BudgetItem, RegionBudget, AllowedIin, LoginLog
 from load_data import (load_excel, load_budget, load_region_budget, load_reference_data,
                        replace_payments_from_file,
                        region_help_ids, raion_help_ids,
@@ -95,8 +95,26 @@ def _user_out(u: User) -> dict:
             "is_eds": u.is_eds, "iin": u.iin, "fio": u.fio}
 
 
+def _client_ip(request: Request) -> str | None:
+    """Реальный IP клиента с учётом обратного прокси Caddy."""
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.headers.get("x-real-ip") or (request.client.host if request.client else None)
+
+
+def _record_login(login: str | None, fio: str | None, method: str, request: Request) -> None:
+    """Пишем событие входа в журнал. Ошибки логирования не должны ломать вход."""
+    try:
+        with Session(engine) as db:
+            db.add(LoginLog(login=login, fio=fio, method=method, ip=_client_ip(request)))
+            db.commit()
+    except Exception:
+        pass
+
+
 @app.post("/api/auth/login")
-def api_login(body: LoginBody):
+def api_login(body: LoginBody, request: Request):
     login = body.login.strip()
     with Session(engine) as db:
         user = db.query(User).filter(User.login == login).first()
@@ -113,13 +131,14 @@ def api_login(body: LoginBody):
             challenge = auth.generate_challenge(user.id)
             return {"requires_2fa": True, "challenge": challenge}
         token = auth.create_access_token(user)
+        _record_login(user.login, user.fio, "password", request)
         resp = JSONResponse(_user_out(user))
         auth.set_auth_cookie(resp, token)
         return resp
 
 
 @app.post("/api/auth/login-2fa")
-def api_login_2fa(body: Login2FABody):
+def api_login_2fa(body: Login2FABody, request: Request):
     try:
         payload = auth.decode_challenge(body.challenge)
     except auth.EDSError as e:
@@ -138,6 +157,7 @@ def api_login_2fa(body: Login2FABody):
         user.fio = eds["fio"]
         db.commit()
         token = auth.create_access_token(user)
+        _record_login(user.login, user.fio, "eds", request)
         resp = JSONResponse(_user_out(user))
         auth.set_auth_cookie(resp, token)
         return resp
@@ -176,6 +196,7 @@ def api_sso(request: Request,
 
     user = auth.find_or_create_portal_user(identifier, (fio or None))
     access = auth.create_access_token(user)
+    _record_login(user.login, user.fio, "sso", request)
     resp = RedirectResponse(url="/", status_code=303)
     auth.set_auth_cookie(resp, access)
     return resp
@@ -246,7 +267,7 @@ def api_sso_post(body: SsoBody, request: Request):
 
 
 @app.get("/api/auth/sso/consume")
-def api_sso_consume(ticket: str = Query(...)):
+def api_sso_consume(request: Request, ticket: str = Query(...)):
     """Браузер пользователя приходит по одноразовому тикету → ставим сессию и в кабинет."""
     payload = auth.decode_login_ticket(ticket)
     with Session(engine) as db:
@@ -254,6 +275,7 @@ def api_sso_consume(ticket: str = Query(...)):
         if not user:
             raise HTTPException(status_code=401, detail="Пользователь не найден")
         access = auth.create_access_token(user)
+        _record_login(user.login, user.fio, "sso", request)
     resp = RedirectResponse(url="/", status_code=303)
     auth.set_auth_cookie(resp, access)
     return resp
@@ -399,6 +421,21 @@ def api_admin_del_allowed_iin(item_id: int, admin: User = Depends(auth.require_a
         db.delete(row)
         db.commit()
         return {"ok": True}
+
+
+@app.get("/api/admin/login-logs")
+def api_admin_login_logs(limit: int = Query(300, ge=1, le=2000),
+                         admin: User = Depends(auth.require_admin)):
+    """Журнал входов (последние сверху). Время в UTC (ISO с 'Z')."""
+    with Session(engine) as db:
+        rows = db.query(LoginLog).order_by(LoginLog.created_at.desc()).limit(limit).all()
+        return [{
+            "ts": (r.created_at.isoformat() + "Z") if r.created_at else None,
+            "login": r.login,
+            "fio": r.fio,
+            "method": r.method,
+            "ip": r.ip,
+        } for r in rows]
 
 
 def _all_raions_for_region(region_id, db_katos: set[str]) -> list[str]:

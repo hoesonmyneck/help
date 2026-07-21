@@ -87,3 +87,15 @@ class AllowedIin(Base):
     iin = Column(String(12), unique=True, nullable=False, index=True)
     note = Column(String(300))                                   # ФИО/комментарий (необязательно)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class LoginLog(Base):
+    """Журнал входов: кто и когда авторизовался на сайте."""
+    __tablename__ = "login_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    login = Column(String(100), index=True)                      # логин / ИИН
+    fio = Column(String(300))
+    method = Column(String(20))                                  # 'password' | 'eds' | 'sso'
+    ip = Column(String(64))
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)

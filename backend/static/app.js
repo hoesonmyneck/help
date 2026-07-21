@@ -365,6 +365,11 @@ function setupAdminPanel() {
           <button type="button" class="rdm-close" onclick="closeAdminPanel()">✕</button>
         </div>
         <div class="rdm-body">
+          <div class="admin-tabs">
+            <button type="button" class="admin-tab active" data-atab="main" onclick="switchAdminTab('main')">Аккаунты</button>
+            <button type="button" class="admin-tab" data-atab="logs" onclick="switchAdminTab('logs')">Логи</button>
+          </div>
+          <div class="admin-pane admin-pane-active" id="admin-pane-main">
           <div class="admin-upload">
             <div class="admin-upload-title">Обновление данных</div>
             <div class="admin-upload-hint"></div>
@@ -412,6 +417,18 @@ function setupAdminPanel() {
               <tbody id="admin-iins-body"></tbody>
             </table>
           </div>
+          </div><!-- /admin-pane-main -->
+
+          <div class="admin-pane" id="admin-pane-logs">
+            <div class="admin-logs-head">
+              <div class="admin-upload-title">Журнал входов</div>
+              <button type="button" class="admin-logs-refresh" onclick="loadLoginLogs()" title="Обновить">↻</button>
+            </div>
+            <table class="rdm-table admin-table admin-logs-table">
+              <thead><tr><th>Время</th><th>Логин / ИИН</th><th>ФИО</th><th class="col-center">Способ</th><th>IP</th></tr></thead>
+              <tbody id="admin-logs-body"></tbody>
+            </table>
+          </div>
         </div>
       </div>`;
     document.body.appendChild(ov);
@@ -427,6 +444,38 @@ function openAdminPanel() {
 }
 function closeAdminPanel() {
   document.getElementById('admin-modal').style.display = 'none';
+}
+
+function switchAdminTab(name) {
+  document.querySelectorAll('#admin-modal .admin-tab').forEach(b => b.classList.toggle('active', b.dataset.atab === name));
+  document.querySelectorAll('#admin-modal .admin-pane').forEach(p => p.classList.toggle('admin-pane-active', p.id === 'admin-pane-' + name));
+  if (name === 'logs') loadLoginLogs();
+}
+
+const _LOGIN_METHODS = { password: 'Пароль', eds: 'ЭЦП', sso: 'Портал' };
+async function loadLoginLogs() {
+  const body = document.getElementById('admin-logs-body');
+  if (!body) return;
+  body.innerHTML = `<tr><td colspan="5" class="loading">Загрузка...</td></tr>`;
+  try {
+    const r = await fetch('/api/admin/login-logs', { credentials: 'include' });
+    if (!r.ok) throw new Error();
+    const rows = await r.json();
+    if (!rows.length) { body.innerHTML = `<tr><td colspan="5" class="admin-iin-empty">Пока нет записей</td></tr>`; return; }
+    body.innerHTML = rows.map(x => {
+      const dt = x.ts ? new Date(x.ts).toLocaleString('ru-RU') : '—';
+      const esc = s => (s ? String(s).replace(/</g, '&lt;') : '—');
+      return `<tr>
+        <td>${dt}</td>
+        <td>${esc(x.login)}</td>
+        <td>${esc(x.fio)}</td>
+        <td class="col-center">${_LOGIN_METHODS[x.method] || esc(x.method)}</td>
+        <td>${esc(x.ip)}</td>
+      </tr>`;
+    }).join('');
+  } catch {
+    body.innerHTML = `<tr><td colspan="5" class="loading">Ошибка загрузки</td></tr>`;
+  }
 }
 
 async function loadAdminUsers() {
