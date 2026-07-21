@@ -816,9 +816,10 @@ async function init() {
     const div = L.DomUtil.create('div', 'map-legend');
     div.innerHTML = `
       <div class="ml-title">Утвержденные виды помощи в МИО </div>
-      <div class="ml-item"><span class="ml-dot" style="background:#4a5258"></span>0 видов помощи</div>
+      <div class="ml-item"><span class="ml-dot" style="background:#c0392b"></span>0 видов помощи</div>
       <div class="ml-item"><span class="ml-dot" style="background:#e67e22"></span>1–4 вида</div>
-      <div class="ml-item"><span class="ml-dot" style="background:#27ae60"></span>5 и более</div>`;
+      <div class="ml-item"><span class="ml-dot" style="background:#27ae60"></span>5 и более</div>
+      <div class="ml-item"><span class="ml-dot" style="background:#4a5258"></span>не предусмотрено</div>`;
     return div;
   };
   mapLegend.addTo(map);
@@ -830,14 +831,14 @@ async function init() {
 }
 
 function getColor(vidy) {
-  if (vidy === 0)  return '#4a5258';   // 0 видов помощи — тёмно-серый (нет данных), а не красный
+  if (vidy === 0)  return '#c0392b';   // 0 видов помощи — красный
   if (vidy <= 4)   return '#e67e22';
   return '#27ae60';
 }
 
 // Покраска по проценту «факт выплачено / сумма заявок»
 function getColorPct(pct) {
-  if (pct < 10)  return '#4a5258';   // менее 10% — тёмно-серый (как «нет данных»)
+  if (pct < 10)  return '#c0392b';   // менее 10% — красный
   if (pct < 20)  return '#e67e22';
   return '#27ae60';
 }
@@ -856,6 +857,10 @@ function geoPct(id) {
 }
 
 function geoFill(id) {
+  // Улытауская (62) и Абайская (10) области — помощь не предусмотрена → серый (в обоих режимах)
+  if (REGIONS_NO_NPA.has(+id) || (currentRegion != null && REGIONS_NO_NPA.has(+currentRegion))) {
+    return '#4a5258';
+  }
   return mapColorMode === 'pct' ? getColorPct(geoPct(id)) : getColor(geoVidy(id));
 }
 
@@ -899,15 +904,17 @@ function updateMapLegend() {
   if (mapColorMode === 'pct') {
     div.innerHTML = `
       <div class="ml-title">Фактическая выплата / Принятые заявления</div>
-      <div class="ml-item"><span class="ml-dot" style="background:#4a5258"></span>менее 10%</div>
+      <div class="ml-item"><span class="ml-dot" style="background:#c0392b"></span>менее 10%</div>
       <div class="ml-item"><span class="ml-dot" style="background:#e67e22"></span>10–20%</div>
-      <div class="ml-item"><span class="ml-dot" style="background:#27ae60"></span>20% и более</div>`;
+      <div class="ml-item"><span class="ml-dot" style="background:#27ae60"></span>20% и более</div>
+      <div class="ml-item"><span class="ml-dot" style="background:#4a5258"></span>не предусмотрено</div>`;
   } else {
     div.innerHTML = `
       <div class="ml-title">Утвержденные виды помощи в МИО </div>
-      <div class="ml-item"><span class="ml-dot" style="background:#4a5258"></span>0 видов помощи</div>
+      <div class="ml-item"><span class="ml-dot" style="background:#c0392b"></span>0 видов помощи</div>
       <div class="ml-item"><span class="ml-dot" style="background:#e67e22"></span>1–4 вида</div>
-      <div class="ml-item"><span class="ml-dot" style="background:#27ae60"></span>5 и более</div>`;
+      <div class="ml-item"><span class="ml-dot" style="background:#27ae60"></span>5 и более</div>
+      <div class="ml-item"><span class="ml-dot" style="background:#4a5258"></span>не предусмотрено</div>`;
   }
 }
 
@@ -2015,7 +2022,7 @@ function sortRaTable(col) {
     `<div class="gp-hdr-row" id="ra-sort-hdr">${_raSortHdrInner()}</div>` +
     _lastRaTotal +
     (sorted.map((r, i) => _buildRegionRow(r, !_lastRaIsRaion, _lastRaIsRaion, i + 1)).join('') ||
-     '<div class="gp-empty" style="padding:8px 4px">Нет данных</div>');
+     `<div class="gp-empty" style="padding:8px 4px">${(_lastRaIsRaion && REGIONS_NO_NPA.has(+currentRegion)) ? 'Не предусмотрено' : 'Нет данных'}</div>`);
 }
 
 function _geoSortHdrInner(pfx) {
@@ -2673,8 +2680,10 @@ function _buildRegionAnalyticsHtml(titleHtml, rows, stats, kpi, isRaion, totalLa
   _lastRaIsRaion = isRaion;
   const sorted = _raSort.col ? [...rows].sort(_makeRaComparator()) : rows;
   const hdr = `<div class="gp-hdr-row" id="ra-sort-hdr">${_raSortHdrInner()}</div>`;
+  // Абайская (10) и Улытауская (62) области — помощь не предусмотрена
+  const emptyMsg = (isRaion && REGIONS_NO_NPA.has(+currentRegion)) ? 'Не предусмотрено' : 'Нет данных';
   const list = sorted.map((r, i) => _buildRegionRow(r, !isRaion, isRaion, i + 1)).join('') ||
-    '<div class="gp-empty" style="padding:8px 4px">Нет данных</div>';
+    `<div class="gp-empty" style="padding:8px 4px">${emptyMsg}</div>`;
   const totalHtml = _buildGeoTotalRow(stats, kpi, totalLabel, true);
   _lastRaTotal = totalHtml;
   return `<div class="gp-main">
@@ -2712,7 +2721,8 @@ async function renderRegionAnalytics() {
     ]);
     _lastRaRows = rows;
     _raGeoFilter = null;  // сброс фильтра по району при смене уровня
-    _raSort.col = null;   // сброс сортировки при смене уровня
+    // по умолчанию — по убыванию по количеству принятых заявок
+    _raSort.col = 'count'; _raSort.dir = -1;
     let title, totalLabel;
     if (region != null) {
       const rname = _toTitleCase((regionStats[region]?.name) || 'Регион');
