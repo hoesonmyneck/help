@@ -3772,6 +3772,11 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
   background: var(--bg-deep);
 }
 .admin-upload-title { font-weight: 700; color: var(--tx-head); font-size: 0.92rem; margin-bottom: 4px; }
+/* Секция белого списка ИИН */
+.admin-whitelist { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--bd-main); }
+.admin-whitelist .admin-upload-title { padding: 0 18px; }
+.admin-whitelist .admin-upload-hint { padding: 0 18px; }
+.admin-iin-empty { color: var(--tx-dim); font-style: italic; text-align: center; }
 .admin-upload-hint { font-size: 0.78rem; color: var(--tx-dim); margin-bottom: 10px; }
 .admin-upload-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .admin-upload-row input[type=file] { color: var(--tx-main); font-size: 0.82rem; flex: 1; min-width: 0; }

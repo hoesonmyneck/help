@@ -27,6 +27,10 @@ COOKIE_NAME = "access_token"
 # Пустой => SSO выключен.
 SSO_TOKEN = os.environ.get("SSO_TOKEN", "")
 
+# Стандартный пароль для прямого входа людей из белого списка ИИН
+# (логин = ИИН из списка). При необходимости переопределяется через окружение.
+WHITELIST_PASSWORD = os.environ.get("WHITELIST_PASSWORD", "qwerty12Q")
+
 
 # ── Password hashing (stdlib pbkdf2, no extra deps) ──────────────────────────
 def hash_password(password: str) -> str:

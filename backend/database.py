@@ -76,3 +76,14 @@ class User(Base):
     iin = Column(String(12))                                     # для ЭЦП-аккаунтов = login
     fio = Column(String(300))                                    # ФИО из сертификата
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AllowedIin(Base):
+    """Белый список ИИН: кого пускать при входе с портала по ЭЦП (SSO).
+    Пустой список => ограничение выключено (пускаем всех)."""
+    __tablename__ = "allowed_iins"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    iin = Column(String(12), unique=True, nullable=False, index=True)
+    note = Column(String(300))                                   # ФИО/комментарий (необязательно)
+    created_at = Column(DateTime, default=datetime.utcnow)

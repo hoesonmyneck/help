@@ -395,16 +395,35 @@ function setupAdminPanel() {
             </tr></thead>
             <tbody id="admin-users-body"></tbody>
           </table>
+
+          <div class="admin-whitelist">
+            <div class="admin-upload-title">Белый список ИИН — доступ с портала по ЭЦП</div>
+            <div class="admin-upload-hint">Пока список пуст — с портала пускаются все. Как только добавлен хотя бы один ИИН — с портала войдут только люди из этого списка. Они же могут войти напрямую: логин — свой ИИН, пароль — <b>qwerty12Q</b>, затем подпись ЭЦП.</div>
+            <form id="admin-iin-form" class="admin-form">
+              <div class="admin-form-row">
+                <input type="text" id="admin-iin-val" placeholder="ИИН (12 цифр)" autocomplete="off" inputmode="numeric" maxlength="12">
+                <input type="text" id="admin-iin-note" placeholder="ФИО / комментарий (необязательно)" autocomplete="off">
+                <button type="submit">Добавить</button>
+              </div>
+              <div class="admin-form-err" id="admin-iin-err"></div>
+            </form>
+            <table class="rdm-table admin-table">
+              <thead><tr><th>ИИН</th><th>ФИО / комментарий</th><th></th></tr></thead>
+              <tbody id="admin-iins-body"></tbody>
+            </table>
+          </div>
         </div>
       </div>`;
     document.body.appendChild(ov);
     document.getElementById('admin-create-form').addEventListener('submit', adminCreateUser);
+    document.getElementById('admin-iin-form').addEventListener('submit', adminAddIin);
   }
 }
 
 function openAdminPanel() {
   document.getElementById('admin-modal').style.display = 'flex';
   loadAdminUsers();
+  loadAllowedIins();
 }
 function closeAdminPanel() {
   document.getElementById('admin-modal').style.display = 'none';
@@ -501,6 +520,66 @@ async function adminSetPassword(id, login) {
     });
     if (!r.ok) { const d = await r.json(); alert(d.detail || 'Ошибка смены пароля'); return; }
     alert('Пароль изменён');
+  } catch {
+    alert('Сеть недоступна');
+  }
+}
+
+// ── Белый список ИИН (доступ с портала по ЭЦП) ──
+async function loadAllowedIins() {
+  const body = document.getElementById('admin-iins-body');
+  if (!body) return;
+  body.innerHTML = `<tr><td colspan="3" class="loading">Загрузка...</td></tr>`;
+  try {
+    const r = await fetch('/api/admin/allowed-iins', { credentials: 'include' });
+    if (!r.ok) throw new Error();
+    const rows = await r.json();
+    if (!rows.length) {
+      body.innerHTML = `<tr><td colspan="3" class="admin-iin-empty">Список пуст — сейчас пускаются все</td></tr>`;
+      return;
+    }
+    body.innerHTML = rows.map(x => `
+      <tr>
+        <td>${x.iin}</td>
+        <td>${x.note ? x.note.replace(/</g, '&lt;') : '—'}</td>
+        <td class="col-center admin-actions">
+          <button type="button" class="admin-del-btn" onclick="adminDeleteIin(${x.id})" title="Убрать из списка">✕</button>
+        </td>
+      </tr>`).join('');
+  } catch {
+    body.innerHTML = `<tr><td colspan="3" class="loading">Ошибка загрузки</td></tr>`;
+  }
+}
+
+async function adminAddIin(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('admin-iin-err');
+  errEl.textContent = '';
+  const iin = document.getElementById('admin-iin-val').value.trim();
+  const note = document.getElementById('admin-iin-note').value.trim();
+  if (!/^\d{12}$/.test(iin)) { errEl.textContent = 'ИИН должен состоять из 12 цифр'; return; }
+  try {
+    const r = await fetch('/api/admin/allowed-iins', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ iin, note }),
+    });
+    const data = await r.json();
+    if (!r.ok) { errEl.textContent = data.detail || 'Ошибка добавления'; return; }
+    document.getElementById('admin-iin-val').value = '';
+    document.getElementById('admin-iin-note').value = '';
+    loadAllowedIins();
+  } catch {
+    errEl.textContent = 'Сеть недоступна';
+  }
+}
+
+async function adminDeleteIin(id) {
+  if (!confirm('Убрать этот ИИН из белого списка?')) return;
+  try {
+    const r = await fetch(`/api/admin/allowed-iins/${id}`, { method: 'DELETE', credentials: 'include' });
+    if (!r.ok) { const d = await r.json(); alert(d.detail || 'Ошибка удаления'); return; }
+    loadAllowedIins();
   } catch {
     alert('Сеть недоступна');
   }

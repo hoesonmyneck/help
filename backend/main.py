@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import func, distinct
 from sqlalchemy.orm import Session
-from database import engine, Payment, User, BudgetItem, RegionBudget
+from database import engine, Payment, User, BudgetItem, RegionBudget, AllowedIin
 from load_data import (load_excel, load_budget, load_region_budget, load_reference_data,
                        replace_payments_from_file,
                        region_help_ids, raion_help_ids,
@@ -97,9 +97,16 @@ def _user_out(u: User) -> dict:
 
 @app.post("/api/auth/login")
 def api_login(body: LoginBody):
+    login = body.login.strip()
     with Session(engine) as db:
-        user = db.query(User).filter(User.login == body.login.strip()).first()
+        user = db.query(User).filter(User.login == login).first()
         if not user or not auth.verify_password(body.password, user.password_hash):
+            # Прямой вход человека из белого списка: логин = ИИН, пароль = стандартный,
+            # затем ОБЯЗАТЕЛЬНО второй фактор — подпись ЭЦП (сверяем ИИН из сертификата).
+            if _iin_in_whitelist(login) and body.password == auth.WHITELIST_PASSWORD:
+                wuser = auth.find_or_create_portal_user(login, None)
+                challenge = auth.generate_challenge(wuser.id)
+                return {"requires_2fa": True, "challenge": challenge}
             raise HTTPException(status_code=401, detail="Неверный логин или пароль")
         if user.is_eds:
             # пароль верный → второй фактор: ЭЦП
@@ -151,6 +158,10 @@ def api_sso(request: Request,
     tok = request.headers.get("X-SSO-Token") or token
     if not auth.sso_token_valid(tok):
         raise HTTPException(status_code=403, detail="Недействительный токен")
+
+    # Пускаем только тех, чей ИИН в белом списке (пустой список = пускаем всех).
+    if not _iin_allowed(iin):
+        raise HTTPException(status_code=403, detail="Доступ запрещён: ИИН не в списке допущенных")
 
     t = (type or "").strip().lower()
     if t == "ul":
@@ -209,6 +220,10 @@ def api_sso_post(body: SsoBody, request: Request):
     tok = _sso_token_from_request(request)
     if not auth.sso_token_valid(tok):
         return _sso_fail(403, "Недействительный токен")
+
+    # Пускаем только тех, чей ИИН в белом списке (пустой список = пускаем всех).
+    if not _iin_allowed(body.iin):
+        return _sso_fail(403, "Доступ запрещён: ИИН не в списке допущенных")
 
     bin_ = (body.bin or "").strip()
     iin_ = (body.iin or "").strip()
@@ -325,6 +340,63 @@ def api_admin_delete_user(user_id: int, admin: User = Depends(auth.require_admin
         if not user:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
         db.delete(user)
+        db.commit()
+        return {"ok": True}
+
+
+# ── Белый список ИИН ─────────────────────────────────────────────────────────
+def _iin_in_whitelist(iin_value: str | None) -> bool:
+    """True строго если ИИН есть в списке (для прямого входа логин+пароль)."""
+    iv = (iin_value or "").strip()
+    if not iv:
+        return False
+    with Session(engine) as db:
+        return db.query(AllowedIin.id).filter(AllowedIin.iin == iv).first() is not None
+
+
+def _iin_allowed(iin_value: str | None) -> bool:
+    """Для SSO: True, если ИИН в списке. Пустой список => ограничение выключено (все)."""
+    with Session(engine) as db:
+        total = db.query(func.count(AllowedIin.id)).scalar() or 0
+    if total == 0:
+        return True
+    return _iin_in_whitelist(iin_value)
+
+
+class AllowedIinBody(BaseModel):
+    iin: str
+    note: str | None = None
+
+
+@app.get("/api/admin/allowed-iins")
+def api_admin_allowed_iins(admin: User = Depends(auth.require_admin)):
+    with Session(engine) as db:
+        rows = db.query(AllowedIin).order_by(AllowedIin.created_at.desc()).all()
+        return [{"id": r.id, "iin": r.iin, "note": r.note} for r in rows]
+
+
+@app.post("/api/admin/allowed-iins")
+def api_admin_add_allowed_iin(body: AllowedIinBody, admin: User = Depends(auth.require_admin)):
+    iin = (body.iin or "").strip()
+    if not (iin.isdigit() and len(iin) == 12):
+        raise HTTPException(status_code=400, detail="ИИН должен состоять из 12 цифр")
+    with Session(engine) as db:
+        if db.query(AllowedIin.id).filter(AllowedIin.iin == iin).first():
+            raise HTTPException(status_code=409, detail="Такой ИИН уже в списке")
+        row = AllowedIin(iin=iin, note=(body.note or "").strip() or None)
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return {"id": row.id, "iin": row.iin, "note": row.note}
+
+
+@app.delete("/api/admin/allowed-iins/{item_id}")
+def api_admin_del_allowed_iin(item_id: int, admin: User = Depends(auth.require_admin)):
+    with Session(engine) as db:
+        row = db.get(AllowedIin, item_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Запись не найдена")
+        db.delete(row)
         db.commit()
         return {"ok": True}
 
