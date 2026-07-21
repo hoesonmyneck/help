@@ -3777,6 +3777,13 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 .admin-whitelist .admin-upload-title { padding: 0 18px; }
 .admin-whitelist .admin-upload-hint { padding: 0 18px; }
 .admin-iin-empty { color: var(--tx-dim); font-style: italic; text-align: center; }
+.admin-iin-search { padding: 0 18px 8px; }
+.admin-iin-search input {
+  width: 100%; box-sizing: border-box;
+  background: var(--bg-deep); border: 1px solid var(--bd-main); border-radius: 8px;
+  color: var(--tx-main); font: inherit; font-size: 0.85rem; padding: 7px 10px;
+}
+.admin-iin-search input:focus { outline: none; border-color: var(--ac-teal); }
 
 /* Вкладки в модалке аккаунтов (Аккаунты / Логи) */
 .admin-tabs { display: flex; gap: 4px; padding: 12px 18px 0; }

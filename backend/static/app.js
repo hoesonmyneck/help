@@ -412,6 +412,9 @@ function setupAdminPanel() {
               </div>
               <div class="admin-form-err" id="admin-iin-err"></div>
             </form>
+            <div class="admin-iin-search">
+              <input type="text" id="admin-iin-search" placeholder="Поиск по ИИН…" autocomplete="off" inputmode="numeric" oninput="renderAllowedIins()">
+            </div>
             <table class="rdm-table admin-table">
               <thead><tr><th>ИИН</th><th>ФИО / комментарий</th><th></th></tr></thead>
               <tbody id="admin-iins-body"></tbody>
@@ -575,6 +578,7 @@ async function adminSetPassword(id, login) {
 }
 
 // ── Белый список ИИН (доступ с портала по ЭЦП) ──
+let _allowedIins = [];
 async function loadAllowedIins() {
   const body = document.getElementById('admin-iins-body');
   if (!body) return;
@@ -582,22 +586,34 @@ async function loadAllowedIins() {
   try {
     const r = await fetch('/api/admin/allowed-iins', { credentials: 'include' });
     if (!r.ok) throw new Error();
-    const rows = await r.json();
-    if (!rows.length) {
-      body.innerHTML = `<tr><td colspan="3" class="admin-iin-empty">Список пуст — сейчас пускаются все</td></tr>`;
-      return;
-    }
-    body.innerHTML = rows.map(x => `
-      <tr>
-        <td>${x.iin}</td>
-        <td>${x.note ? x.note.replace(/</g, '&lt;') : '—'}</td>
-        <td class="col-center admin-actions">
-          <button type="button" class="admin-del-btn" onclick="adminDeleteIin(${x.id})" title="Убрать из списка">✕</button>
-        </td>
-      </tr>`).join('');
+    _allowedIins = await r.json();
+    renderAllowedIins();
   } catch {
     body.innerHTML = `<tr><td colspan="3" class="loading">Ошибка загрузки</td></tr>`;
   }
+}
+
+function renderAllowedIins() {
+  const body = document.getElementById('admin-iins-body');
+  if (!body) return;
+  if (!_allowedIins.length) {
+    body.innerHTML = `<tr><td colspan="3" class="admin-iin-empty">Список пуст — сейчас пускаются все</td></tr>`;
+    return;
+  }
+  const q = (document.getElementById('admin-iin-search')?.value || '').trim();
+  const rows = q ? _allowedIins.filter(x => x.iin.includes(q)) : _allowedIins;
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="3" class="admin-iin-empty">ИИН «${q.replace(/</g, '&lt;')}» в списке не найден</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map(x => `
+    <tr>
+      <td>${x.iin}</td>
+      <td>${x.note ? x.note.replace(/</g, '&lt;') : '—'}</td>
+      <td class="col-center admin-actions">
+        <button type="button" class="admin-del-btn" onclick="adminDeleteIin(${x.id})" title="Убрать из списка">✕</button>
+      </td>
+    </tr>`).join('');
 }
 
 async function adminAddIin(e) {
