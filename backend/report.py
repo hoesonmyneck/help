@@ -304,8 +304,14 @@ def write_xlsx(sheets, scope):
 
         ws.column_dimensions["A"].width = 36
         for col in range(2, ncols + 1):
-            fmt = metrics[(col - 2) // block][2]
-            ws.column_dimensions[get_column_letter(col)].width = 15 if fmt == "money" else 10
+            mi = (col - 2) // block
+            offset = (col - 2) % block           # 0 = столбец-итог показателя
+            fmt = metrics[mi][2]
+            if fmt == "money":
+                w = 15
+            else:
+                w = 20 if offset == 0 else 10     # итог количества («Принятые заявки») — вдвое шире
+            ws.column_dimensions[get_column_letter(col)].width = w
         ws.freeze_panes = "B4"
 
     buf = io.BytesIO()
