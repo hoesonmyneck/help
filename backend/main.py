@@ -2110,7 +2110,7 @@ def download_report(region_id: int = Query(None), format: str = Query("xlsx")):
         sheets = _report.build_sheets(db, region_id)
     now = datetime.now()
     scope = f"{_report.scope_label(region_id)} на {now.strftime('%d.%m.%Y')}"
-    stamp = now.strftime("%Y%m%d")
+    stamp = now.strftime("%Y%m%d_%H%M%S")
     tag = "kz" if region_id is None else f"reg{region_id}"
     if fmt == "pdf":
         data = _report.write_pdf(sheets, scope)
@@ -2120,7 +2120,13 @@ def download_report(region_id: int = Query(None), format: str = Query("xlsx")):
         data = _report.write_xlsx(sheets, scope)
         media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         ext = "xlsx"
-    headers = {"Content-Disposition": f'attachment; filename="report_{tag}_{stamp}.{ext}"'}
+    headers = {
+        "Content-Disposition": f'attachment; filename="report_{tag}_{stamp}.{ext}"',
+        # запрет кэширования — иначе браузер может отдавать старый скачанный файл
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
     return Response(content=data, media_type=media, headers=headers)
 
 

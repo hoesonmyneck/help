@@ -335,6 +335,9 @@ header {
   z-index: 1200;
 }
 
+/* В полноэкранном режиме панель должна перекрывать шапку, а не наоборот */
+body.fs-open header { z-index: 0; }
+
 header h1 {
   font-size: 18px;
   font-weight: 800;

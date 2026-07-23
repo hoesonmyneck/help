@@ -244,6 +244,7 @@ function downloadReport() {
   const params = new URLSearchParams();
   params.set('format', _reportFmt);
   if (region) params.set('region_id', region);
+  params.set('_', Date.now());   // анти-кэш: всегда свежий файл, без кэша браузера
   const btn = document.getElementById('rm-download');
   if (btn) { btn.disabled = true; btn.textContent = 'Готовим…'; }
   // скачивание через временную ссылку (кука авторизации уходит автоматически)
