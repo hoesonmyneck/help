@@ -5,14 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ЕЦП "Анализ по дополнительным видам помощи МИО"</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="/style.css?v=82">
+  <link rel="stylesheet" href="/style.css?v=84">
 </head>
 <body>
 
 <header>
   <div class="header-title-block">
     <h0>Единая цифровая платформа "Анализ по дополнительным видам помощи МИО"</h0>
-    <div class="header-date" id="header-date"></div>
+    <div class="header-date-row">
+      <div class="header-date" id="header-date"></div>
+      <div class="report-wrap" id="report-wrap">
+        <button type="button" class="report-btn" onclick="toggleReportMenu(event)">
+          <span class="report-ico">⭳</span> Скачать отчёт
+        </button>
+        <div class="report-menu" id="report-menu" style="display:none" onclick="event.stopPropagation()">
+          <div class="rm-title">Выгрузка отчёта</div>
+          <label class="rm-lab" for="report-region">Область</label>
+          <select id="report-region" class="rm-select"></select>
+          <label class="rm-lab">Формат</label>
+          <div class="rm-fmt">
+            <button type="button" class="rm-fmt-btn on" data-fmt="xlsx" onclick="setReportFmt('xlsx', this)">Excel</button>
+            <button type="button" class="rm-fmt-btn" data-fmt="pdf" onclick="setReportFmt('pdf', this)">PDF</button>
+          </div>
+          <button type="button" class="rm-download" id="rm-download" onclick="downloadReport()">Скачать</button>
+        </div>
+      </div>
+    </div>
   </div>
   <div class="breadcrumb" id="breadcrumb">
     <span onclick="goBack()">Казахстан</span>
@@ -502,7 +520,7 @@
 
 <script src="/i18n-raions.js?v=1"></script>
 <script src="/i18n.js?v=10"></script>
-<script src="/app.js?v=84"></script>
+<script src="/app.js?v=86"></script>
 <script src="/kpifx.js?v=11"></script>
 
 <!-- Three.js (для 3D-пирога видов помощи) -->

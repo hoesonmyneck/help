@@ -14,6 +14,7 @@ from load_data import (load_excel, load_budget, load_region_budget, load_referen
                        raion_names_ref, raion_reg_ref, settings_rows, settings_pay_names)
 import auth
 import os
+from datetime import datetime
 
 # Внешний базовый URL сервиса (как его видит браузер пользователя через портал).
 # Используется для абсолютной ссылки redirectUrl в SSO-ответе.
@@ -2094,6 +2095,33 @@ def paytype_geo(pay_type_id: int = Query(...), region_id: int = Query(None)):
                   for r in rows if (r[2] or 0) > 0]
         result.sort(key=lambda x: x["total_dec"], reverse=True)
         return result
+
+
+@app.get("/api/report")
+def download_report(region_id: int = Query(None), format: str = Query("xlsx")):
+    """Отчёт из двух листов: «Аналитика по видам помощи» и «Аналитика по регионам».
+    Каждая строка разбита на «Итоги» + группы по ЦКС (A, B, C, …).
+    Область: вся РК (region_id не задан) или конкретная область (её районы).
+    Бюджет и пол/возраст не выгружаются."""
+    from fastapi.responses import Response
+    import report as _report
+    fmt = (format or "xlsx").lower()
+    with Session(engine) as db:
+        sheets = _report.build_sheets(db, region_id)
+    now = datetime.now()
+    scope = f"{_report.scope_label(region_id)} на {now.strftime('%d.%m.%Y')}"
+    stamp = now.strftime("%Y%m%d")
+    tag = "kz" if region_id is None else f"reg{region_id}"
+    if fmt == "pdf":
+        data = _report.write_pdf(sheets, scope)
+        media = "application/pdf"
+        ext = "pdf"
+    else:
+        data = _report.write_xlsx(sheets, scope)
+        media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ext = "xlsx"
+    headers = {"Content-Disposition": f'attachment; filename="report_{tag}_{stamp}.{ext}"'}
+    return Response(content=data, media_type=media, headers=headers)
 
 
 app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static"), html=True), name="static")

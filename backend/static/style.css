@@ -331,6 +331,8 @@ header {
   display: flex;
   align-items: center;
   gap: 12px;
+  /* выше .main-layout (z-index:1), иначе карта Leaflet перекрывает меню отчёта */
+  z-index: 1200;
 }
 
 header h1 {
@@ -360,6 +362,109 @@ header h0 {
   letter-spacing: 0.3px;
   opacity: 0.75;
 }
+
+/* ── «Скачать отчёт» — кнопка и выпадающее меню ── */
+.header-date-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.report-wrap { position: relative; }
+.report-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ac-teal);
+  color: #fff;
+  border: 1px solid var(--ac-teal);
+  border-radius: 6px;
+  padding: 4px 11px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: filter 0.15s;
+  white-space: nowrap;
+}
+.report-btn:hover { filter: brightness(1.08); }
+.report-ico { font-size: 0.85rem; line-height: 1; }
+.report-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 4000;
+  width: 260px;
+  background: var(--bg-card);
+  border: 1px solid var(--bd-mid);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+  animation: kpi-fade-in 0.15s ease;
+}
+.rm-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--tx-head);
+  margin-bottom: 12px;
+}
+.rm-lab {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tx-muted);
+  font-weight: 600;
+  margin: 10px 0 5px;
+}
+.rm-select {
+  width: 100%;
+  background: var(--bg-deep);
+  color: var(--tx-main);
+  border: 1px solid var(--bd-mid);
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+}
+.rm-select:focus { border-color: var(--ac-teal); }
+.rm-fmt { display: flex; gap: 8px; }
+.rm-fmt-btn {
+  flex: 1;
+  background: var(--bg-deep);
+  color: var(--tx-sub);
+  border: 1px solid var(--bd-mid);
+  border-radius: 7px;
+  padding: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.rm-fmt-btn.on {
+  background: var(--ac-teal);
+  color: #fff;
+  border-color: var(--ac-teal);
+}
+.rm-download {
+  width: 100%;
+  margin-top: 16px;
+  background: var(--ac-blue);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.rm-download:hover { filter: brightness(1.08); }
+.rm-download:disabled { opacity: 0.6; cursor: default; }
 
 .breadcrumb {
   font-size: 0.82rem;

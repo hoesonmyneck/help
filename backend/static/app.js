@@ -198,7 +198,71 @@ function closePlansModal() {
   if (m) m.style.display = 'none';
 }
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeSupportModal(); closePlansModal(); }
+  if (e.key === 'Escape') { closeSupportModal(); closePlansModal(); closeReportMenu(); }
+});
+
+// ── Выгрузка отчёта ─────────────────────────────────────────────
+let _reportFmt = 'xlsx';
+
+function _populateReportRegions() {
+  const sel = document.getElementById('report-region');
+  if (!sel || sel.dataset.filled === '1') return;
+  const opts = ['<option value="">По Республике Казахстан</option>'];
+  const list = Object.values(regionStats || {})
+    .filter(r => r && r.id_reg != null && r.name)
+    .map(r => ({ id: r.id_reg, name: _toTitleCase(r.name) }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  list.forEach(r => opts.push(`<option value="${r.id}">${r.name}</option>`));
+  sel.innerHTML = opts.join('');
+  if (list.length) sel.dataset.filled = '1';
+  // по умолчанию — текущая область, если пользователь уже провалился в регион
+  if (currentRegion != null) sel.value = String(currentRegion);
+}
+
+function toggleReportMenu(e) {
+  if (e) e.stopPropagation();
+  const m = document.getElementById('report-menu');
+  if (!m) return;
+  if (m.style.display === 'block') { m.style.display = 'none'; return; }
+  _populateReportRegions();
+  m.style.display = 'block';
+}
+
+function closeReportMenu() {
+  const m = document.getElementById('report-menu');
+  if (m) m.style.display = 'none';
+}
+
+function setReportFmt(fmt, btn) {
+  _reportFmt = fmt;
+  document.querySelectorAll('.rm-fmt-btn').forEach(b => b.classList.toggle('on', b === btn));
+}
+
+function downloadReport() {
+  const sel = document.getElementById('report-region');
+  const region = sel ? sel.value : '';
+  const params = new URLSearchParams();
+  params.set('format', _reportFmt);
+  if (region) params.set('region_id', region);
+  const btn = document.getElementById('rm-download');
+  if (btn) { btn.disabled = true; btn.textContent = 'Готовим…'; }
+  // скачивание через временную ссылку (кука авторизации уходит автоматически)
+  const a = document.createElement('a');
+  a.href = `/api/report?${params.toString()}`;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => {
+    if (btn) { btn.disabled = false; btn.textContent = 'Скачать'; }
+    closeReportMenu();
+  }, 1200);
+}
+
+// клик вне меню — закрыть
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('report-wrap');
+  if (wrap && !wrap.contains(e.target)) closeReportMenu();
 });
 
 function showLogin() {
