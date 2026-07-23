@@ -362,10 +362,11 @@ def write_pdf(sheets, scope):
     cat_hexes = ["#C8E6C9", "#A5D6A7", "#FFE0B2", "#FFCCBC", "#B3E5FC",
                  "#D1C4E9", "#F0F4C3", "#F8BBD0"]
     label_w = 130
-    int_w = 40       # столбцы с количеством — уже
-    money_w = 88     # столбцы с суммами (₸) — шире, чтобы влезали большие числа
+    int_head_w = 90   # столбец-итог количества («Принятые заявки»…) — под заголовок в одну строку
+    int_cat_w = 40    # разбивка количества (A/B/C,D,E) — узкая
+    money_w = 64      # денежные столбцы (₸) — уже, чем были
 
-    story = []
+    blocks = []
     for si, sh in enumerate(sheets):
         cats = sh["cats"]
         metrics = sh["metrics"]
@@ -397,8 +398,10 @@ def write_pdf(sheets, scope):
 
         col_widths = [label_w]
         for (mlabel, midx, mfmt) in metrics:
-            w = money_w if mfmt == "money" else int_w
-            col_widths += [w] * (1 + ncat)
+            if mfmt == "money":
+                col_widths += [money_w] * (1 + ncat)
+            else:
+                col_widths += [int_head_w] + [int_cat_w] * ncat
         t = Table(data, colWidths=col_widths, repeatRows=2)
 
         ts = [
@@ -427,22 +430,41 @@ def write_pdf(sheets, scope):
                            colors.HexColor(cat_hexes[ci % len(cat_hexes)])))
         t.setStyle(TableStyle(ts))
 
-        if si > 0:
-            story.append(PageBreak())
-        story.append(Paragraph(f'{sh["title"]}<br/>{scope}', h_style))
-        story.append(t)
+        blocks.append((Paragraph(f'{sh["title"]}<br/>{scope}', h_style), t))
 
     # ширина страницы — по самому широкому листу
     def sheet_w(sh):
         w = label_w + 30
         ncat = len(sh["cats"])
         for (mlabel, midx, mfmt) in sh["metrics"]:
-            cw = money_w if mfmt == "money" else int_w
-            w += cw * (1 + ncat)
+            if mfmt == "money":
+                w += money_w * (1 + ncat)
+            else:
+                w += int_head_w + int_cat_w * ncat
         return w
     max_w = max(sheet_w(sh) for sh in sheets)
+    page_w = max_w
+    l_m = r_m = 14
+    t_m = b_m = 16
+    avail_w = page_w - l_m - r_m
+
+    # высоту листа берём по реальной высоте самой большой таблицы (reportlab.wrap),
+    # чтобы каждая таблица помещалась на одну страницу без переноса
+    def block_h(title, tbl):
+        th = title.wrap(avail_w, 100000)[1]
+        bh = tbl.wrap(avail_w, 100000)[1]
+        return th + bh + 8
+    page_h = max(block_h(title, tbl) for title, tbl in blocks) + t_m + b_m + 12
+
+    story = []
+    for i, (title, tbl) in enumerate(blocks):
+        if i > 0:
+            story.append(PageBreak())
+        story.append(title)
+        story.append(tbl)
+
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=(max_w, 595),
-                            leftMargin=14, rightMargin=14, topMargin=16, bottomMargin=16)
+    doc = SimpleDocTemplate(buf, pagesize=(page_w, page_h),
+                            leftMargin=l_m, rightMargin=r_m, topMargin=t_m, bottomMargin=b_m)
     doc.build(story)
     return buf.getvalue()
