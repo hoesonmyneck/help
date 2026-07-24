@@ -82,7 +82,55 @@ function toggleHelpTypesList(ev) {
   });
 }
 
-function _kpiCardToggle(cardId, renderFn) {
+// FLIP: карточка «вылетает» из своей ячейки в центр и раскрывается (и обратно).
+const _KPI_EASE_OPEN  = 'cubic-bezier(0.22, 1, 0.36, 1)';   // сильный ease-out (морфинг на экран)
+const _KPI_EASE_CLOSE = 'cubic-bezier(0.4, 0, 0.2, 1)';
+function _prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function _flip(card, first, last, dur, ease, onDone) {
+  const dx = first.left - last.left, dy = first.top - last.top;
+  const sx = first.width / last.width, sy = first.height / last.height;
+  card.style.transformOrigin = 'top left';
+  card.style.transition = 'none';
+  card.style.setProperty('transform', `translate(${dx}px,${dy}px) scale(${sx},${sy})`, 'important');
+  // лёгкий блюр маскирует искажение контента при неравномерном масштабе (совет Emil)
+  card.style.filter = 'blur(4px)';
+  // reflow, затем проигрываем к финальному положению
+  void card.offsetWidth;
+  requestAnimationFrame(() => {
+    card.style.transition = `transform ${dur}ms ${ease}, filter ${dur}ms ${ease}`;
+    card.style.setProperty('transform', 'translate(0px,0px) scale(1)', 'important');
+    card.style.filter = 'blur(0px)';
+    const te = (e) => {
+      if (e.propertyName !== 'transform') return;
+      card.removeEventListener('transitionend', te);
+      card.style.transition = ''; card.style.removeProperty('transform');
+      card.style.transformOrigin = ''; card.style.filter = '';
+      onDone && onDone();
+    };
+    card.addEventListener('transitionend', te);
+  });
+}
+
+function _closeKpiCard(card, col) {
+  if (!card || !card.classList.contains('expanded')) return;
+  const bd = card._kpiBd;
+  if (bd) { bd.classList.remove('show'); setTimeout(() => bd.remove(), 280); card._kpiBd = null; }
+  const rmPh = () => { if (card._kpiPh) { card._kpiPh.remove(); card._kpiPh = null; } };
+  if (_prefersReducedMotion()) {
+    card.classList.remove('expanded'); rmPh(); col?.classList.remove('kpi-expanding'); return;
+  }
+  const first = card.getBoundingClientRect();     // центр
+  card.classList.remove('expanded');              // вернулась в свою ячейку
+  rmPh();                                         // убираем пустышку — карточка занимает свой слот
+  const last = card.getBoundingClientRect();      // ячейка в ряду
+  _flip(card, first, last, 300, _KPI_EASE_CLOSE, () => col?.classList.remove('kpi-expanding'));
+}
+
+// классическое раскрытие (варианты 1/2): карточка заполняет колонку, соседние гаснут
+function _kpiCardToggleClassic(cardId, renderFn) {
   const card = document.getElementById(cardId);
   const col  = card?.closest('.kpi-col-left, .kpi-col-right');
   if (!card) return;
@@ -98,6 +146,58 @@ function _kpiCardToggle(cardId, renderFn) {
   card.classList.add('expanded');
   renderFn();
 }
+
+// диспетчер: v3 — FLIP-анимация «вылетает в центр», v1/v2 — классическое раскрытие
+function _kpiCardToggle(cardId, renderFn) {
+  if (document.documentElement.dataset.variant === 'v3') return _kpiCardToggleV3(cardId, renderFn);
+  return _kpiCardToggleClassic(cardId, renderFn);
+}
+
+function _kpiCardToggleV3(cardId, renderFn) {
+  const card = document.getElementById(cardId);
+  const col  = card?.closest('.kpi-col-left, .kpi-col-right');
+  if (!card) return;
+  if (card.classList.contains('expanded')) { _closeKpiCard(card, col); return; }
+
+  const first = card.getBoundingClientRect();     // позиция карточки в ряду
+  // держим слот карточки невидимой пустышкой того же размера/flex,
+  // чтобы соседние карточки не сдвигались, пока эта раскрыта
+  const ph = document.createElement('div');
+  ph.className = 'kpi-slot-ph';
+  const cs = getComputedStyle(card);
+  ph.style.flex = cs.flex;
+  ph.style.width = first.width + 'px';
+  ph.style.height = first.height + 'px';
+  card.parentNode.insertBefore(ph, card);
+  card._kpiPh = ph;
+  col?.classList.add('kpi-expanding');
+  card.classList.add('expanded');                 // ушла в центр (fixed)
+  renderFn();
+
+  // затемнение (проявляется плавно, клик по нему закрывает).
+  // Кладём его в тот же стекинг-контекст, что и карточка (.main-layout),
+  // иначе фон из body перекрывает fixed-карточку (не скроллится, выглядит тёмной).
+  const bd = document.createElement('div');
+  bd.className = 'kpi-modal-backdrop';
+  bd.addEventListener('click', () => _closeKpiCard(card, col));
+  // ...в тот же стекинг-контекст, что и карточка: правая колонка живёт в .v2-mainrow
+  // (у него свой z-index), верхний ряд — прямо в .main-layout
+  (card.closest('.v2-mainrow') || card.closest('.main-layout') || document.body).appendChild(bd);
+  card._kpiBd = bd;
+  requestAnimationFrame(() => bd.classList.add('show'));
+
+  if (_prefersReducedMotion()) return;
+  const last = card.getBoundingClientRect();       // центр
+  _flip(card, first, last, 380, _KPI_EASE_OPEN);
+}
+
+// Esc закрывает раскрытую KPI-карточку (в v3, где раскрытие — модальное)
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (document.documentElement.dataset.variant !== 'v3') return;
+  const c = document.querySelector('.kpi-card-expandable.expanded');
+  if (c) _closeKpiCard(c, c.closest('.kpi-col-left, .kpi-col-right'));
+});
 
 function _fmtRegionName(s) {
   if (!s) return s;
@@ -1183,6 +1283,68 @@ async function selectRaion(raionId) {
   _syncAnomalyGeo();
 }
 
+/* ── Варианты оформления: v1 старая тёмная, v2 старая светлая, v3 новая зелёная ──
+   Переключение перезагружает страницу — так каждый вариант инициализируется чисто
+   (нужный CSS подключается head-скриптом, раскладка и карта строятся заново). */
+function setVariant(v) {
+  if (!['v1', 'v2', 'v3'].includes(v)) v = 'v3';
+  localStorage.setItem('siteVariant', v);
+  location.reload();
+}
+
+function _markVariantButtons(v) {
+  document.querySelectorAll('.variant-switch button').forEach(b => {
+    b.classList.toggle('on', b.dataset.variant === v);
+  });
+}
+
+// DOM из разметки собран под v3; для старых вариантов возвращаем классическую раскладку
+function _toClassicLayout() {
+  const ml = document.querySelector('.main-layout');
+  if (!ml) return;
+  ml.classList.remove('v2-layout');
+  const left  = ml.querySelector('.kpi-col-left');
+  const right = ml.querySelector('.kpi-col-right');
+  const map   = ml.querySelector('.map-panel');
+  const mr    = ml.querySelector('.v2-mainrow');
+  const geo   = document.getElementById('kpi-geo-side');
+  const deliv = document.getElementById('kpi-deliv')?.closest('.kpi-card');
+  if (deliv && right) right.appendChild(deliv);   // «произведённые выплаты» → правая колонка
+  if (geo && left)    left.appendChild(geo);       // гео-панель детализации → левая колонка
+  if (map)   ml.appendChild(map);                  // распаковываем v2-mainrow → порядок left, map, right
+  if (right) ml.appendChild(right);
+  if (mr) mr.remove();
+}
+
+/* v3: бургер-меню — все управляющие кнопки шапки в выпадающий блок под ней */
+function toggleHeaderMenu() {
+  const m = document.getElementById('header-menu');
+  if (m) m.classList.toggle('open');
+}
+function _buildBurgerMenu() {
+  const header = document.querySelector('header');
+  const menu = document.getElementById('header-menu');
+  if (!header || !menu) return;
+  const toggles = header.querySelector('.header-toggles');       // тема + язык
+  const report  = header.querySelector('.report-wrap');          // Скачать отчёт
+  const actions = document.getElementById('header-actions');     // Аккаунты + Планы развития
+  const help    = header.querySelector('.help-btn');             // «?» → Тех. поддержка
+  const logout  = header.querySelector(':scope > .logout-btn');  // Выйти
+  if (help) help.textContent = 'Тех. поддержка';
+  [toggles, report, actions, help, logout].forEach(el => { if (el) menu.appendChild(el); });
+  // меню НЕ закрывается при выборе пункта (закрытие — по клику вне или по ☰)
+}
+// закрытие бургер-меню по клику вне
+document.addEventListener('click', (e) => {
+  const m = document.getElementById('header-menu');
+  const b = document.getElementById('burger-btn');
+  if (!m || !m.classList.contains('open')) return;
+  if (m.contains(e.target) || (b && b.contains(e.target))) return;
+  // клики по модалкам (Аккаунты/Поддержка/Планы/логин) не закрывают бургер
+  if (e.target.closest('.rdm-overlay, .support-overlay, .plans-overlay, .auth-overlay')) return;
+  m.classList.remove('open');
+});
+
 function toggleTheme(isLight) {
   document.documentElement.dataset.theme = isLight ? 'light' : '';
   localStorage.setItem('theme', isLight ? 'light' : 'dark');
@@ -1578,7 +1740,7 @@ function clearAllFilters() {
 function _anyDemoFilter() {
   return currentSduSet.length > 0 || currentGender != null || currentAgeSet.length > 0;
 }
-// Кнопка «Снять фильтры» в шапке блока «Пол / Возраст» (видна только при активных фильтрах)
+// Кнопка «Снять фильтры» в шапке блока «Пол » (видна только при активных фильтрах)
 function _clearFiltersBtn() {
   return `<button type="button" class="ga-clear-btn${_anyDemoFilter() ? '' : ' ga-clear-hidden'}" onclick="clearAllFilters()">Снять фильтры</button>`;
 }
@@ -2272,7 +2434,7 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp', emptyMsg
   }
   const totalHtml = _buildGeoTotalRow(stats, kpi, totalLabel, true);
   const gaChartBox = `<div class="gp-chart-box">
-            <div class="gp-chart-title gp-chart-title-row"><span>Пол / Возраст</span>${_clearFiltersBtn()}</div>
+            <div class="gp-chart-title gp-chart-title-row"><span>Пол </span>${_clearFiltersBtn()}</div>
             <div id="${pfx}-ga-chart" class="ga-chart gp-ga"></div>
           </div>`;
   const gaugeHtml = _buildGauge(k.total_deliv_sum || 0, k.total_dec_pay_sum || 0);
@@ -2761,7 +2923,7 @@ function _buildRegionAnalyticsHtml(titleHtml, rows, stats, kpi, isRaion, totalLa
             <div class="gp-sdu-wrap"><canvas id="ra-sdu-chart"></canvas></div>
           </div>
           <div class="gp-chart-box">
-            <div class="gp-chart-title gp-chart-title-row"><span>Пол / Возраст</span>${_clearFiltersBtn()}</div>
+            <div class="gp-chart-title gp-chart-title-row"><span>Пол </span>${_clearFiltersBtn()}</div>
             <div id="ra-ga-chart" class="ga-chart gp-ga"></div>
           </div>
         </div>
@@ -3859,15 +4021,22 @@ function initPayTooltip() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  const savedTheme = localStorage.getItem('theme') || 'dark';
-  document.documentElement.dataset.theme = savedTheme === 'light' ? 'light' : '';
-  const sw = document.getElementById('theme-switch');
-  if (sw) sw.checked = savedTheme === 'light';
+  // Вариант оформления (стиль уже подключён head-скриптом, без мигания)
+  const variant = localStorage.getItem('siteVariant') || 'v3';
+  document.documentElement.dataset.variant = variant;
+  _markVariantButtons(variant);
+  if (variant === 'v3') {
+    document.documentElement.dataset.theme = '';           // зелёная тёмная
+  } else {
+    document.documentElement.dataset.theme = (variant === 'v2') ? 'light' : '';
+    _toClassicLayout();                                    // старая раскладка (до init/карты)
+  }
 
   // Real auth gate — verify session cookie against the backend
   CURRENT_USER = await fetchMe();
   if (!CURRENT_USER) { showLogin(); return; }
   if (CURRENT_USER.role === 'admin') setupAdminPanel();
+  if (variant === 'v3') _buildBurgerMenu();   // собрать управление в бургер (после кнопки «Аккаунты»)
 
   initPayTooltip();
   init();

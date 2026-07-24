@@ -5,7 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ЕЦП "Анализ по дополнительным видам помощи МИО"</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="/style.css?v=85">
+  <link id="main-style" rel="stylesheet" href="/style.css?v=101">
+  <script>
+  /* выбираем стиль до отрисовки: v3 — зелёный style.css, v1/v2 — классический style-classic.css */
+  (function(){
+    try{
+      var v = localStorage.getItem('siteVariant') || 'v3';
+      document.documentElement.setAttribute('data-variant', v);
+      if (v !== 'v3'){
+        var l = document.getElementById('main-style');
+        if (l) l.setAttribute('href', '/style-classic.css?v=1');
+        document.documentElement.setAttribute('data-theme', v === 'v2' ? 'light' : '');
+      }
+    }catch(e){}
+  })();
+  </script>
 </head>
 <body>
 
@@ -37,10 +51,11 @@
   </div>
   <button type="button" class="help-btn" onclick="openSupportModal()" title="Контакты поддержки" aria-label="Контакты поддержки">?</button>
   <div class="header-toggles">
-    <label class="theme-toggle" title="Светлая / тёмная тема">
-      <input type="checkbox" id="theme-switch" onchange="toggleTheme(this.checked)">
-      <span class="toggle-slider"></span>
-    </label>
+    <div class="variant-switch" role="group" aria-label="Вариант оформления">
+      <button type="button" data-variant="v1" onclick="setVariant('v1')" title="Старая тёмная">Тёмная</button>
+      <button type="button" data-variant="v2" onclick="setVariant('v2')" title="Старая светлая">Светлая</button>
+      <button type="button" data-variant="v3" onclick="setVariant('v3')" title="Новая зелёная">Зелёная</button>
+    </div>
     <div class="lang-switch" role="group" aria-label="Тіл / Язык">
       <button type="button" class="lang-btn active" data-lang="ru" onclick="setLang('ru')">РУС</button>
       <button type="button" class="lang-btn" data-lang="kk" onclick="setLang('kk')">ҚАЗ</button>
@@ -50,11 +65,14 @@
     <button type="button" class="logout-btn plans-btn" onclick="openPlansModal()" title="Планы развития">Планы развития</button>
   </div>
   <button type="button" class="logout-btn" onclick="logout()" title="Выйти">Выйти</button>
+  <!-- v3: бургер-меню (JS переносит сюда управление, кнопка видна только в зелёной версии) -->
+  <button type="button" id="burger-btn" class="burger-btn" style="display:none" onclick="toggleHeaderMenu()" aria-label="Меню" title="Меню">☰</button>
+  <div id="header-menu" class="header-menu" style="display:none"></div>
 </header>
 
-<div class="main-layout">
+<div class="main-layout v2-layout">
 
-  <!-- Left KPI column (3) -->
+  <!-- Верхний ряд: KPI в один ряд -->
   <div class="kpi-col kpi-col-left">
     <div class="kpi-card kpi-card-expandable" id="kpi-card-help-types" onclick="toggleHelpTypesList()">
       <div class="label">Всего видов помощи</div>
@@ -77,8 +95,17 @@
       </div>
       <div class="kpi-sub"><b id="kpi-dec-pct">—</b> от бюджета</div>
     </div>
-    <div id="kpi-geo-side" class="kpi-geo-side"></div>
+    <div class="kpi-card kpi-multi">
+      <div class="label">ПРОИЗВЕДЁННЫЕ ВЫПЛАТЫ</div>
+      <div class="value kpi-deliv" id="kpi-deliv">—</div>
+      <div class="label">ВЫПЛАЧЕННАЯ СУММА</div>
+      <div class="kpi-sub"><b id="kpi-deliv-pct">—</b> от суммы заявок</div>
+      <div class="kpi-sub" style="margin-top:6px">по <b id="kpi-recipients">—</b> получателям</div>
+    </div>
   </div>
+
+  <!-- Нижний ряд: карта (~70%) + правая колонка -->
+  <div class="v2-mainrow">
 
   <!-- Center: tabbed map block -->
   <div class="map-panel map-tabs">
@@ -144,7 +171,7 @@
     <div class="mtab-pane" id="mtab-data"></div>
   </div>
 
-  <!-- Right KPI column (2) -->
+  <!-- Right column: рейтинг + гео-панель детализации (drill) -->
   <div class="kpi-col kpi-col-right">
     <div class="kpi-card kpi-card-expandable" id="kpi-card-top-mgp" onclick="toggleTopMgpList()">
       <div class="label">Рейтинг сумм видов помощи по принятым заявлениям
@@ -153,14 +180,10 @@
       <div class="kpi-expand-corners"><span class="kpi-cn kpi-cn-tl"></span><span class="kpi-cn kpi-cn-tr"></span><span class="kpi-cn kpi-cn-bl"></span><span class="kpi-cn kpi-cn-br"></span></div>
       <div class="kpi-help-list" id="kpi-top-mgp-list"></div>
     </div>
-    <div class="kpi-card kpi-multi">
-      <div class="label">ПРОИЗВЕДЁННЫЕ ВЫПЛАТЫ</div>
-      <div class="value kpi-deliv" id="kpi-deliv">—</div>
-      <div class="label">ВЫПЛАЧЕННАЯ СУММА</div>
-      <div class="kpi-sub"><b id="kpi-deliv-pct">—</b> от суммы заявок</div>
-      <div class="kpi-sub" style="margin-top:6px">по <b id="kpi-recipients">—</b> получателям</div>
-    </div>
+    <div id="kpi-geo-side" class="kpi-geo-side"></div>
   </div>
+
+  </div><!-- /v2-mainrow -->
 
 </div>
 
@@ -520,7 +543,7 @@
 
 <script src="/i18n-raions.js?v=1"></script>
 <script src="/i18n.js?v=10"></script>
-<script src="/app.js?v=87"></script>
+<script src="/app.js?v=97"></script>
 <script src="/kpifx.js?v=11"></script>
 
 <!-- Three.js (для 3D-пирога видов помощи) -->
@@ -532,7 +555,7 @@
   }
 }
 </script>
-<script type="module" src="/pie3d.js?v=20"></script>
+<script type="module" src="/pie3d.js?v=21"></script>
 <script type="module" src="/map3d.js?v=12"></script>
 </body>
 </html>

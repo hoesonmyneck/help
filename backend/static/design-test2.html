@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Тест дизайна 2 · МИО (тёмно-зелёная тема)</title>
+<style>
+/* ============================================================
+   ТЕСТОВЫЙ ДИЗАЙН №2 — standalone, mock-данные.
+   Стиль по мокапам дизайнера: near-black фон, лайм/изумруд акценты,
+   жёлтый как второй акцент, скруглённые тёмные карточки (FocusFlow-like).
+   Раскладка: 5 KPI в ряд → карта ~70% + рейтинг справа.
+   Ничего из рабочего приложения не использует. Удалить = откат.
+   ============================================================ */
+:root{
+  --bg:        #0a0f0b;
+  --bg-2:      #0d130e;
+  --panel:     #141a15;
+  --panel-2:   #191f1a;
+  --panel-hi:  #1e2620;
+  --line:      #26302a;
+  --line-soft: #1e261f;
+  --ink:       #eaf1ea;
+  --ink-2:     #b7c4ba;
+  --muted:     #7f8e83;
+  --green:     #34d17f;
+  --green-ink: #7cf0a0;
+  --lime:      #9be564;
+  --yellow:    #ffd23f;
+  --grad:      linear-gradient(135deg,#a6f24a 0%,#37c66a 55%,#159f5c 100%);
+  --grad-soft: linear-gradient(135deg,#2b6b3f 0%,#1a4d30 100%);
+  --male:      #4f9be0;
+  --female:    #d17fb2;
+  --radius:    16px;
+  --sans: "Segoe UI",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,system-ui,sans-serif;
+  --mono: ui-monospace,"SF Mono","JetBrains Mono","Roboto Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:
+    radial-gradient(1200px 500px at 15% -10%, #12341f 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, #0f2a1b 0%, transparent 50%),
+    var(--bg);
+  color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45;
+  -webkit-font-smoothing:antialiased;min-height:100vh;
+}
+body{padding:0 0 48px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.wrap{max-width:1440px;margin:0 auto;padding:0 26px}
+
+/* ── Header ── */
+header{position:sticky;top:0;z-index:20;background:rgba(10,15,11,.82);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.hd{display:flex;align-items:center;gap:18px;height:66px}
+.brand{display:flex;align-items:center;gap:11px}
+.logo{width:34px;height:34px;border-radius:10px;background:var(--grad);
+  display:grid;place-items:center;color:#06210f;font-weight:800;font-size:15px;
+  box-shadow:0 6px 20px rgba(52,209,127,.35)}
+.brand .nm{font-weight:700;font-size:15px;letter-spacing:-.01em}
+.brand .sub{font-size:11px;color:var(--muted)}
+.hd-spacer{flex:1}
+.search{flex:0 1 340px;display:flex;align-items:center;gap:9px;height:38px;
+  padding:0 14px;background:var(--panel);border:1px solid var(--line);
+  border-radius:999px;color:var(--muted);font-size:13px}
+.search input{background:none;border:none;outline:none;color:var(--ink);
+  font:inherit;width:100%}
+.pill-toggle{display:inline-flex;background:var(--panel);border:1px solid var(--line);
+  border-radius:999px;padding:3px}
+.pill-toggle button{border:none;background:none;font:inherit;font-size:12px;
+  color:var(--muted);padding:6px 13px;border-radius:999px;cursor:pointer;transition:.15s}
+.pill-toggle button.on{background:var(--grad);color:#06210f;font-weight:700}
+.hd-ic{width:36px;height:36px;border-radius:10px;background:var(--panel);
+  border:1px solid var(--line);color:var(--ink-2);display:grid;place-items:center;
+  cursor:pointer;font-size:15px}
+.hd-ic:hover{border-color:var(--green);color:var(--green)}
+
+/* ── section title ── */
+.crumb{display:flex;align-items:center;gap:8px;margin:22px 0 4px;font-size:13px;
+  color:var(--muted)}
+.crumb b{color:var(--green-ink);font-weight:600}
+
+/* ── KPI row: 5 в ряд ── */
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-top:14px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:16px 17px;position:relative;overflow:hidden;transition:.18s}
+.kpi:hover{border-color:#33463a;transform:translateY(-2px)}
+.kpi .lab{font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--muted);font-weight:600;margin-bottom:11px;display:flex;
+  align-items:center;gap:7px}
+.kpi .ic{width:26px;height:26px;border-radius:8px;background:var(--panel-hi);
+  display:grid;place-items:center;color:var(--green);font-size:13px;flex:none}
+.kpi .big{font-size:25px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.kpi .u{font-size:14px;color:var(--muted);font-weight:600}
+.kpi .meta{font-size:12px;color:var(--ink-2);margin-top:8px}
+.kpi .meta b{color:var(--ink)}
+.kpi.hero{background:var(--grad);border:none;color:#062012}
+.kpi.hero .lab,.kpi.hero .u,.kpi.hero .meta{color:#0a2c18}
+.kpi.hero .ic{background:rgba(255,255,255,.28);color:#083}
+.kpi.hero .big{color:#052c15}
+.kpi.hero .meta b{color:#052c15}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
+  padding:3px 9px;border-radius:999px;margin-top:10px}
+.chip.g{color:var(--green-ink);background:rgba(52,209,127,.12);
+  border:1px solid rgba(52,209,127,.3)}
+.chip.y{color:#3a2d05;background:var(--yellow)}
+
+/* ── main: карта + рейтинг ── */
+.main{display:grid;grid-template-columns:minmax(0,1fr) 372px;gap:16px;margin-top:16px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  overflow:hidden}
+.panel-head{display:flex;align-items:center;gap:8px;padding:12px 15px;
+  border-bottom:1px solid var(--line)}
+.panel-head .ttl{font-size:14px;font-weight:700;letter-spacing:-.01em}
+.panel-head .sp{flex:1}
+.tabs{display:inline-flex;gap:4px;background:var(--panel-2);border-radius:999px;padding:3px}
+.tabs button{border:none;background:none;font:inherit;font-size:12px;color:var(--muted);
+  padding:6px 12px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.tabs button.on{background:var(--panel-hi);color:var(--ink);font-weight:600;
+  box-shadow:inset 0 0 0 1px var(--line)}
+
+/* map */
+.mapwrap{position:relative;height:540px;display:grid;place-items:center;
+  background:radial-gradient(120% 90% at 50% 0%,#0f1811,var(--panel))}
+.map-ctrl{position:absolute;top:14px;left:14px;z-index:3}
+.legend{position:absolute;right:14px;bottom:14px;z-index:3;background:rgba(13,19,14,.9);
+  border:1px solid var(--line);border-radius:12px;padding:11px 13px;font-size:11.5px}
+.legend .lt{font-size:10px;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--muted);font-weight:700;margin-bottom:7px}
+.lrow{display:flex;align-items:center;gap:8px;padding:2.5px 0;color:var(--ink-2)}
+.dot{width:11px;height:11px;border-radius:4px;flex:none}
+.kzmap{width:90%;max-width:760px;aspect-ratio:16/9;position:relative}
+.rg{position:absolute;border-radius:7px;border:1px solid rgba(255,255,255,.12);
+  display:grid;place-items:center;font-size:10px;font-weight:700;color:#04160c;
+  cursor:pointer;transition:.18s;overflow:hidden}
+.rg:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(0,0,0,.5);z-index:2;
+  filter:brightness(1.08)}
+
+/* right column */
+.stack{display:flex;flex-direction:column;gap:16px}
+.rk{padding:6px 6px 12px}
+.rk-row{display:grid;grid-template-columns:20px 1fr auto;align-items:center;gap:11px;
+  padding:9px 12px;border-radius:11px;cursor:pointer;transition:.12s}
+.rk-row:hover{background:var(--panel-2)}
+.rk-n{font-family:var(--mono);font-size:12px;color:var(--muted);text-align:right}
+.rk-name{font-size:13px;font-weight:600;letter-spacing:-.01em}
+.rk-bar{height:5px;border-radius:3px;background:var(--grad);margin-top:6px}
+.rk-val{font-family:var(--mono);font-size:12.5px;font-weight:700;text-align:right}
+.rk-val .u{color:var(--muted);font-weight:400;font-size:10.5px}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:15px 16px}
+.card-h{font-size:13px;font-weight:700;letter-spacing:-.01em;display:flex;
+  justify-content:space-between;align-items:center;margin-bottom:14px}
+.card-h .clr{font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;
+  border:1px solid var(--line);border-radius:999px;padding:4px 11px}
+.card-h .clr:hover{color:var(--green);border-color:var(--green)}
+
+.cks{display:flex;gap:9px;align-items:flex-end;height:100px}
+.cks-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}
+.cks-bar{width:100%;border-radius:6px 6px 3px 3px;background:var(--grad);min-height:6px;
+  transition:.18s}
+.cks-col.dim{opacity:.32}
+.cks-col.sel .cks-bar{outline:2px solid var(--green-ink);outline-offset:2px}
+.cks-k{font-size:11px;font-weight:700;color:var(--ink-2)}
+.cks-v{font-size:10.5px;color:var(--muted)}
+
+.gsplit{display:flex;height:26px;border-radius:8px;overflow:hidden;
+  border:1px solid var(--line);margin-bottom:8px}
+.gsplit i{display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff;cursor:pointer}
+.age{display:flex;flex-direction:column;gap:3px;margin-top:12px}
+.age-row{display:grid;grid-template-columns:52px 1fr 40px;align-items:center;gap:9px;
+  font-size:11.5px;padding:3px 4px;border-radius:8px;cursor:pointer}
+.age-row:hover{background:var(--panel-2)}
+.age-k{color:var(--ink-2);font-weight:600}
+.age-t{height:7px;border-radius:4px;background:var(--panel-hi);overflow:hidden}
+.age-f{height:100%;background:var(--grad);border-radius:4px}
+.age-v{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:right}
+
+.foot{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
+  font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between}
+
+@media(max-width:1120px){
+  .main{grid-template-columns:1fr}
+  .kpis{grid-template-columns:repeat(3,1fr)}
+}
+@media(max-width:680px){
+  .wrap{padding:0 14px}.kpis{grid-template-columns:1fr 1fr}.search{display:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap hd">
+    <div class="brand">
+      <div class="logo">МИО</div>
+      <div>
+        <div class="nm">Анализ по видам помощи МИО</div>
+        <div class="sub">Единая цифровая платформа · данные на 24.07.2026</div>
+      </div>
+    </div>
+    <div class="hd-spacer"></div>
+    <div class="search"><span>🔎</span><input placeholder="Поиск региона, вида помощи…"></div>
+    <div class="pill-toggle"><button class="on">РУС</button><button>ҚАЗ</button></div>
+    <button class="hd-ic" title="Скачать отчёт">⭳</button>
+    <button class="hd-ic" title="Поддержка">?</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="crumb"><b>Казахстан</b> · сводка по стране</div>
+
+  <!-- 5 KPI в один ряд -->
+  <div class="kpis">
+    <div class="kpi">
+      <div class="lab"><span class="ic">◈</span>Видов помощи</div>
+      <div class="big num">34</div>
+      <div class="meta">по <b>17</b> регионам</div>
+    </div>
+    <div class="kpi">
+      <div class="lab"><span class="ic">₸</span>Годовой бюджет</div>
+      <div class="big num">148,6 <span class="u">млрд ₸</span></div>
+      <div class="meta">утверждён на 2026</div>
+    </div>
+    <div class="kpi hero">
+      <div class="lab"><span class="ic">✔</span>Принято заявлений</div>
+      <div class="big num">312 480</div>
+      <div class="meta">на <b>96,2 млрд ₸</b></div>
+      <div class="chip y">64,7% от бюджета</div>
+    </div>
+    <div class="kpi">
+      <div class="lab"><span class="ic">◎</span>Произведено выплат</div>
+      <div class="big num">71,3 <span class="u">млрд ₸</span></div>
+      <div class="chip g">74,1% от заявок</div>
+    </div>
+    <div class="kpi">
+      <div class="lab"><span class="ic">◕</span>Получатели</div>
+      <div class="big num">248 900</div>
+      <div class="meta">уникальных ИИН</div>
+    </div>
+  </div>
+
+  <!-- карта ~70% + рейтинг -->
+  <div class="main">
+    <div class="panel">
+      <div class="panel-head">
+        <span class="ttl">Карта охвата</span>
+        <span class="sp"></span>
+        <div class="tabs" id="map-tabs">
+          <button class="on">По видам помощи</button>
+          <button>% выплат</button>
+        </div>
+      </div>
+      <div class="mapwrap">
+        <div class="kzmap" id="kzmap"></div>
+        <div class="legend">
+          <div class="lt">Охват видов помощи</div>
+          <div class="lrow"><span class="dot" style="background:#c0392b"></span>0 видов</div>
+          <div class="lrow"><span class="dot" style="background:#e0a52a"></span>1–4 вида</div>
+          <div class="lrow"><span class="dot" style="background:#34d17f"></span>5 и более</div>
+          <div class="lrow"><span class="dot" style="background:#3a4640"></span>не предусмотрено</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="panel">
+        <div class="panel-head"><span class="ttl">Рейтинг регионов</span>
+          <span class="sp"></span><span style="font-size:11px;color:var(--muted)">по сумме заявок</span>
+        </div>
+        <div class="rk" id="rk"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">Уровень благосостояния (ЦКС)
+          <span class="clr" onclick="clearCks()">Снять фильтры</span></div>
+        <div class="cks" id="cks"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">Пол и возраст</div>
+        <div class="gsplit">
+          <i style="background:var(--male);flex:0 0 54%">М · 54%</i>
+          <i style="background:var(--female);flex:0 0 46%">Ж · 46%</i>
+        </div>
+        <div class="age" id="age"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span>Тестовый макет №2 · данные условные (mock)</span>
+    <span>support_newesobes@enbek.kz · 1414</span>
+  </div>
+</div>
+
+<script>
+/* рейтинг */
+const REGIONS=[
+  ["Алматинская область",11.8],["г. Алматы",10.2],["Туркестанская область",9.6],
+  ["Карагандинская область",8.1],["Восточно-Казахстанская",7.4],["г. Астана",6.9],
+  ["Жамбылская область",6.2],["Костанайская область",5.5],["Актюбинская область",5.1],
+];
+const rk=document.getElementById('rk');const rmax=Math.max(...REGIONS.map(r=>r[1]));
+REGIONS.forEach((r,i)=>{
+  const row=document.createElement('div');row.className='rk-row';
+  row.innerHTML=`<div class="rk-n">${i+1}</div>
+    <div><div class="rk-name">${r[0]}</div>
+      <div class="rk-bar" style="width:${Math.max(10,r[1]/rmax*100)}%"></div></div>
+    <div class="rk-val">${r[1].toString().replace('.',',')}<span class="u"> млрд</span></div>`;
+  rk.appendChild(row);
+});
+
+/* ЦКС */
+const CKS=[["A",38],["B",64],["C",96],["D",71],["E",42]];
+const cksEl=document.getElementById('cks');const cmax=Math.max(...CKS.map(c=>c[1]));
+let sel=new Set();
+CKS.forEach(c=>{
+  const col=document.createElement('div');col.className='cks-col';col.dataset.k=c[0];
+  col.innerHTML=`<div class="cks-v num">${c[1]}k</div>
+    <div class="cks-bar" style="height:${c[1]/cmax*74}px"></div><div class="cks-k">${c[0]}</div>`;
+  col.onclick=()=>{sel.has(c[0])?sel.delete(c[0]):sel.add(c[0]);paint()};
+  cksEl.appendChild(col);
+});
+function paint(){[...cksEl.children].forEach(col=>{const k=col.dataset.k;
+  col.classList.toggle('sel',sel.has(k));col.classList.toggle('dim',sel.size>0&&!sel.has(k));});}
+function clearCks(){sel.clear();paint()}
+
+/* возраст */
+const AGE=[["до 18",22],["18–29",18],["30–44",26],["45–59",19],["60+",34]];
+const ageEl=document.getElementById('age');const amax=Math.max(...AGE.map(a=>a[1]));
+AGE.forEach(a=>{const row=document.createElement('div');row.className='age-row';
+  row.innerHTML=`<div class="age-k">${a[0]}</div>
+    <div class="age-t"><div class="age-f" style="width:${a[1]/amax*100}%"></div></div>
+    <div class="age-v num">${a[1]}%</div>`;ageEl.appendChild(row);});
+
+/* стилизованная карта РК (mock choropleth) */
+const G='#34d17f',O='#e0a52a',R='#c0392b',N='#3a4640';
+const MAP=[
+  ["Актюбинская",6,30,20,26,G],["Атырауская",2,58,13,17,O],["Мангистауская",1,74,13,20,O],
+  ["З-Казахстан",4,14,16,16,O],["Костанайская",27,6,17,22,G],["Актоб.",27,30,16,20,G],
+  ["Кызылорд.",22,57,20,24,O],["Туркестан.",36,74,17,20,G],["Шымкент",45,82,9,11,G],
+  ["Жамбылская",50,64,17,16,O],["Карагандин.",45,34,20,26,G],["Улытауская",38,40,15,18,N],
+  ["Акмолинская",46,10,15,20,G],["Астана",52,20,8,8,G],["С-Казахстан",46,1,17,8,G],
+  ["Павлодар.",64,10,15,18,O],["Абайская",66,32,14,18,N],["В-Казахстан",78,20,20,26,G],
+  ["Жетысу",70,56,17,18,G],["Алматин.",66,66,20,22,G],["Алматы",70,80,9,9,G],
+];
+const kz=document.getElementById('kzmap');
+MAP.forEach(m=>{const d=document.createElement('div');d.className='rg';
+  d.style.cssText=`left:${m[1]}%;top:${m[2]}%;width:${m[3]}%;height:${m[4]}%;background:${m[5]}`;
+  d.title=m[0];if(m[3]>=12&&m[4]>=12)d.textContent=m[0].length>10?m[0].slice(0,9)+'…':m[0];
+  kz.appendChild(d);});
+
+/* переключатели-пилюли */
+document.querySelectorAll('.pill-toggle,.tabs').forEach(g=>{
+  g.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    g.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');});});
+</script>
+</body>
+</html>
