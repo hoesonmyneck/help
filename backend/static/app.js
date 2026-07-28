@@ -2219,12 +2219,17 @@ let _lastRaRows = [], _lastRaIsRaion = false;
 let _lastRaTotal = '';
 
 // Применить/инвертировать сортировку и перерисовать только строки (не «Итого»)
-function _tableGroupHdr() {
+// Столбец «Утвержденный бюджет» скрыт для видов помощи (вкладка + панели),
+// но остаётся в «Аналитике по регионам» (pfx 'ra'), где бюджет реальный.
+function _pfxNoBudget(pfx) { return pfx === 'mt' || pfx === 'gs' || pfx === 'gp'; }
+
+function _tableGroupHdr(pfx) {
+  const noBudget = _pfxNoBudget(pfx);
   return `<div class="gp-grp-row">` +
     `<span></span>` +
     `<span class="gp-grp-span">Принятые заявления</span>` +
     `<span class="gp-grp-span">Фактическая выплата</span>` +
-    `<span class="gp-grp-span gp-grp-1">Утвержденный бюджет</span>` +
+    (noBudget ? '' : `<span class="gp-grp-span gp-grp-1">Утвержденный бюджет</span>`) +
     `</div>`;
 }
 
@@ -2235,9 +2240,9 @@ function sortGeoTable(pfx, col) {
   const listEl = document.getElementById(`${pfx}-sort-list`);
   const d = _geoData[pfx];
   if (!listEl || !d) return;
-  listEl.innerHTML = _tableGroupHdr() +
+  listEl.innerHTML = _tableGroupHdr(pfx) +
     `<div class="gp-hdr-row" id="${pfx}-sort-hdr">${_geoSortHdrInner(pfx)}</div>` +
-    _buildGeoTotalRow(d.stats, d.kpi, d.totalLabel, true) +
+    _buildGeoTotalRow(d.stats, d.kpi, d.totalLabel, true, pfx) +
     _buildGeoPanelHtml(d.provided, d.stats, pfx, d.emptyMsg);
 }
 function sortRaTable(col) {
@@ -2255,12 +2260,14 @@ function sortRaTable(col) {
 function _geoSortHdrInner(pfx) {
   const q = c => `sortGeoTable('${pfx}','${c}')`;
   const numHdr = `<span class="gp-rownum gp-rownum-hdr">№</span>`;
+  const budgetHdr = _pfxNoBudget(pfx) ? '' :
+        `<span class="gp-stat gp-hdr gp-sortable" onclick="${q('budget')}">Сумма</span>`;
   return `<span class="gp-pay gp-hdr gp-sortable" onclick="${q('name')}">${numHdr}Вид помощи</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="${q('count')}">Кол-во</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="${q('total_dec')}">Сумма</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="${q('fact_recipients')}">Кол-во</span>
         <span class="gp-stat gp-hdr gp-sortable" onclick="${q('total_deliv')}">Сумма</span>
-        <span class="gp-stat gp-hdr gp-sortable" onclick="${q('budget')}">Сумма</span>`;
+        ${budgetHdr}`;
 }
 
 function _raSortHdrInner() {
@@ -2304,6 +2311,7 @@ function _buildGeoPanelHtml(provided, stats, pfx = 'gp', emptyMsg = 'Нет да
       ? dir * stripHelpPrefix(a.c.name).localeCompare(stripHelpPrefix(b.c.name), 'ru')
       : dir * ((a[col] || 0) - (b[col] || 0)));
   }
+  const noBudget = _pfxNoBudget(pfx);
   return rows.map(({ c, count, fact_recipients, total_dec, total_deliv, budget }, idx) => {
     const cnt   = formatInt(count);
     const fact  = formatInt(fact_recipients);
@@ -2320,7 +2328,7 @@ function _buildGeoPanelHtml(provided, stats, pfx = 'gp', emptyMsg = 'Нет да
       <span class="gp-stat">${dec} ₸</span>
       <span class="gp-stat">${fact}</span>
       <span class="gp-stat">${deliv} ₸</span>
-      <span class="gp-stat gp-budget">${budgetTxt}</span>
+      ${noBudget ? '' : `<span class="gp-stat gp-budget">${budgetTxt}</span>`}
     </div>`;
   }).join('');
 }
@@ -2382,7 +2390,7 @@ async function showGeoPanel(id, name, ev) {
 }
 
 // Строка «Итого»: услугополучатели (уник.), сумма заявок, факт выплачено, бюджет
-function _buildGeoTotalRow(stats, kpi, label = 'Республика Казахстан', numbered = false) {
+function _buildGeoTotalRow(stats, kpi, label = 'Республика Казахстан', numbered = false, pfx) {
   const k = kpi || {};
   const recip = k.app_count != null ? formatInt(k.app_count) : '—';   // число заявлений (совпадает с KPI)
   const fact = k.fact_recipients != null ? formatInt(k.fact_recipients) : '—';
@@ -2390,13 +2398,14 @@ function _buildGeoTotalRow(stats, kpi, label = 'Республика Казах�
   const deliv = k.total_deliv_sum != null ? formatCompact(k.total_deliv_sum) + ' ₸' : '—';
   const budget = stats && stats._budget > 0 ? formatCompact(stats._budget) + ' ₸' : '—';
   const numHtml = numbered ? `<span class="gp-rownum"></span>` : '';
+  const noBudget = _pfxNoBudget(pfx);
   return `<div class="gp-row gp-budget-summary gp-total-kz">
       <span class="gp-pay">${numHtml}${label}</span>
       <span class="gp-stat">${recip}</span>
       <span class="gp-stat">${dec}</span>
       <span class="gp-stat">${fact}</span>
       <span class="gp-stat">${deliv}</span>
-      <span class="gp-stat gp-budget">${budget}</span>
+      ${noBudget ? '' : `<span class="gp-stat gp-budget">${budget}</span>`}
     </div>`;
 }
 
@@ -2432,7 +2441,7 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp', emptyMsg
   if (provided.length) {
     hdr = `<div class="gp-hdr-row" id="${pfx}-sort-hdr">${_geoSortHdrInner(pfx)}</div>`;
   }
-  const totalHtml = _buildGeoTotalRow(stats, kpi, totalLabel, true);
+  const totalHtml = _buildGeoTotalRow(stats, kpi, totalLabel, true, pfx);
   const gaChartBox = `<div class="gp-chart-box">
             <div class="gp-chart-title gp-chart-title-row"><span>Пол </span>${_clearFiltersBtn()}</div>
             <div id="${pfx}-ga-chart" class="ga-chart gp-ga"></div>
@@ -2442,7 +2451,7 @@ function _buildGeoMainHtml(titleHtml, provided, stats, kpi, pfx = 'gp', emptyMsg
   return `<div class="gp-main">
       <div class="gp-body">
         <div class="gp-title">${titleHtml}</div>
-        <div class="gp-list" id="${pfx}-sort-list">${hdr ? _tableGroupHdr() : ''}${hdr}${totalHtml}${_buildGeoPanelHtml(provided, stats, pfx, emptyMsg)}</div>
+        <div class="gp-list" id="${pfx}-sort-list">${hdr ? _tableGroupHdr(pfx) : ''}${hdr}${totalHtml}${_buildGeoPanelHtml(provided, stats, pfx, emptyMsg)}</div>
         <div class="gp-charts">
           <div class="gp-chart-box">
             <div class="gp-chart-title">Уровень благосостояния по ЦКС</div>
@@ -3085,7 +3094,7 @@ function renderHelpPresence() {
   if (!presenceRows.length) {
     document.getElementById('presence-thead').innerHTML = '';
     document.getElementById('presence-body').innerHTML =
-      '<tr><td colspan="2" class="no-data">Нет информации</td></tr>';
+      '<tr><td colspan="3" class="no-data">Нет информации</td></tr>';
     return;
   }
 
@@ -3105,6 +3114,7 @@ function renderHelpPresence() {
 
   document.getElementById('presence-thead').innerHTML =
     `<tr>
+       <th class="prs-num-hdr">№</th>
        <th class="prs-geo-hdr">${geoLabel}</th>
        ${miniHdr('vidy', 'Виды помощи', '', 'Виды помощи, которые должны оказываться')}
        ${miniHdr('lyudei', 'Людей', '', 'Количество людей, которым оказывается услуга')}
@@ -3126,12 +3136,14 @@ function renderHelpPresence() {
   }
   const ordered = total ? [total, ...body] : body;
 
+  let _prsNum = 0;
   document.getElementById('presence-body').innerHTML = ordered.map(r => {
     const isTotal = !!r.is_total;
     const clickAttr = (!currentRegion && !isTotal)
       ? `onclick="drillRegionFromRanking(${r.id})" style="cursor:pointer"` : '';
     const cls = isTotal ? 'prs-total-row' : (!currentRegion ? 'coverage-row' : '');
     const m = r.mini || {};
+    const numTxt = isTotal ? '' : ++_prsNum;
     const cells = r.presence.map(p => {
       const present = typeof p === 'object' ? p.p : p;
       const mx = typeof p === 'object' ? p.mx : 0;
@@ -3142,6 +3154,7 @@ function renderHelpPresence() {
       return `<td class="prs-cell prs-no">✕</td>`;
     }).join('');
     return `<tr ${clickAttr} class="${cls}">
+      <td class="prs-num">${numTxt}</td>
       <td class="prs-geo-cell">${r.name || '—'}</td>
       <td class="col-center prs-mini">${m.vidy ?? 0}</td>
       <td class="col-center prs-mini">${formatInt(m.lyudei ?? 0)}</td>

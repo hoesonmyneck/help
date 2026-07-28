@@ -1881,6 +1881,7 @@ th.sort-active { color: var(--ac-blue); }
 /* Help-presence tab */
 #presence-table { table-layout: fixed; }
 #presence-table th, #presence-table td { text-align: center; }
+.prs-num-hdr, .prs-num { width: 40px; text-align: right !important; color: var(--tx-dim); font-weight: 700; font-variant-numeric: tabular-nums; padding-right: 8px; }
 .prs-geo-hdr, .prs-geo-cell { text-align: left !important; white-space: nowrap; width: 220px; }
 .prs-mini-hdr, .prs-mini {
   width: 92px;
@@ -2367,23 +2368,24 @@ th.sort-active { color: #8ab4ff !important; }
 /* ── Sticky left columns: Матрица видов помощи ── */
 /* Col widths: geo=220, vidy=92, lyudei=92, summa=120, deliv=140 */
 #presence-table th:nth-child(1), #presence-table td:nth-child(1) { position: sticky; left: 0;     z-index: 2; }
-#presence-table th:nth-child(2), #presence-table td:nth-child(2) { position: sticky; left: 220px; z-index: 2; }
-#presence-table th:nth-child(3), #presence-table td:nth-child(3) { position: sticky; left: 312px; z-index: 2; }
-#presence-table th:nth-child(4), #presence-table td:nth-child(4) { position: sticky; left: 404px; z-index: 2; }
-#presence-table th:nth-child(5), #presence-table td:nth-child(5) { position: sticky; left: 524px; z-index: 2; }
+#presence-table th:nth-child(2), #presence-table td:nth-child(2) { position: sticky; left: 40px;  z-index: 2; }
+#presence-table th:nth-child(3), #presence-table td:nth-child(3) { position: sticky; left: 260px; z-index: 2; }
+#presence-table th:nth-child(4), #presence-table td:nth-child(4) { position: sticky; left: 352px; z-index: 2; }
+#presence-table th:nth-child(5), #presence-table td:nth-child(5) { position: sticky; left: 444px; z-index: 2; }
+#presence-table th:nth-child(6), #presence-table td:nth-child(6) { position: sticky; left: 564px; z-index: 2; }
 /* Header corner cells: stick top+left simultaneously → highest z-index */
-#presence-table thead th:nth-child(-n+5) { z-index: 4; }
+#presence-table thead th:nth-child(-n+6) { z-index: 4; }
 /* Body sticky cells need explicit bg so scrolled content is hidden */
-#presence-table tbody td:nth-child(-n+5) { background: var(--bg-card); }
-#presence-table tbody tr:hover td:nth-child(-n+5) {
+#presence-table tbody td:nth-child(-n+6) { background: var(--bg-card); }
+#presence-table tbody tr:hover td:nth-child(-n+6) {
   background-color: var(--bg-card) !important;
   background-image: linear-gradient(rgba(91,138,248,0.08), rgba(91,138,248,0.08)) !important;
 }
-#presence-table tbody tr.prs-total-row td:nth-child(-n+5) {
+#presence-table tbody tr.prs-total-row td:nth-child(-n+6) {
   background-color: var(--bg-card);
   background-image: linear-gradient(rgba(78,205,196,0.10), rgba(78,205,196,0.10));
 }
-#presence-table tbody tr.prs-total-row:hover td:nth-child(-n+5) {
+#presence-table tbody tr.prs-total-row:hover td:nth-child(-n+6) {
   background-color: var(--bg-card) !important;
   background-image: linear-gradient(rgba(78,205,196,0.14), rgba(78,205,196,0.14)) !important;
 }
@@ -3735,7 +3737,13 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 .geo-panel.country-mode .gp-grp-row,
 .geo-panel.country-mode .gp-hdr-row,
 .geo-panel.country-mode .gp-row {
-  grid-template-columns: minmax(200px, 1fr) 70px 130px 70px 140px 145px;
+  grid-template-columns: minmax(200px, 1fr) 70px 130px 70px 140px;
+}
+/* Плавающий тултип (наведение на регион) — тоже без столбца утв. бюджета */
+.geo-panel:not(.country-mode) .gp-grp-row,
+.geo-panel:not(.country-mode) .gp-hdr-row,
+.geo-panel:not(.country-mode) .gp-row {
+  grid-template-columns: 1fr 64px 110px 70px 110px;
 }
 .gp-main { position: relative; }
 .gp-close {
@@ -4076,6 +4084,12 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 }
 .mtab-summary-body .gp-hdr { font-size: 0.9rem; }
 .mtab-summary-body .gp-grp-span { font-size:0.9rem; }
+/* «Аналитика по видам помощи» — без столбца утв. бюджета (5 колонок) */
+#mtab-summary-body .gp-grp-row,
+#mtab-summary-body .gp-hdr-row,
+#mtab-summary-body .gp-row {
+  grid-template-columns: minmax(150px, 1fr) 70px 120px 70px 120px;
+}
 /* Спидометр «Факт / Сумма заявок» во вкладках виден только в полноэкранном
    режиме; в плавающем тултипе и панели «Казахстан» — всегда. */
 .mtab-summary-body .gp-gauge { display: none; }
@@ -4238,7 +4252,7 @@ header { flex-shrink: 0; }
 .kpi-geo-side .gp-grp-row,
 .kpi-geo-side .gp-hdr-row,
 .kpi-geo-side .gp-row {
-  grid-template-columns: minmax(0, 1fr) 50px 100px 50px 100px 150px;
+  grid-template-columns: minmax(0, 1fr) 50px 100px 50px 100px;
   font-size: 0.70rem;
 }
 /* Заголовки числовых колонок не вылезают за ячейку */
