@@ -4049,7 +4049,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   CURRENT_USER = await fetchMe();
   if (!CURRENT_USER) { showLogin(); return; }
   if (CURRENT_USER.role === 'admin') setupAdminPanel();
-  if (variant === 'v3') _buildBurgerMenu();   // собрать управление в бургер (после кнопки «Аккаунты»)
+  _buildBurgerMenu();   // бургер-меню во всех вариантах (тёмная/светлая/зелёная)
 
   initPayTooltip();
   init();

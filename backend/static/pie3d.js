@@ -58,8 +58,7 @@ function ensureScene() {
   labelLayer.className = 'pie3d-labels';
   wrap.appendChild(labelLayer);
 
-  const _V3 = document.documentElement.dataset.variant === 'v3';   // зелёная версия
-  scene.add(new THREE.AmbientLight(_V3 ? 0x9ad6ac : 0x8fa3d6, 0.62));
+  scene.add(new THREE.AmbientLight(0x8fa3d6, 0.62));   // тёмная (индиго) сцена во всех вариантах
   const key = new THREE.DirectionalLight(0xffffff, 1.6);
   key.position.set(8, 20, 10); key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
@@ -81,11 +80,10 @@ function ensureScene() {
   // адаптация под светлую/тёмную тему
   const applyTheme = () => {
     const light = document.documentElement.dataset.theme === 'light';
-    const v3 = document.documentElement.dataset.variant === 'v3';   // зелёная тёмная сцена
-    const dFog   = v3 ? 0x0f1810 : 0x141831;
-    const dFloor = v3 ? 0x172016 : 0x1b2140;
-    const dGridA = v3 ? 0x2f5540 : 0x3a4570;
-    const dGridB = v3 ? 0x213a2b : 0x2a3252;
+    const dFog   = 0x141831;   // тёмная (индиго) сцена во всех вариантах
+    const dFloor = 0x1b2140;
+    const dGridA = 0x3a4570;
+    const dGridB = 0x2a3252;
     scene.fog = new THREE.Fog(light ? 0xeef1f6 : dFog, light ? 28 : 24, light ? 74 : 64);
     floor.material.color.set(light ? 0xe2e6ee : dFloor);
     scene.remove(grid);
