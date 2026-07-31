@@ -16,6 +16,9 @@ class Payment(Base):
     __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    # Раздел данных: 'mio' — статистика МИО (new14.xlsx), 'vseobuch' — данные всеобуча
+    # (vseobuch.xlsx). Все запросы к payments автоматически фильтруются по текущему разделу.
+    dataset = Column(String(20), nullable=False, default="mio", index=True)
     app_id = Column(Integer)
     app_date = Column(Date)
     app_date_close = Column(Date)

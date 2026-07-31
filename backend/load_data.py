@@ -21,6 +21,13 @@ raion_reg_ref:   dict[str, str] = {}   # {kato_dis: kato_reg} — region that ow
 settings_rows: list = []
 settings_pay_names: dict[int, str] = {}  # {pay_type_id: НАИМЕНОВАНИЕ ВЫПЛАТЫ} from settings file
 
+# ── Раздел «Всеобуч»: каталог видов услуг, выведенный из vseobuch.xlsx ──
+# У всеобуча нет отдельного settings-файла, поэтому «каталог» строится из самих данных.
+# Все структуры мутируются на месте (не переприсваиваются) — импорт по ссылке в main.py.
+vseobuch_settings_rows: list = []            # аналог settings_rows для всеобуча
+vseobuch_settings_pay_names: dict[int, str] = {}   # {pid: SERVICE_NAME}
+vseobuch_pay_type_names: dict[int, str] = {}       # аналог pay_type_names (REGION.xlsx)
+
 # Regions that exist on the map / administratively but provide nothing (not in REGION.xlsx)
 EXTRA_REGIONS = [('10', 'АБАЙСКАЯ ОБЛАСТЬ'), ('62', 'УЛЫТАУСКАЯ ОБЛАСТЬ')]
 
@@ -210,8 +217,9 @@ def _detect_app_id_offset(ws) -> int:
     return 1 if len(header) >= 31 else 0
 
 
-def parse_payment_rows(ws) -> list:
-    """Распарсить лист в список Payment. Колонки идут фиксированным порядком от APP_ID."""
+def parse_payment_rows(ws, dataset: str = "mio") -> list:
+    """Распарсить лист в список Payment. Колонки идут фиксированным порядком от APP_ID.
+    `dataset` помечает раздел ('mio' или 'vseobuch') — по нему фильтруются все запросы."""
     b = _detect_app_id_offset(ws)
     rows_data = []
     for row in ws.iter_rows(min_row=2, values_only=True):
@@ -225,6 +233,7 @@ def parse_payment_rows(ws) -> list:
         _kreg = parse_num(row[b + 5], int)   # KATO_REG
         _kdis = parse_num(row[b + 7], int)   # KATO_DIS
         rows_data.append(Payment(
+            dataset=dataset,
             app_id=parse_num(row[b + 0], int),
             app_date=parse_date(row[b + 1]),
             app_date_close=parse_date(row[b + 2]),
@@ -257,36 +266,191 @@ def parse_payment_rows(ws) -> list:
     return rows_data
 
 
-def replace_payments_from_file(file_obj) -> int:
-    """Загрузить выплаты из переданного xlsx (файл/поток): очистить и залить заново.
-    Возвращает число загруженных строк. Используется админ-загрузкой."""
+def ensure_dataset_column():
+    """Идемпотентная миграция: добавить колонку payments.dataset и проставить 'mio'
+    существующим строкам (раздел МИО — данные, которые уже загружены)."""
     Base.metadata.create_all(bind=engine)
+    with engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE payments ADD COLUMN IF NOT EXISTS dataset VARCHAR(20)"))
+        conn.execute(text(
+            "UPDATE payments SET dataset='mio' WHERE dataset IS NULL"))
+
+
+def replace_payments_from_file(file_obj, dataset: str = "mio") -> int:
+    """Загрузить выплаты из переданного xlsx (файл/поток): заменить строки раздела
+    `dataset` и залить заново. Возвращает число загруженных строк. Другие разделы
+    (напр. всеобуч) не затрагиваются. Используется админ-загрузкой."""
+    ensure_dataset_column()
     wb = load_workbook(file_obj, read_only=True, data_only=True)
     ws = wb.active
-    rows_data = parse_payment_rows(ws)
+    rows_data = parse_payment_rows(ws, dataset=dataset)
     wb.close()
     if not rows_data:
         raise ValueError("В файле не найдено ни одной строки данных (нет колонки APP_ID?)")
     with Session(engine) as session:
-        session.execute(text("TRUNCATE TABLE payments"))
+        session.execute(text("DELETE FROM payments WHERE dataset=:ds"), {"ds": dataset})
         session.add_all(rows_data)
         session.commit()
-    print(f"Admin upload: replaced payments with {len(rows_data)} rows")
+    print(f"Admin upload: replaced '{dataset}' payments with {len(rows_data)} rows")
     return len(rows_data)
+
+
+def _vs_nn(v):
+    """Значение или None для пустых/`[NULL]`."""
+    if v is None:
+        return None
+    s = str(v).strip()
+    if s == '' or s == '[NULL]':
+        return None
+    return v
+
+
+def _vs_money(v):
+    """Сумма из vseobuch: число или текст вида '50 831' (неразрывный пробел)."""
+    v = _vs_nn(v)
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).replace('\xa0', '').replace(' ', '').replace(',', '.')
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return None
+
+
+# Раскладка колонок листа ' social_services' в vseobuch.xlsx (0-индексно):
+# 0 счётчик, 1 REG_RU, 2 CODE_KATO, 3 RAI_RU, 4 IDRAI, 5 REGION_NAME, 6 BIN, 7 DEP_NAME,
+# 8 IIN, 9 SERVICE_NAME, 10 APP_DATE, 11 SOURCE_NAME, 12 APP_STATUS_NAME, 13 NAZN_SUM,
+# 14 PERIOD_TYPE, 15 ED_IZM, 16 STAT_RESHENIYA, 17 PODPISANO, 18 SDU_TZHS,
+# 19 SK_FAMILY_ID, 20 GENDER_ID, 21 VOZRAST
+def parse_vseobuch_rows(ws):
+    """Распарсить лист всеобуча в (список Payment, каталог видов услуг).
+
+    У всеобуча нет числового ID вида услуги — синтезируем стабильный ID из
+    SERVICE_NAME. Сумм всего одна (NAZN_SUM = назначенная) — кладём её в
+    max/dec/deliv, чтобы метрики «принято/факт» работали как в МИО.
+    Категорий получателей нет — считаем каждую услугу отдельной категорией."""
+    service_ids: dict[str, int] = {}
+
+    def _svc_id(name):
+        if name not in service_ids:
+            service_ids[name] = len(service_ids) + 1
+        return service_ids[name]
+
+    rows_data = []
+    settings_seen: dict = {}   # (reg2, rai4, pid) -> (name, max_val)
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        counter = parse_num(row[0], int)
+        code_kato = parse_num(row[2], int)
+        service = _vs_nn(row[9])
+        if code_kato is None or service is None:
+            continue
+        pid = _svc_id(str(service).strip())
+        summ = _vs_money(row[13])
+        kato_region = code_kato // 10_000_000
+        kato_raion = code_kato // 100_000
+        rows_data.append(Payment(
+            dataset="vseobuch",
+            app_id=counter,
+            app_date=parse_date(row[10]),
+            app_status=str(_vs_nn(row[12])).strip() if _vs_nn(row[12]) else None,
+            iin=str(_vs_nn(row[8])).strip() if _vs_nn(row[8]) else None,
+            kato_reg=code_kato,
+            kato_dis=code_kato,
+            pay_type_id=pid,
+            pay_type=str(service).strip(),
+            cat_type_id=pid,
+            cat_type=str(service).strip(),
+            period=str(_vs_nn(row[14])).strip() if _vs_nn(row[14]) else None,
+            unit_id=None,
+            max_pay_sum=summ,
+            decision=str(_vs_nn(row[16])).strip() if _vs_nn(row[16]) else None,
+            dec_pay_sum=summ,
+            deliv_date=None,
+            deliv_sum=summ,
+            mrp=None,
+            sys_date=None,
+            sicid=parse_num(row[19], int),
+            gender_id=parse_gender(row[20]),
+            vozrast=parse_num(row[21], int),
+            sdu_tzhs=str(_vs_nn(row[18])).strip() if _vs_nn(row[18]) else None,
+            kato_region=kato_region,
+            kato_raion=kato_raion,
+            kato_regname=_fmt_geo_name(row[1]),
+            kato_rainame=_fmt_geo_name(row[3]),
+        ))
+        key = (str(kato_region), str(kato_raion), pid)
+        prev = settings_seen.get(key)
+        mx = summ if summ is not None else (prev[1] if prev else 1.0)
+        if prev is None or (summ is not None and (prev[1] is None or summ > prev[1])):
+            settings_seen[key] = (str(service).strip(), mx)
+
+    # Собрать каталог (мутируем глобальные структуры на месте)
+    vseobuch_settings_pay_names.clear()
+    vseobuch_pay_type_names.clear()
+    for name, pid in service_ids.items():
+        vseobuch_settings_pay_names[pid] = name
+        vseobuch_pay_type_names[pid] = name
+    vseobuch_settings_rows.clear()
+    for (reg2, rai4, pid), (name, mx) in settings_seen.items():
+        # (kato_reg2, kato_dis4, pid, pay_name, cat=name, max_val) — как settings_rows
+        vseobuch_settings_rows.append((reg2, rai4, pid, name, name, mx))
+
+    return rows_data
+
+
+def load_vseobuch():
+    """Построить каталог всеобуча из vseobuch.xlsx и (идемпотентно) залить строки
+    в раздел 'vseobuch'. Каталог строится ВСЕГДА (он в памяти), строки — только если
+    в БД их ещё нет."""
+    ensure_dataset_column()
+
+    path = os.path.join(os.path.dirname(__file__), "data", "vseobuch.xlsx")
+    if not os.path.exists(path):
+        print("load_vseobuch: vseobuch.xlsx не найден — пропуск")
+        return
+
+    wb = load_workbook(path, read_only=True, data_only=True)
+    ws = wb.active
+    rows_data = parse_vseobuch_rows(ws)   # всегда пересобирает каталог в памяти
+    wb.close()
+
+    print(f"Vseobuch catalog: {len(vseobuch_settings_pay_names)} services, "
+          f"{len(vseobuch_settings_rows)} settings rows")
+
+    with engine.connect() as conn:
+        count = conn.execute(text(
+            "SELECT COUNT(*) FROM payments WHERE dataset='vseobuch'")).scalar()
+    if count and count > 0:
+        return
+
+    if not rows_data:
+        print("load_vseobuch: в vseobuch.xlsx не найдено строк данных")
+        return
+
+    with Session(engine) as session:
+        session.add_all(rows_data)
+        session.commit()
+
+    print(f"Loaded {len(rows_data)} rows from vseobuch.xlsx")
 
 
 def load_excel():
     Base.metadata.create_all(bind=engine)
+    ensure_dataset_column()
 
     with engine.connect() as conn:
-        count = conn.execute(text("SELECT COUNT(*) FROM payments")).scalar()
-        if count > 0:
+        count = conn.execute(text(
+            "SELECT COUNT(*) FROM payments WHERE dataset='mio'")).scalar()
+        if count and count > 0:
             return
 
     path = os.path.join(os.path.dirname(__file__), "data", "new14.xlsx")
     wb = load_workbook(path, read_only=True, data_only=True)
     ws = wb.active
-    rows_data = parse_payment_rows(ws)
+    rows_data = parse_payment_rows(ws, dataset="mio")
     wb.close()
 
     with Session(engine) as session:

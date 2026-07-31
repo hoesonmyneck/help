@@ -1,13 +1,16 @@
 import io
+from contextvars import ContextVar
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query, Request, Depends, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
-from sqlalchemy import func, distinct
-from sqlalchemy.orm import Session
+from sqlalchemy import func, distinct, literal, event
+from sqlalchemy.orm import Session, with_loader_criteria
 from database import engine, Payment, User, BudgetItem, RegionBudget, AllowedIin, LoginLog
+import load_data
 from load_data import (load_excel, load_budget, load_region_budget, load_reference_data,
+                       load_vseobuch,
                        replace_payments_from_file,
                        region_help_ids, raion_help_ids,
                        all_region_katos, pay_type_names, REGION_NAMES,
@@ -15,6 +18,52 @@ from load_data import (load_excel, load_budget, load_region_budget, load_referen
 import auth
 import os
 from datetime import datetime
+
+# ─────────────────────── Раздел данных (МИО / Всеобуч) ───────────────────────
+# Текущий раздел запроса берётся из query-параметра ?source=. По умолчанию 'mio'.
+# Значение хранится в ContextVar и применяется ко ВСЕМ ORM-запросам к payments
+# автоматически (событие do_orm_execute ниже) — эндпоинты править не нужно.
+_current_source: ContextVar[str] = ContextVar("current_source", default="mio")
+
+
+async def _use_source(source: str = Query("mio")):
+    """Глобальная зависимость: зафиксировать раздел данных для текущего запроса.
+    Асинхронная — значение ContextVar корректно наследуется sync-эндпоинтом."""
+    _current_source.set(source if source in ("mio", "vseobuch") else "mio")
+
+
+@event.listens_for(Session, "do_orm_execute")
+def _dataset_scope(execute_state):
+    """Прозрачная фильтрация по разделу данных:
+      • payments — только строки текущего раздела ('mio'/'vseobuch');
+      • бюджет (region_budgets / budget_items) — только в разделе МИО
+        (у всеобуча утверждённого бюджета нет → пустой результат)."""
+    if not execute_state.is_select or execute_state.is_column_load:
+        return
+    if execute_state.execution_options.get("skip_dataset_scope"):
+        return
+    ds = _current_source.get()
+    # payments: ds — связанный параметр (документированный шаблон мультиарендности)
+    opts = [with_loader_criteria(Payment, lambda cls: cls.dataset == ds, include_aliases=True)]
+    # Всеобуч: бюджета нет — добавляем всегда-ложное условие (решение принято здесь,
+    # в Python, а не внутри lambda → безопасно для кэша лямбда-выражений SQLAlchemy).
+    if ds != "mio":
+        opts.append(with_loader_criteria(RegionBudget, lambda cls: literal(False), include_aliases=True))
+        opts.append(with_loader_criteria(BudgetItem, lambda cls: literal(False), include_aliases=True))
+    execute_state.statement = execute_state.statement.options(*opts)
+
+
+# Каталог видов помощи зависит от раздела: МИО — из settings-файлов, Всеобуч — из данных.
+def active_settings_rows():
+    return load_data.vseobuch_settings_rows if _current_source.get() == "vseobuch" else settings_rows
+
+
+def active_settings_pay_names():
+    return load_data.vseobuch_settings_pay_names if _current_source.get() == "vseobuch" else settings_pay_names
+
+
+def active_pay_type_names():
+    return load_data.vseobuch_pay_type_names if _current_source.get() == "vseobuch" else pay_type_names
 
 # Внешний базовый URL сервиса (как его видит браузер пользователя через портал).
 # Используется для абсолютной ссылки redirectUrl в SSO-ответе.
@@ -32,6 +81,7 @@ def _is_excluded(pname: str | None) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     load_excel()
+    load_vseobuch()
     load_budget()
     load_region_budget()
     load_reference_data()
@@ -39,7 +89,8 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(lifespan=lifespan)
+# Раздел данных фиксируется для каждого запроса глобальной зависимостью
+app = FastAPI(lifespan=lifespan, dependencies=[Depends(_use_source)])
 
 # Public API paths that must work without a session (login flow itself)
 _PUBLIC_API = {"/api/auth/login", "/api/auth/login-2fa", "/api/auth/sso",
@@ -558,17 +609,17 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
 
         # help_type_count: for all KZ = 13 (from settings); otherwise count distinct pay_type_id from Payment
         if raion_id is None and region_id is None:
-            help_type_count = len({r[2] for r in settings_rows if not _is_excluded(r[3])})
+            help_type_count = len({r[2] for r in active_settings_rows() if not _is_excluded(r[3])})
         else:
             help_type_count = base.with_entities(func.count(distinct(Payment.pay_type_id))).scalar() or 0
 
         # people categories — still from settings
         if raion_id is not None:
-            geo = [r for r in settings_rows if r[1] == str(raion_id)]
+            geo = [r for r in active_settings_rows() if r[1] == str(raion_id)]
         elif region_id is not None:
-            geo = [r for r in settings_rows if r[0] == str(region_id)]
+            geo = [r for r in active_settings_rows() if r[0] == str(region_id)]
         else:
-            geo = settings_rows
+            geo = active_settings_rows()
         people_cat_count = len({r[4] for r in geo if r[5] is not None})
 
         # Фактически выплачено: сумма всех DELIV_SUM независимо от статуса заявки
@@ -822,7 +873,7 @@ def summary(region_id: int = Query(None), sdu_filter: str = Query(None), gender_
             nat_cat = sdu_q(db.query(func.count(distinct(Payment.cat_type_id)))).scalar() or 0
             nat_total = float(sdu_q(db.query(func.sum(Payment.dec_pay_sum))).scalar() or 0)
             nat_max = float(sdu_q(db.query(paid_max)).scalar() or 0)
-            nat_help = len([p for p, n in settings_pay_names.items() if not _is_excluded(n)])
+            nat_help = len([p for p, n in active_settings_pay_names().items() if not _is_excluded(n)])
             total = {
                 "id": None, "name": "Республика Казахстан", "is_total": True,
                 "help_types": nat_help, "cat_count": nat_cat,
@@ -879,7 +930,7 @@ def summary(region_id: int = Query(None), sdu_filter: str = Query(None), gender_
 @app.get("/api/coverage-groups")
 def coverage_groups(region_id: int = Query(None)):
     with Session(engine) as db:
-        groups_def = sorted(pay_type_names.items())   # [(42, 'name'), ...]
+        groups_def = sorted(active_pay_type_names().items())   # [(42, 'name'), ...]
         columns = [{'id': pid, 'name': pname} for pid, pname in groups_def]
 
         if region_id is None:
@@ -989,7 +1040,7 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
         def af(q): return apply_extra_filters(q, sdu_filter, gender_filter, age_group)
 
         # Columns = pay types from the settings file, excluding phone subscription
-        pay_defs = [(pid, pname) for pid, pname in sorted(settings_pay_names.items())
+        pay_defs = [(pid, pname) for pid, pname in sorted(active_settings_pay_names().items())
                     if not _is_excluded(pname)]
         columns = [{'id': pid, 'name': pname} for pid, pname in pay_defs]
 
@@ -1000,7 +1051,7 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
             geo_pay_cat = defaultdict(lambda: defaultdict(set))  # kato_reg -> pid -> {cat}
             nat_pay, nat_cat = set(), set()
             nat_pay_cat = defaultdict(set)                       # pid -> {cat} nationwide
-            for kreg, kdis, pid, pname, cat, mx in settings_rows:
+            for kreg, kdis, pid, pname, cat, mx in active_settings_rows():
                 if mx is None or _is_excluded(pname):
                     continue
                 geo_pay[kreg].add(pid); geo_cat[kreg].add(cat)
@@ -1085,7 +1136,7 @@ def help_presence(region_id: int = Query(None), sdu_filter: str = Query(None), g
         dis_pay = defaultdict(set); dis_cat = defaultdict(set)
         dis_pay_cat = defaultdict(lambda: defaultdict(set))  # kato_dis -> pid -> {cat}
         reg_pay_cat = defaultdict(set)                        # pid -> {cat} for region total
-        for kreg, kdis, pid, pname, cat, mx in settings_rows:
+        for kreg, kdis, pid, pname, cat, mx in active_settings_rows():
             if mx is None or kreg != str(region_id) or _is_excluded(pname):
                 continue
             dis_pay[kdis].add(pid); dis_cat[kdis].add(cat)
@@ -1219,7 +1270,7 @@ def cat_regions(region_id: int = Query(None)):
 
     # cat -> reg -> dis -> {pay_name: max_val}  (only rows with a configured max sum)
     tree: dict = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
-    for reg, dis, pid, pname, cat, mx in settings_rows:
+    for reg, dis, pid, pname, cat, mx in active_settings_rows():
         if mx is None or not cat or not pname:
             continue
         cur = tree[cat][reg][dis].get(pname)
@@ -1427,7 +1478,7 @@ def anomalies_kpi():
         }
         declared_pairs = {
             (str(kreg), pid)
-            for kreg, kdis, pid, pname, cat, mx in settings_rows if mx is not None
+            for kreg, kdis, pid, pname, cat, mx in active_settings_rows() if mx is not None
         }
         empty_count = len(declared_pairs - paid_pairs)
 
@@ -1604,7 +1655,7 @@ def anomalies_utilization(region_id: int = Query(None), sdu_filter: str = Query(
 def anomalies_unique_help(region_id: int = Query(None)):
     from collections import defaultdict
     pay_type_regions: dict = defaultdict(set)
-    for kreg, kdis, pid, pname, cat, mx in settings_rows:
+    for kreg, kdis, pid, pname, cat, mx in active_settings_rows():
         if pname and not _is_excluded(pname):
             pay_type_regions[pname].add(kreg)
 
@@ -1631,7 +1682,7 @@ def anomalies_empty_help():
         }
 
         declared: dict = {}
-        for kreg, kdis, pid, pname, cat, mx in settings_rows:
+        for kreg, kdis, pid, pname, cat, mx in active_settings_rows():
             if mx is None:
                 continue
             key = (str(kreg), pid)

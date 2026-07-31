@@ -1325,6 +1325,8 @@ function _buildBurgerMenu() {
   const header = document.querySelector('header');
   const menu = document.getElementById('header-menu');
   if (!header || !menu) return;
+  // Переключатель раздела данных: МИО ↔ Всеобуч — первым пунктом меню
+  _buildSectionSwitch(menu);
   const toggles = header.querySelector('.header-toggles');       // тема + язык
   const report  = header.querySelector('.report-wrap');          // Скачать отчёт
   const actions = document.getElementById('header-actions');     // Аккаунты + Планы развития
@@ -1333,6 +1335,31 @@ function _buildBurgerMenu() {
   if (help) help.textContent = 'Тех. поддержка';
   [toggles, report, actions, help, logout].forEach(el => { if (el) menu.appendChild(el); });
   // меню НЕ закрывается при выборе пункта (закрытие — по клику вне или по ☰)
+}
+
+/* Раздел данных: 'mio' — статистика МИО, 'vseobuch' — данные всеобуча (vseobuch.xlsx).
+   Переключение перезагружает страницу — весь дашборд перезапрашивает данные нужного раздела. */
+function currentDataSource() {
+  return localStorage.getItem('dataSource') || 'mio';
+}
+function setDataSource(ds) {
+  if (!['mio', 'vseobuch'].includes(ds)) ds = 'mio';
+  localStorage.setItem('dataSource', ds);
+  location.reload();
+}
+function _buildSectionSwitch(menu) {
+  if (menu.querySelector('.section-switch')) return;
+  const cur = currentDataSource();
+  const wrap = document.createElement('div');
+  wrap.className = 'section-switch';
+  wrap.setAttribute('role', 'group');
+  wrap.setAttribute('aria-label', 'Раздел данных');
+  wrap.innerHTML =
+    `<button type="button" data-ds="mio" class="${cur === 'mio' ? 'on' : ''}" ` +
+      `onclick="setDataSource('mio')" title="Статистика МИО">МИО</button>` +
+    `<button type="button" data-ds="vseobuch" class="${cur === 'vseobuch' ? 'on' : ''}" ` +
+      `onclick="setDataSource('vseobuch')" title="Данные всеобуча">Всеобуч</button>`;
+  menu.appendChild(wrap);
 }
 // закрытие бургер-меню по клику вне
 document.addEventListener('click', (e) => {

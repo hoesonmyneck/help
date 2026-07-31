@@ -4543,6 +4543,23 @@ header { flex-shrink: 0; }
 }
 .variant-switch button.on{ background:var(--ac-teal); color:#fff; }
 
+/* Переключатель раздела данных (МИО / Всеобуч) в бургер-меню */
+.section-switch{
+  display:flex; gap:2px; width:100%;
+  background:var(--bg-deep); border:1px solid var(--bd-mid);
+  border-radius:999px; padding:3px;
+}
+.section-switch button{
+  flex:1; border:none; background:none; font:inherit; font-size:.72rem; font-weight:700;
+  color:var(--tx-dim); padding:6px 10px; border-radius:999px; cursor:pointer;
+  transition:background .15s, color .15s; white-space:nowrap;
+}
+.section-switch button.on{ background:var(--ac-teal); color:#fff; }
+.section-switch button:active{ transform:scale(0.97); }
+
+/* Всеобуч: утверждённого бюджета нет — скрываем бюджетную KPI-карточку */
+:root[data-dataset="vseobuch"] #kpi-card-budget{ display:none; }
+
 /* меню отчёта должно перекрывать карту; в фуллскрине шапка уходит вниз */
 header{ z-index:1200; }
 body.fs-open header{ z-index:0; }
@@ -4586,7 +4603,9 @@ body.fs-open header{ z-index:0; }
 .header-menu.open > *:nth-child(3){ transition-delay:110ms; }
 .header-menu.open > *:nth-child(4){ transition-delay:145ms; }
 .header-menu.open > *:nth-child(5){ transition-delay:180ms; }
+.header-menu.open > *:nth-child(6){ transition-delay:215ms; }
 
+.header-menu .section-switch{ margin:0; }
 .header-menu .header-toggles{ flex-direction:column; align-items:stretch; gap:10px; margin:0; }
 .header-menu .variant-switch{ margin-left:0; justify-content:center; }
 .header-menu #header-actions{ flex-direction:column; gap:10px; }

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ЕЦП "Анализ по дополнительным видам помощи МИО"</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link id="main-style" rel="stylesheet" href="/style.css?v=105">
+  <link id="main-style" rel="stylesheet" href="/style.css?v=106">
   <script>
   /* выбираем стиль до отрисовки: v3 — зелёный style.css, v1/v2 — классический style-classic.css */
   (function(){
@@ -14,9 +14,29 @@
       document.documentElement.setAttribute('data-variant', v);
       if (v !== 'v3'){
         var l = document.getElementById('main-style');
-        if (l) l.setAttribute('href', '/style-classic.css?v=4');
+        if (l) l.setAttribute('href', '/style-classic.css?v=5');
         document.documentElement.setAttribute('data-theme', v === 'v2' ? 'light' : '');
       }
+      /* раздел данных: 'mio' — статистика МИО (по умолчанию), 'vseobuch' — данные всеобуча.
+         Ставим атрибут до отрисовки, чтобы CSS сразу скрыл бюджет в режиме всеобуча. */
+      var ds = localStorage.getItem('dataSource') || 'mio';
+      document.documentElement.setAttribute('data-dataset', ds);
+
+      /* Глобальный перехват fetch: в режиме всеобуча ко всем data-запросам /api/*
+         (кроме auth/admin) добавляем ?source=vseobuch — бэкенд отдаёт данные из vseobuch.xlsx. */
+      var _origFetch = window.fetch;
+      window.fetch = function(input, init){
+        try{
+          var cur = localStorage.getItem('dataSource') || 'mio';
+          var url = (typeof input === 'string') ? input : (input && input.url) || '';
+          if (cur !== 'mio' && /^\/api\//.test(url) && !/^\/api\/(auth|admin)\//.test(url)){
+            var nu = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'source=' + encodeURIComponent(cur);
+            if (typeof input === 'string') input = nu;
+            else input = new Request(nu, input);
+          }
+        }catch(e){}
+        return _origFetch.call(this, input, init);
+      };
     }catch(e){}
   })();
   </script>
@@ -543,7 +563,7 @@
 
 <script src="/i18n-raions.js?v=1"></script>
 <script src="/i18n.js?v=10"></script>
-<script src="/app.js?v=100"></script>
+<script src="/app.js?v=101"></script>
 <script src="/kpifx.js?v=11"></script>
 
 <!-- Three.js (для 3D-пирога видов помощи) -->
