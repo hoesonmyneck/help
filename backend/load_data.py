@@ -424,20 +424,28 @@ def load_vseobuch():
           f"{len(vseobuch_settings_rows)} settings rows")
 
     with engine.connect() as conn:
-        count = conn.execute(text(
-            "SELECT COUNT(*) FROM payments WHERE dataset='vseobuch'")).scalar()
-    if count and count > 0:
+        total = conn.execute(text(
+            "SELECT COUNT(*) FROM payments WHERE dataset='vseobuch'")).scalar() or 0
+        with_src = conn.execute(text(
+            "SELECT COUNT(*) FROM payments WHERE dataset='vseobuch' "
+            "AND source_name IS NOT NULL")).scalar() or 0
+    # Уже загружено корректно (есть строки и заполнен source_name) — ничего не делаем.
+    if total > 0 and with_src > 0:
         return
 
     if not rows_data:
         print("load_vseobuch: в vseobuch.xlsx не найдено строк данных")
         return
 
+    # Либо строк нет, либо это старые строки без source_name (загружены прежней версией)
+    # — перезаливаем раздел заново, чтобы появился источник (Е-Собес / ПЭП).
     with Session(engine) as session:
+        session.execute(text("DELETE FROM payments WHERE dataset='vseobuch'"))
         session.add_all(rows_data)
         session.commit()
 
-    print(f"Loaded {len(rows_data)} rows from vseobuch.xlsx")
+    action = "Reloaded" if total > 0 else "Loaded"
+    print(f"{action} {len(rows_data)} rows from vseobuch.xlsx")
 
 
 def load_excel():
