@@ -28,6 +28,10 @@ function _applyDemoFilters(p) {
 function _demoQS() { return _applyDemoFilters(new URLSearchParams()).toString(); }
 // собирает URL из непустых query-фрагментов ('a=1', '', 'b=2') → path?a=1&b=2
 function _url(path, ...q) { const s = q.filter(Boolean).join('&'); return s ? `${path}?${s}` : path; }
+// Подпись источника заявления (SOURCE_NAME) для показа: в эксельке «ЕСобес» → «Е-Собес»
+function _srcLabel(s) {
+  return String(s || '').replace(/^\s*Е\s*-?\s*Собес\s*$/i, 'Е-Собес');
+}
 function _escHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1579,7 +1583,7 @@ async function refreshKPI(sduSeq) {
     // Всеобуч: вместо «% от бюджета» — разбивка заявлений по источнику (SOURCE_NAME)
     // например: «107 (84%) ПЭП и 21 (16%) Е-Собес»
     subEl.innerHTML = srcBreak
-      .map(s => `<b>${formatInt(s.count)}</b> (${s.pct}%) ${_escHtml(s.source)}`)
+      .map(s => `<b>${formatInt(s.count)}</b> (${s.pct}%) ${_escHtml(_srcLabel(s.source))}`)
       .join(' и ');
   } else {
     const decPct = data.budget_total ? (data.total_dec_pay_sum || 0) / data.budget_total * 100 : 0;
