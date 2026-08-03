@@ -31,6 +31,9 @@ class Payment(Base):
     cat_type_id = Column(Integer)
     cat_type = Column(String(500))
     period = Column(String(100))
+    # Источник заявления (SOURCE_NAME) — используется только разделом «Всеобуч»
+    # (Е-Собес / ПЭП). Для строк МИО остаётся пустым.
+    source_name = Column(String(100))
     unit_id = Column(Integer)
     max_pay_sum = Column(Numeric(18, 2))
     decision = Column(String(500))

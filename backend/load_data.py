@@ -275,6 +275,8 @@ def ensure_dataset_column():
             "ALTER TABLE payments ADD COLUMN IF NOT EXISTS dataset VARCHAR(20)"))
         conn.execute(text(
             "UPDATE payments SET dataset='mio' WHERE dataset IS NULL"))
+        conn.execute(text(
+            "ALTER TABLE payments ADD COLUMN IF NOT EXISTS source_name VARCHAR(100)"))
 
 
 def replace_payments_from_file(file_obj, dataset: str = "mio") -> int:
@@ -364,6 +366,7 @@ def parse_vseobuch_rows(ws):
             cat_type_id=pid,
             cat_type=str(service).strip(),
             period=str(_vs_nn(row[14])).strip() if _vs_nn(row[14]) else None,
+            source_name=str(_vs_nn(row[11])).strip() if _vs_nn(row[11]) else None,
             unit_id=None,
             max_pay_sum=summ,
             decision=str(_vs_nn(row[16])).strip() if _vs_nn(row[16]) else None,

@@ -554,6 +554,17 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
         total_max = base.with_entities(func.sum(Payment.max_pay_sum)).scalar() or 0
         total_dec = base.with_entities(func.sum(Payment.dec_pay_sum)).scalar() or 0
         app_count = base.with_entities(func.count(Payment.id)).scalar() or 0
+        # Разбивка заявлений по источнику (SOURCE_NAME): Е-Собес / ПЭП — для всеобуча.
+        # У МИО source_name пустой → список пустой (фронт покажет «% от бюджета»).
+        src_rows = (base.filter(Payment.source_name.isnot(None))
+                    .with_entities(Payment.source_name, func.count(Payment.id))
+                    .group_by(Payment.source_name).all())
+        _src_total = sum(c for _, c in src_rows)
+        source_breakdown = [
+            {"source": s, "count": c,
+             "pct": round(c / _src_total * 100) if _src_total else 0}
+            for s, c in sorted(src_rows, key=lambda x: -x[1])
+        ]
         # «Фактические» метрики — по реально выплаченным суммам (DELIV_SUM > 0),
         # независимо от статуса заявки (по решению руководства)
         fact_help_type_count = (
@@ -643,6 +654,7 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
             "total_deliv_sum": float(deliv_total),
             "budget_total": float(budget_total),
             "app_count": app_count,
+            "source_breakdown": source_breakdown,
             "fact_help_type_count": fact_help_type_count,
             "fact_recipients": fact_recipients,
             "unique_recipients": unique_recipients,

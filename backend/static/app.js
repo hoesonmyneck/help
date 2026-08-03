@@ -28,6 +28,10 @@ function _applyDemoFilters(p) {
 function _demoQS() { return _applyDemoFilters(new URLSearchParams()).toString(); }
 // собирает URL из непустых query-фрагментов ('a=1', '', 'b=2') → path?a=1&b=2
 function _url(path, ...q) { const s = q.filter(Boolean).join('&'); return s ? `${path}?${s}` : path; }
+function _escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 
 function buildFilterParams(geoMode = 'full') {
   const p = new URLSearchParams();
@@ -1022,6 +1026,12 @@ function geoPct(id) {
 }
 
 function geoFill(id) {
+  // Всеобуч — пилот только по 3 регионам: активны они, остальные серые.
+  // (Внутри пилотного региона районы красятся обычным образом.)
+  if (currentDataSource() === 'vseobuch') {
+    if (currentRegion == null && !VSEOBUCH_PILOT_REGIONS.has(+id)) return '#4a5258';
+    return mapColorMode === 'pct' ? getColorPct(geoPct(id)) : getColor(geoVidy(id));
+  }
   // Улытауская (62) и Абайская (10) области — помощь не предусмотрена → серый (в обоих режимах)
   if (REGIONS_NO_NPA.has(+id) || (currentRegion != null && REGIONS_NO_NPA.has(+currentRegion))) {
     return '#4a5258';
@@ -1109,6 +1119,12 @@ function _toTitleCase(s) {
 }
 
 const REGIONS_NO_NPA = new Set([10, 62]);
+
+// ── Всеобуч: пилот только по 3 регионам ──────────────────────────────────────
+// ЗКО (27), Костанайская (39), Улытауская (62). Остальные регионы на карте серые.
+// Захардкожено намеренно — когда всеобуч распространят на все регионы, просто
+// удалить этот Set и ветку в geoFill (либо добавить сюда новые коды регионов).
+const VSEOBUCH_PILOT_REGIONS = new Set([27, 39, 62]);
 
 // Города республиканского значения без районного деления: Астана (71), Шымкент (79).
 // При заходе в такой регион на карте не показываем районы, а рисуем регион целиком
@@ -1556,9 +1572,19 @@ async function refreshKPI(sduSeq) {
   animateCounter('kpi-app-count',   data.app_count || 0,      v => formatInt(v));
   renderTopMgp(ptRows);
 
-  // проценты
-  const decPct = data.budget_total ? (data.total_dec_pay_sum || 0) / data.budget_total * 100 : 0;
-  setText('kpi-dec-pct', decPct.toFixed(2).replace('.', ',') + '%');
+  // проценты / разбивка по источнику
+  const subEl = document.getElementById('kpi-dec-sub');
+  const srcBreak = data.source_breakdown || [];
+  if (currentDataSource() === 'vseobuch' && srcBreak.length) {
+    // Всеобуч: вместо «% от бюджета» — разбивка заявлений по источнику (SOURCE_NAME)
+    // например: «107 (84%) ПЭП и 21 (16%) Е-Собес»
+    subEl.innerHTML = srcBreak
+      .map(s => `<b>${formatInt(s.count)}</b> (${s.pct}%) ${_escHtml(s.source)}`)
+      .join(' и ');
+  } else {
+    const decPct = data.budget_total ? (data.total_dec_pay_sum || 0) / data.budget_total * 100 : 0;
+    subEl.innerHTML = `<b id="kpi-dec-pct">${decPct.toFixed(2).replace('.', ',')}%</b> от бюджета`;
+  }
   const delivPct = data.total_dec_pay_sum ? Math.round((data.total_deliv_sum || 0) / data.total_dec_pay_sum * 100) : 0;
   setText('kpi-deliv-pct', delivPct + '%');
 
