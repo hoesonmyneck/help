@@ -322,17 +322,16 @@ def _vs_money(v):
         return None
 
 
-# Раскладка колонок листа ' social_services' в vseobuch.xlsx (0-индексно):
-# 0 счётчик, 1 REG_RU, 2 CODE_KATO, 3 RAI_RU, 4 IDRAI, 5 REGION_NAME, 6 BIN, 7 DEP_NAME,
-# 8 IIN, 9 SERVICE_NAME, 10 APP_DATE, 11 SOURCE_NAME, 12 APP_STATUS_NAME, 13 NAZN_SUM,
-# 14 PERIOD_TYPE, 15 ED_IZM, 16 STAT_RESHENIYA, 17 PODPISANO, 18 SDU_TZHS,
-# 19 SK_FAMILY_ID, 20 GENDER_ID, 21 VOZRAST
+# Колонки читаются ПО ИМЕНИ ЗАГОЛОВКА, а не по позиции — выгрузки всеобуча приходят
+# в разных раскладках (старая — единый CODE_KATO; новая — раздельные KATO_REG/KATO_RAI).
+# Поддерживаются оба формата: для каждого поля перечислены допустимые имена столбцов.
 def parse_vseobuch_rows(ws):
     """Распарсить лист всеобуча в (список Payment, каталог видов услуг).
 
     У всеобуча нет числового ID вида услуги — синтезируем стабильный ID из
     SERVICE_NAME. Сумм всего одна (NAZN_SUM = назначенная) — кладём её в
-    max/dec/deliv, чтобы метрики «принято/факт» работали как в МИО.
+    max/dec, чтобы метрики «принято» работали как в МИО. deliv_sum заполняется
+    только у реально оплаченных заявлений (см. is_paid ниже).
     Категорий получателей нет — считаем каждую услугу отдельной категорией."""
     service_ids: dict[str, int] = {}
 
@@ -341,55 +340,79 @@ def parse_vseobuch_rows(ws):
             service_ids[name] = len(service_ids) + 1
         return service_ids[name]
 
+    # Заголовок → индекс (имя нормализуем: обрезаем пробелы, верхний регистр).
+    header = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
+    hmap = {str(h).strip().upper(): i for i, h in enumerate(header) if h is not None}
+
+    def col(row, *names):
+        """Значение первой присутствующей колонки из names (или None)."""
+        for n in names:
+            i = hmap.get(n)
+            if i is not None and i < len(row):
+                return row[i]
+        return None
+
     rows_data = []
     settings_seen: dict = {}   # (reg2, rai4, pid) -> (name, max_val)
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        counter = parse_num(row[0], int)
-        code_kato = parse_num(row[2], int)
-        service = _vs_nn(row[9])
-        if code_kato is None or service is None:
+    for n, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=1):
+        service = _vs_nn(col(row, 'SERVICE_NAME'))
+        # КАТО: либо раздельные KATO_REG/KATO_RAI (новый формат), либо единый
+        # CODE_KATO (старый) → регион = //10^7 (2 цифры), район = //10^5 (4 цифры).
+        kato_region = parse_num(col(row, 'KATO_REG'), int)
+        kato_raion = parse_num(col(row, 'KATO_RAI'), int)
+        if kato_region is None:
+            code_kato = parse_num(col(row, 'CODE_KATO'), int)
+            if code_kato is not None:
+                kato_region = code_kato // 10_000_000
+                kato_raion = code_kato // 100_000
+        if kato_region is None or service is None:
             continue
         pid = _svc_id(str(service).strip())
-        summ = _vs_money(row[13])
-        kato_region = code_kato // 10_000_000
-        kato_raion = code_kato // 100_000
+        summ = _vs_money(col(row, 'NAZN_SUM'))
         # «Произведённая выплата» для всеобуча: заявление реально оплачено, только
         # если статус = «Принято» И подписано руководителем (PODPISANO_RUKOVODITELEM = 1).
         # Иначе deliv_sum пустой → в «фактически выплачено» такая строка не попадает.
-        app_status = str(_vs_nn(row[12])).strip() if _vs_nn(row[12]) else None
-        podpisano = str(_vs_nn(row[17])).strip() if _vs_nn(row[17]) else None
+        app_status = str(_vs_nn(col(row, 'APP_STATUS_NAME'))).strip() if _vs_nn(col(row, 'APP_STATUS_NAME')) else None
+        _pod = _vs_nn(col(row, 'PODPISANO_RUKOVODITELEM'))
+        podpisano = str(_pod).strip() if _pod else None
         is_paid = (app_status == "Принято" and podpisano == "1")
         deliv = summ if is_paid else None
+        app_date = parse_date(col(row, 'APP_DATE'))
+        iin = _vs_nn(col(row, 'IIN'))
+        period = _vs_nn(col(row, 'PERIOD_TYPE'))
+        source = _vs_nn(col(row, 'SOURCE_NAME'))
+        decision = _vs_nn(col(row, 'STAT_RESHENIYA'))
+        sdu = _vs_nn(col(row, 'SDU_TZHS'))
         rows_data.append(Payment(
             dataset="vseobuch",
-            app_id=counter,
-            app_date=parse_date(row[10]),
+            app_id=n,
+            app_date=app_date,
             app_status=app_status,
-            iin=str(_vs_nn(row[8])).strip() if _vs_nn(row[8]) else None,
-            kato_reg=code_kato,
-            kato_dis=code_kato,
+            iin=str(iin).strip() if iin else None,
+            kato_reg=kato_region,
+            kato_dis=kato_raion,
             pay_type_id=pid,
             pay_type=str(service).strip(),
             cat_type_id=pid,
             cat_type=str(service).strip(),
-            period=str(_vs_nn(row[14])).strip() if _vs_nn(row[14]) else None,
-            source_name=str(_vs_nn(row[11])).strip() if _vs_nn(row[11]) else None,
+            period=str(period).strip() if period else None,
+            source_name=str(source).strip() if source else None,
             unit_id=None,
             max_pay_sum=summ,
-            decision=str(_vs_nn(row[16])).strip() if _vs_nn(row[16]) else None,
+            decision=str(decision).strip() if decision else None,
             dec_pay_sum=summ,
-            deliv_date=parse_date(row[10]) if is_paid else None,
+            deliv_date=app_date if is_paid else None,
             deliv_sum=deliv,
             mrp=None,
             sys_date=None,
-            sicid=parse_num(row[19], int),
-            gender_id=parse_gender(row[20]),
-            vozrast=parse_num(row[21], int),
-            sdu_tzhs=str(_vs_nn(row[18])).strip() if _vs_nn(row[18]) else None,
+            sicid=parse_num(col(row, 'SK_FAMILY_ID'), int),
+            gender_id=parse_gender(col(row, 'GENDER_ID')),
+            vozrast=parse_num(col(row, 'VOZRAST'), int),
+            sdu_tzhs=str(sdu).strip() if sdu else None,
             kato_region=kato_region,
             kato_raion=kato_raion,
-            kato_regname=_fmt_geo_name(row[1]),
-            kato_rainame=_fmt_geo_name(row[3]),
+            kato_regname=_fmt_geo_name(col(row, 'REGION_NAME', 'REG_RU')),
+            kato_rainame=_fmt_geo_name(col(row, 'RAYON_NAME', 'RAI_RU')),
         ))
         key = (str(kato_region), str(kato_raion), pid)
         prev = settings_seen.get(key)
@@ -442,9 +465,11 @@ def load_vseobuch():
         stale_deliv = conn.execute(text(
             "SELECT COUNT(*) FROM payments WHERE dataset='vseobuch' "
             "AND deliv_sum IS NOT NULL AND app_status <> 'Принято'")).scalar() or 0
-    # Уже загружено корректно (строки есть, source_name заполнен, deliv_sum по новому
-    # правилу) — ничего не делаем.
-    if total > 0 and with_src > 0 and stale_deliv == 0:
+    # Уже загружено корректно: строки есть, source_name заполнен, deliv_sum по новому
+    # правилу И число строк совпадает с файлом (иначе прислали новую выгрузку) —
+    # тогда ничего не делаем.
+    if (total > 0 and with_src > 0 and stale_deliv == 0
+            and total == len(rows_data)):
         return
 
     if not rows_data:
