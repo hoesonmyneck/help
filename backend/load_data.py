@@ -353,11 +353,18 @@ def parse_vseobuch_rows(ws):
         summ = _vs_money(row[13])
         kato_region = code_kato // 10_000_000
         kato_raion = code_kato // 100_000
+        # «Произведённая выплата» для всеобуча: заявление реально оплачено, только
+        # если статус = «Принято» И подписано руководителем (PODPISANO_RUKOVODITELEM = 1).
+        # Иначе deliv_sum пустой → в «фактически выплачено» такая строка не попадает.
+        app_status = str(_vs_nn(row[12])).strip() if _vs_nn(row[12]) else None
+        podpisano = str(_vs_nn(row[17])).strip() if _vs_nn(row[17]) else None
+        is_paid = (app_status == "Принято" and podpisano == "1")
+        deliv = summ if is_paid else None
         rows_data.append(Payment(
             dataset="vseobuch",
             app_id=counter,
             app_date=parse_date(row[10]),
-            app_status=str(_vs_nn(row[12])).strip() if _vs_nn(row[12]) else None,
+            app_status=app_status,
             iin=str(_vs_nn(row[8])).strip() if _vs_nn(row[8]) else None,
             kato_reg=code_kato,
             kato_dis=code_kato,
@@ -371,8 +378,8 @@ def parse_vseobuch_rows(ws):
             max_pay_sum=summ,
             decision=str(_vs_nn(row[16])).strip() if _vs_nn(row[16]) else None,
             dec_pay_sum=summ,
-            deliv_date=None,
-            deliv_sum=summ,
+            deliv_date=parse_date(row[10]) if is_paid else None,
+            deliv_sum=deliv,
             mrp=None,
             sys_date=None,
             sicid=parse_num(row[19], int),
@@ -429,8 +436,15 @@ def load_vseobuch():
         with_src = conn.execute(text(
             "SELECT COUNT(*) FROM payments WHERE dataset='vseobuch' "
             "AND source_name IS NOT NULL")).scalar() or 0
-    # Уже загружено корректно (есть строки и заполнен source_name) — ничего не делаем.
-    if total > 0 and with_src > 0:
+        # Старые строки: deliv_sum заполнялся для ЛЮБОГО статуса. По новому правилу
+        # «произведённая выплата» = только «Принято» + подписано. Если в БД есть
+        # оплаченные строки с иным статусом — данные устарели, перезаливаем.
+        stale_deliv = conn.execute(text(
+            "SELECT COUNT(*) FROM payments WHERE dataset='vseobuch' "
+            "AND deliv_sum IS NOT NULL AND app_status <> 'Принято'")).scalar() or 0
+    # Уже загружено корректно (строки есть, source_name заполнен, deliv_sum по новому
+    # правилу) — ничего не делаем.
+    if total > 0 and with_src > 0 and stale_deliv == 0:
         return
 
     if not rows_data:
