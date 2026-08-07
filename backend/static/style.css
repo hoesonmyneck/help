@@ -4612,8 +4612,8 @@ header{
 
 /* нижний ряд: карта (~70%) + правая колонка */
 .v2-mainrow{ display:flex; gap:16px; flex:1 1 auto; min-height:0; position:relative; z-index:1; }
-/* Карта занимает 60% ширины строки, правая колонка рейтинга — оставшиеся ~40%. */
-.v2-mainrow > .map-panel{ flex:0 0 60%; min-width:0; }
+/* Карта занимает 50% ширины строки, правая колонка рейтинга — оставшиеся ~50%. */
+.v2-mainrow > .map-panel{ flex:0 0 50%; min-width:0; }
 .v2-mainrow > .kpi-col-right{
   flex:1 1 auto; width:auto; max-width:none; min-width:0;
   position:relative; overflow:visible;
