@@ -4612,8 +4612,9 @@ header{
 
 /* нижний ряд: карта (~70%) + правая колонка */
 .v2-mainrow{ display:flex; gap:16px; flex:1 1 auto; min-height:0; position:relative; z-index:1; }
-/* Карта занимает 50% ширины строки, правая колонка рейтинга — оставшиеся ~50%. */
-.v2-mainrow > .map-panel{ flex:0 0 50%; min-width:0; }
+/* По умолчанию карта — 70% ширины строки, правая колонка рейтинга — ~30%.
+   При клике на регион (map-drill-active) карта сжимается до 50% — см. правило ниже. */
+.v2-mainrow > .map-panel{ flex:0 0 70%; min-width:0; transition:flex-basis .3s ease; }
 .v2-mainrow > .kpi-col-right{
   flex:1 1 auto; width:auto; max-width:none; min-width:0;
   position:relative; overflow:visible;
@@ -4625,6 +4626,8 @@ header{
 .main-layout.v2-layout.map-drill-active .kpi-col-right{
   max-width:none; opacity:1; margin-left:0; overflow:visible;
 }
+/* Регион выбран → карта 50%, правая колонка (гео-детализация) — оставшиеся ~50%. */
+.main-layout.v2-layout.map-drill-active .v2-mainrow > .map-panel{ flex:0 0 50%; }
 .main-layout.v2-layout.map-drill-active .kpi-col-left{ flex-grow:0; }
 .main-layout.v2-layout.map-drill-active .kpi-col-left > .kpi-card{ opacity:1; pointer-events:auto; }
 .v2-layout .kpi-col-right > .kpi-card{ transition:opacity .25s ease; }
