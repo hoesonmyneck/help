@@ -250,6 +250,19 @@
 .plan-name { font-size: 0.9rem; font-weight: 700; color: var(--tx-main); line-height: 1.3; }
 .plan-desc { font-size: 0.78rem; color: var(--tx-dim); margin-top: 4px; line-height: 1.35; }
 
+/* Выполненный пункт дорожной карты (зелёный, галочка вместо номера) */
+.plan-item.done .plan-node {
+  color: #fff; background: #34a853; border: 2px solid #34a853;
+}
+.plan-item.done .plan-content {
+  border-style: solid; border-color: color-mix(in srgb, #34a853 45%, transparent);
+  background: color-mix(in srgb, #34a853 8%, transparent);
+}
+.plan-item.done .plan-date { color: #2f9e4a; }
+.plan-item.done .plan-status {
+  color: #fff; background: #34a853; border-color: #34a853;
+}
+
 /* мини-визуализации «будущих» дашбордов */
 .plan-viz { margin-top: 12px; height: 44px; opacity: 0.9; }
 .plan-viz-bars { display: flex; align-items: flex-end; gap: 6px; height: 44px; }
