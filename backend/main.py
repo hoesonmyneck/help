@@ -12,6 +12,7 @@ import load_data
 from load_data import (load_excel, load_budget, load_region_budget, load_reference_data,
                        load_vseobuch,
                        replace_payments_from_file,
+                       replace_vseobuch_from_file,
                        region_help_ids, raion_help_ids,
                        all_region_katos, pay_type_names, REGION_NAMES,
                        raion_names_ref, raion_reg_ref, settings_rows, settings_pay_names)
@@ -402,6 +403,32 @@ async def api_admin_upload_data(file: UploadFile = File(...), admin: User = Depe
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка загрузки: {e}")
+    return {"ok": True, "rows": count}
+
+
+@app.post("/api/admin/upload-vseobuch")
+async def api_admin_upload_vseobuch(file: UploadFile = File(...), admin: User = Depends(auth.require_admin)):
+    """Загрузить новый Excel всеобуча: очистить раздел 'vseobuch' и залить заново
+    (только админ). Файл также сохраняется на диск как data/vseobuch.xlsx, чтобы
+    каталог и строки остались согласованными после перезапуска бэкенда."""
+    name = (file.filename or "").lower()
+    if not name.endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="Нужен файл .xlsx")
+    content = await file.read()
+    try:
+        count = replace_vseobuch_from_file(io.BytesIO(content))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка загрузки: {e}")
+    # Сохранить файл на диск (data/vseobuch.xlsx) — источник каталога при рестарте.
+    try:
+        data_path = os.path.join(os.path.dirname(__file__), "data", "vseobuch.xlsx")
+        os.makedirs(os.path.dirname(data_path), exist_ok=True)
+        with open(data_path, "wb") as f:
+            f.write(content)
+    except Exception as e:
+        print(f"upload-vseobuch: не удалось сохранить файл на диск: {e}")
     return {"ok": True, "rows": count}
 
 

@@ -544,13 +544,22 @@ function setupAdminPanel() {
           </div>
           <div class="admin-pane admin-pane-active" id="admin-pane-main">
           <div class="admin-upload">
-            <div class="admin-upload-title">Обновление данных</div>
+            <div class="admin-upload-title">Обновление данных МИО</div>
             <div class="admin-upload-hint"></div>
             <div class="admin-upload-row">
               <input type="file" id="admin-data-file" accept=".xlsx,.xlsm">
               <button type="button" id="admin-data-upload-btn" onclick="adminUploadData()">Загрузить и обновить</button>
             </div>
             <div class="admin-upload-status" id="admin-upload-status"></div>
+          </div>
+          <div class="admin-upload">
+            <div class="admin-upload-title">Обновление данных Всеобуч</div>
+            <div class="admin-upload-hint"></div>
+            <div class="admin-upload-row">
+              <input type="file" id="admin-vseobuch-file" accept=".xlsx,.xlsm">
+              <button type="button" id="admin-vseobuch-upload-btn" onclick="adminUploadVseobuch()">Загрузить и обновить</button>
+            </div>
+            <div class="admin-upload-status" id="admin-vseobuch-status"></div>
           </div>
           <form id="admin-create-form" class="admin-form">
             <div class="admin-form-row">
@@ -720,6 +729,34 @@ async function adminUploadData() {
     const fd = new FormData();
     fd.append('file', file);
     const r = await fetch('/api/admin/upload-data', { method: 'POST', credentials: 'include', body: fd });
+    const data = await r.json();
+    if (!r.ok) { statusEl.className = 'admin-upload-status err'; statusEl.textContent = data.detail || 'Ошибка загрузки'; return; }
+    statusEl.className = 'admin-upload-status ok';
+    statusEl.textContent = `Готово: загружено ${formatInt(data.rows)} строк. Обновляю страницу…`;
+    setTimeout(() => location.reload(), 1200);
+  } catch {
+    statusEl.className = 'admin-upload-status err';
+    statusEl.textContent = 'Сеть недоступна';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function adminUploadVseobuch() {
+  const input = document.getElementById('admin-vseobuch-file');
+  const statusEl = document.getElementById('admin-vseobuch-status');
+  const btn = document.getElementById('admin-vseobuch-upload-btn');
+  const file = input.files && input.files[0];
+  if (!file) { statusEl.className = 'admin-upload-status err'; statusEl.textContent = 'Выберите файл .xlsx'; return; }
+  if (!confirm(`Заменить все данные всеобуча данными из «${file.name}»?`)) return;
+
+  btn.disabled = true;
+  statusEl.className = 'admin-upload-status';
+  statusEl.textContent = 'Загрузка и обработка файла…';
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await fetch('/api/admin/upload-vseobuch', { method: 'POST', credentials: 'include', body: fd });
     const data = await r.json();
     if (!r.ok) { statusEl.className = 'admin-upload-status err'; statusEl.textContent = data.detail || 'Ошибка загрузки'; return; }
     statusEl.className = 'admin-upload-status ok';

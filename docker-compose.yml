@@ -32,6 +32,9 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://interaction.enbek.kz:8443}
     volumes:
       - ./backend/static:/app/static
+      # data/ монтируется, чтобы загруженные через админку эксельки (МИО/всеобуч)
+      # переживали пересборку образа и оставались согласованными с БД.
+      - ./backend/data:/app/data
 
   caddy:
     image: caddy:2-alpine

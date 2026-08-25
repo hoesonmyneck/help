@@ -298,6 +298,28 @@ def replace_payments_from_file(file_obj, dataset: str = "mio") -> int:
     return len(rows_data)
 
 
+def replace_vseobuch_from_file(file_obj) -> int:
+    """Загрузить всеобуч из переданного xlsx (файл/поток): заново собрать каталог
+    (в памяти) и заменить строки раздела 'vseobuch' в БД. Возвращает число строк.
+    Раздел МИО не затрагивается. Используется админ-загрузкой всеобуча."""
+    ensure_dataset_column()
+    wb = load_workbook(file_obj, read_only=True, data_only=True)
+    ws = wb.active
+    rows_data = parse_vseobuch_rows(ws)   # пересобирает каталог всеобуча в памяти
+    wb.close()
+    if not rows_data:
+        raise ValueError(
+            "В файле не найдено ни одной строки данных всеобуча "
+            "(нет колонок SERVICE_NAME / KATO_REG?)"
+        )
+    with Session(engine) as session:
+        session.execute(text("DELETE FROM payments WHERE dataset='vseobuch'"))
+        session.add_all(rows_data)
+        session.commit()
+    print(f"Admin upload: replaced 'vseobuch' with {len(rows_data)} rows")
+    return len(rows_data)
+
+
 def _vs_nn(v):
     """Значение или None для пустых/`[NULL]`."""
     if v is None:

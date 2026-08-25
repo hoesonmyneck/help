@@ -3921,13 +3921,16 @@ body { font-family: 'Google Sans', 'Roboto', 'Segoe UI', system-ui, Arial, sans-
 .admin-upload-hint { font-size: 0.78rem; color: var(--tx-dim); margin-bottom: 10px; }
 .admin-upload-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .admin-upload-row input[type=file] { color: var(--tx-main); font-size: 0.82rem; flex: 1; min-width: 0; }
-#admin-data-upload-btn {
+#admin-data-upload-btn,
+#admin-vseobuch-upload-btn {
   background: #1a73e8; color: #fff; border: none; border-radius: 8px;
   padding: 9px 16px; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap;
   font-family: inherit; transition: background .15s;
 }
-#admin-data-upload-btn:hover { background: #1967d2; }
-#admin-data-upload-btn:disabled { opacity: 0.6; cursor: default; }
+#admin-data-upload-btn:hover,
+#admin-vseobuch-upload-btn:hover { background: #1967d2; }
+#admin-data-upload-btn:disabled,
+#admin-vseobuch-upload-btn:disabled { opacity: 0.6; cursor: default; }
 .admin-upload-status { font-size: 0.8rem; margin-top: 8px; min-height: 1em; color: var(--tx-dim); }
 .admin-upload-status.ok { color: #2ecc71; }
 .admin-upload-status.err { color: #e74c3c; }
