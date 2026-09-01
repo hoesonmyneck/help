@@ -561,7 +561,7 @@ def build_filter(q, region_id, raion_id, sdu_filter=None, gender_filter=None, ag
 
 
 @app.get("/api/kpi")
-def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None), pay_type_id: int = Query(None)):
+def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: str = Query(None), gender_filter: str = Query(None), age_group: str = Query(None), pay_type_id: int = Query(None), demo_metric: str = Query("dec")):
     with Session(engine) as db:
         # base — со ВСЕМИ фильтрами (для верхних KPI-чисел).
         # Графики-распределения (ЦКС / возраст / пол) строятся как кросс-фильтр:
@@ -577,6 +577,12 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
         base_no_sdu    = _mk(None,       gender_filter, age_group)   # для графика ЦКС
         base_no_age    = _mk(sdu_filter, gender_filter, None)        # для графика возрастов
         base_no_gender = _mk(sdu_filter, None,          age_group)   # для гендер-бара
+
+        # Срез для графиков ЦКС/возраст: «dec» — по всем принятым заявлениям (как раньше),
+        # «deliv» — только по реально произведённым выплатам (DELIV_SUM > 0).
+        # Гендер-бар этот срез не затрагивает (по требованию — «кроме пола»).
+        def _metric(q):
+            return q.filter(Payment.deliv_sum > 0) if demo_metric == "deliv" else q
 
         total_max = base.with_entities(func.sum(Payment.max_pay_sum)).scalar() or 0
         total_dec = base.with_entities(func.sum(Payment.dec_pay_sum)).scalar() or 0
@@ -612,7 +618,7 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
         # ЦКС (уровень благосостояния) — с разбивкой по полу (gender_id 1=муж, 2=жен).
         # Без фильтра по ЦКС: показываем все уровни, чтобы можно было выбрать несколько.
         sdu_rows = (
-            base_no_sdu.with_entities(func.upper(Payment.sdu_tzhs), Payment.gender_id, func.count(Payment.id))
+            _metric(base_no_sdu).with_entities(func.upper(Payment.sdu_tzhs), Payment.gender_id, func.count(Payment.id))
             .group_by(func.upper(Payment.sdu_tzhs), Payment.gender_id)
             .all()
         )
@@ -634,7 +640,7 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
         # Возрастные группы — тоже с разбивкой по полу.
         # Без фильтра по возрасту: показываем все группы (для мультивыбора).
         age_rows = (
-            base_no_age.with_entities(age_group, Payment.gender_id, func.count(Payment.id))
+            _metric(base_no_age).with_entities(age_group, Payment.gender_id, func.count(Payment.id))
             .group_by(age_group, Payment.gender_id)
             .all()
         )

@@ -4415,6 +4415,15 @@ header { flex-shrink: 0; }
 .kpi-card-expandable { cursor: pointer; position: relative; }
 .kpi-card-expandable:hover { filter: brightness(1.08); }
 
+/* Развёрнутая KPI-карточка со срезом: два графика (ЦКС + возрастные группы) */
+.kpi-demo-charts { display: flex; flex-direction: column; gap: 16px; height: 100%; padding-top: 4px; }
+.kpi-demo-box { display: flex; flex-direction: column; gap: 6px; }
+.kpi-demo-box:not(.kpi-demo-grow) { flex: 0 0 auto; }                /* возрастные группы — по содержимому */
+.kpi-demo-box.kpi-demo-grow { flex: 1 1 auto; min-height: 0; }       /* ЦКС занимает остаток высоты */
+.kpi-demo-title { font-size: 0.78rem; font-weight: 700; color: var(--tx-main); text-transform: uppercase; letter-spacing: 0.3px; }
+.kpi-demo-sdu { position: relative; flex: 1 1 auto; min-height: 0; }
+.kpi-demo-loading { padding: 20px 0; color: var(--tx-dim); font-size: 0.85rem; }
+
 .kpi-card-expandable.expanded {
   position: absolute;
   inset: 0;

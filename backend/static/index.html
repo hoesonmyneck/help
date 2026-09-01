@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ЕЦП "Анализ по дополнительным видам помощи МИО"</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link id="main-style" rel="stylesheet" href="/style.css?v=106">
+  <link id="main-style" rel="stylesheet" href="/style.css?v=110">
   <script>
   /* выбираем стиль до отрисовки: v3 — зелёный style.css, v1/v2 — классический style-classic.css */
   (function(){
@@ -14,7 +14,7 @@
       document.documentElement.setAttribute('data-variant', v);
       if (v !== 'v3'){
         var l = document.getElementById('main-style');
-        if (l) l.setAttribute('href', '/style-classic.css?v=5');
+        if (l) l.setAttribute('href', '/style-classic.css?v=9');
         document.documentElement.setAttribute('data-theme', v === 'v2' ? 'light' : '');
       }
       /* раздел данных: 'mio' — статистика МИО (по умолчанию), 'vseobuch' — данные всеобуча.
@@ -106,7 +106,7 @@
       <div class="kpi-expand-corners"><span class="kpi-cn kpi-cn-tl"></span><span class="kpi-cn kpi-cn-tr"></span><span class="kpi-cn kpi-cn-bl"></span><span class="kpi-cn kpi-cn-br"></span></div>
       <div class="kpi-help-list" id="kpi-budget-list"></div>
     </div>
-    <div class="kpi-card kpi-multi">
+    <div class="kpi-card kpi-multi kpi-card-expandable" id="kpi-card-accepted" onclick="toggleAcceptedDemo()" title="Нажмите: графики ЦКС и возрастных групп по принятым заявлениям">
       <div class="label">ПРИНЯТО ЗАЯВЛЕНИЙ</div>
       <div class="value accent" id="kpi-app-count">—</div>
       <div class="kpi-sum-row">
@@ -114,13 +114,17 @@
         <span class="value accent kpi-sum-val"><span id="kpi-dec">—</span> ₸</span>
       </div>
       <div class="kpi-sub" id="kpi-dec-sub"><b id="kpi-dec-pct">—</b> от бюджета</div>
+      <div class="kpi-expand-corners"><span class="kpi-cn kpi-cn-tl"></span><span class="kpi-cn kpi-cn-tr"></span><span class="kpi-cn kpi-cn-bl"></span><span class="kpi-cn kpi-cn-br"></span></div>
+      <div class="kpi-help-list" id="kpi-accd-panel" onclick="event.stopPropagation()"></div>
     </div>
-    <div class="kpi-card kpi-multi">
+    <div class="kpi-card kpi-multi kpi-card-expandable" id="kpi-card-deliv" onclick="toggleDelivDemo()" title="Нажмите: графики ЦКС и возрастных групп по произведённым выплатам">
       <div class="label">ПРОИЗВЕДЁННЫЕ ВЫПЛАТЫ</div>
       <div class="value kpi-deliv" id="kpi-deliv">—</div>
       <div class="label">ВЫПЛАЧЕННАЯ СУММА</div>
       <div class="kpi-sub"><b id="kpi-deliv-pct">—</b> от суммы заявок</div>
       <div class="kpi-sub" style="margin-top:6px">по <b id="kpi-recipients">—</b> получателям</div>
+      <div class="kpi-expand-corners"><span class="kpi-cn kpi-cn-tl"></span><span class="kpi-cn kpi-cn-tr"></span><span class="kpi-cn kpi-cn-bl"></span><span class="kpi-cn kpi-cn-br"></span></div>
+      <div class="kpi-help-list" id="kpi-dlvd-panel" onclick="event.stopPropagation()"></div>
     </div>
   </div>
 
@@ -562,8 +566,8 @@
 </div>
 
 <script src="/i18n-raions.js?v=1"></script>
-<script src="/i18n.js?v=10"></script>
-<script src="/app.js?v=103"></script>
+<script src="/i18n.js?v=11"></script>
+<script src="/app.js?v=106"></script>
 <script src="/kpifx.js?v=11"></script>
 
 <!-- Three.js (для 3D-пирога видов помощи) -->

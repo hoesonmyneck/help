@@ -2,6 +2,7 @@
 let map, regionsLayer, raionsLayer, labelsLayer;
 let sduChart = null;
 let tileLayer = null;
+let tileLabels = null;   // Esri Reference — границы стран и подписи (оверлей)
 let regionGeoJSON = null, raionGeoJSON = null;
 let regionCentroids = {}, raionCentroids = {};
 let regionStats = {}, raionStats = {};
@@ -88,6 +89,70 @@ function toggleHelpTypesList(ev) {
       fetch('/api/help-presence').then(r => r.json()).then(d => populate(d.columns || []));
     }
   });
+}
+
+// Клик по KPI «Принято заявлений» / «Произведённые выплаты» — раскрывает карточку
+// (как «Всего видов помощи») и показывает внутри графики ЦКС и возрастных групп,
+// построенные по нужному срезу: 'dec' — принятые заявления, 'deliv' — произведённые выплаты.
+function toggleAcceptedDemo(ev) {
+  if (ev) ev.stopPropagation();
+  _kpiCardToggle('kpi-card-accepted', () => renderDemoPanel('dec', 'accd'));
+}
+function toggleDelivDemo(ev) {
+  if (ev) ev.stopPropagation();
+  _kpiCardToggle('kpi-card-deliv', () => renderDemoPanel('deliv', 'dlvd'));
+}
+
+async function renderDemoPanel(metric, pfx) {
+  const panel = document.getElementById(`kpi-${pfx}-panel`);
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="kpi-demo-charts">
+      <div class="kpi-demo-box kpi-demo-grow">
+        <div class="kpi-demo-title">Уровень благосостояния по ЦКС</div>
+        <div class="kpi-demo-sdu"><canvas id="${pfx}-sdu-chart"></canvas></div>
+      </div>
+      <div class="kpi-demo-box">
+        <div class="kpi-demo-title">Возрастные группы</div>
+        <div id="${pfx}-ga-age" class="ga-chart"><div class="kpi-demo-loading">Загрузка…</div></div>
+      </div>
+    </div>`;
+  const p = buildFilterParams();          // текущий гео/вид-помощи контекст
+  p.set('demo_metric', metric);           // срез только для этого окна
+  try {
+    const kpi = await fetch(`/api/kpi?${p}`).then(r => r.json());
+    // окно могли уже закрыть, пока грузилось — тогда canvas исчез, render сам выйдет
+    renderGpSduChart(kpi.sdu_gender || {}, pfx, { readonly: true });
+    _renderDemoAgeRows(kpi.age || {}, kpi.age_gender || {}, `${pfx}-ga-age`);
+  } catch {
+    panel.innerHTML = '<div class="kpi-demo-loading">Ошибка загрузки</div>';
+  }
+}
+
+// Возрастные группы для окна среза — только полосы возрастов (без блока «Пол»),
+// разбивка по полу внутри полосы сохранена. Read-only (без фильтрации по клику).
+function _renderDemoAgeRows(age, ageG, elId) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const ageTotal = GA_AGE_META.reduce((s, m) => s + (age[m.key] || 0), 0);
+  el.innerHTML = GA_AGE_META.map(m => {
+    const cnt = age[m.key] || 0;
+    const pct = ageTotal > 0 ? Math.round(cnt / ageTotal * 100) : 0;
+    const gm = ageG[m.key]?.m || 0, gf = ageG[m.key]?.f || 0;
+    const gTot = gm + gf;
+    const mPct = gTot ? Math.round(gm / gTot * 100) : 0;
+    const fPct = gTot ? 100 - mPct : 0;
+    const mW = gTot ? (gm / gTot * 100) : 0;
+    const fW = gTot ? (gf / gTot * 100) : 0;
+    const tip = `${t(m.label)}: ${formatInt(cnt)}  •  ${t('Мужчины')}: ${formatInt(gm)} (${mPct}%)  •  ${t('Женщины')}: ${formatInt(gf)} (${fPct}%)`;
+    return `<div class="ga-age-row" title="${tip}">
+        <span class="ga-age-lbl">${m.label}</span>
+        <div class="ga-age-bar-wrap"><div class="ga-age-split" style="width:${pct}%">
+          <div class="ga-seg-m" style="width:${mW}%"></div><div class="ga-seg-f" style="width:${fW}%"></div>
+        </div></div>
+        <span class="ga-age-pct">${pct}%</span>
+      </div>`;
+  }).join('');
 }
 
 // FLIP: карточка «вылетает» из своей ячейки в центр и раскрывается (и обратно).
@@ -989,11 +1054,20 @@ async function init() {
   }))().addTo(map);
 
   const isLight = document.documentElement.dataset.theme === 'light';
+  // Подложка: Esri Light/Dark Gray Canvas — бесплатные тайлы без API-ключа.
+  // (CARTO с 2026 требует ключ и отдаёт «API KEY REQUIRED» на анонимные запросы.)
   tileLayer = L.tileLayer(
     isLight
-      ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    { attribution: '© OpenStreetMap © CARTO', maxZoom: 18 }
+      ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+      : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    { attribution: 'Tiles © Esri', maxZoom: 18, maxNativeZoom: 16 }
+  ).addTo(map);
+  // Оверлей Reference — границы стран и названия (прозрачный слой поверх подложки).
+  tileLabels = L.tileLayer(
+    isLight
+      ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}'
+      : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+    { maxZoom: 18, maxNativeZoom: 16, pane: 'tilePane' }
   ).addTo(map);
   requestAnimationFrame(() => requestAnimationFrame(() => map.invalidateSize()));
 
@@ -1435,8 +1509,15 @@ function toggleTheme(isLight) {
   if (tileLayer) {
     tileLayer.setUrl(
       isLight
-        ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+        ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+        : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+    );
+  }
+  if (tileLabels) {
+    tileLabels.setUrl(
+      isLight
+        ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}'
+        : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}'
     );
   }
   // Charts bake tick/label colours at render time → re-render for the new theme
@@ -2621,7 +2702,8 @@ function refreshGpSduChartsTheme() {
 
 // ЦКС (уровень благосостояния) — стек-бар с разбивкой по полу (муж/жен).
 // sduG: { A:{m,f}, B:{m,f}, ... }
-function renderGpSduChart(sduG, pfx = 'gp') {
+function renderGpSduChart(sduG, pfx = 'gp', opts = {}) {
+  const readonly = !!opts.readonly;   // в развёрнутой KPI-карточке график только для просмотра
   const cv = document.getElementById(`${pfx}-sdu-chart`);
   if (!cv || !window.Chart) return;
   _lastSduByPfx[pfx] = sduG;
@@ -2649,7 +2731,7 @@ function renderGpSduChart(sduG, pfx = 'gp') {
     },
   };
   // подсветка мультивыбора: невыбранные приглушаем, выбранные обводим
-  const sel = currentSduSet;
+  const sel = readonly ? [] : currentSduSet;
   const dimM = keys.map(k => (sel.length && !sel.includes(k)) ? '#5b8af855' : '#5b8af8');
   const dimF = keys.map(k => (sel.length && !sel.includes(k)) ? '#f875c355' : '#f875c3');
   const selBorder = keys.map(k => sel.includes(k) ? (isLight ? '#202124' : '#fff') : 'transparent');
@@ -2667,10 +2749,10 @@ function renderGpSduChart(sduG, pfx = 'gp') {
     options: {
       responsive: true, maintainAspectRatio: false, layout: { padding: { top: 16 } },
       interaction: { mode: 'index', intersect: false },
-      onClick(e, elements) {
+      onClick: readonly ? undefined : function (e, elements) {
         if (elements.length) toggleSduFilter(keys[elements[0].index]);
       },
-      onHover(_e, elements, chart) {
+      onHover: readonly ? undefined : function (_e, elements, chart) {
         chart.canvas.style.cursor = elements.length ? 'pointer' : 'default';
       },
       plugins: {
