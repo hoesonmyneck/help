@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Numeric, Date, DateTime, Boolean
+from sqlalchemy import create_engine, Column, Integer, BigInteger, String, Numeric, Date, DateTime, Boolean, Text
 from sqlalchemy.orm import DeclarativeBase
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://cbdi:cbdi123@localhost:5432/cbdi")
@@ -27,16 +27,16 @@ class Payment(Base):
     kato_reg = Column(BigInteger)
     kato_dis = Column(BigInteger)
     pay_type_id = Column(Integer)
-    pay_type = Column(String(500))
+    pay_type = Column(Text)
     cat_type_id = Column(Integer)
-    cat_type = Column(String(500))
+    cat_type = Column(Text)
     period = Column(String(100))
     # Источник заявления (SOURCE_NAME) — используется только разделом «Всеобуч»
     # (Е-Собес / ПЭП). Для строк МИО остаётся пустым.
     source_name = Column(String(100))
     unit_id = Column(Integer)
     max_pay_sum = Column(Numeric(18, 2))
-    decision = Column(String(500))
+    decision = Column(Text)
     dec_pay_sum = Column(Numeric(18, 2))
     deliv_date = Column(Date)
     deliv_sum = Column(Numeric(18, 2))

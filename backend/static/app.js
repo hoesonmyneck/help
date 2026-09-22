@@ -1418,7 +1418,7 @@ async function selectRaion(raionId) {
    Переключение перезагружает страницу — так каждый вариант инициализируется чисто
    (нужный CSS подключается head-скриптом, раскладка и карта строятся заново). */
 function setVariant(v) {
-  if (!['v1', 'v2', 'v3'].includes(v)) v = 'v3';
+  if (!['v1', 'v2', 'v3', 'v4'].includes(v)) v = 'v3';   // v4 — HUD (поверх зелёной)
   localStorage.setItem('siteVariant', v);
   location.reload();
 }
@@ -4211,9 +4211,11 @@ function initPayTooltip() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Вариант оформления (стиль уже подключён head-скриптом, без мигания)
-  const variant = localStorage.getItem('siteVariant') || 'v3';
+  const sv = localStorage.getItem('siteVariant') || 'v4';   // по умолчанию — HUD
+  // v4 (HUD) построен поверх зелёной — раскладка/логика как в v3, поверх ложится data-skin=hud
+  const variant = (sv === 'v4') ? 'v3' : sv;
   document.documentElement.dataset.variant = variant;
-  _markVariantButtons(variant);
+  _markVariantButtons(sv);
   if (variant === 'v3') {
     document.documentElement.dataset.theme = '';           // зелёная тёмная
   } else {

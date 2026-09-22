@@ -277,6 +277,10 @@ def ensure_dataset_column():
             "UPDATE payments SET dataset='mio' WHERE dataset IS NULL"))
         conn.execute(text(
             "ALTER TABLE payments ADD COLUMN IF NOT EXISTS source_name VARCHAR(100)"))
+        # Некоторые выгрузки содержат длинные названия/решения (>500 симв.) —
+        # расширяем текстовые колонки до TEXT, чтобы вставка не падала (идемпотентно).
+        for col in ("pay_type", "cat_type", "decision"):
+            conn.execute(text(f"ALTER TABLE payments ALTER COLUMN {col} TYPE TEXT"))
 
 
 def replace_payments_from_file(file_obj, dataset: str = "mio") -> int:
