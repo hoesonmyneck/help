@@ -958,7 +958,7 @@ let _mapNeedsFit = false;   // отложенный fitBounds, если карт
 
 // Единый вид «вся страна»: инициализация, возврат из региона (goBack),
 // кнопка «дом» и возврат из 3D в 2D. Дробный зум работает за счёт zoomSnap: 0.5.
-const KZ_VIEW = { center: [48, 67], zoom: 4.5 };
+const KZ_VIEW = { center: [48, 67], zoom: 4.25 };
 
 // Целевой зум страны С УЧЁТОМ полноэкранного буста (+1). Любой жёсткий сброс вида
 // (goBack, кнопка «дом», возврат из 3D) обязан его учитывать, иначе флаг
@@ -1030,8 +1030,8 @@ let tableFilters = {};
 
 async function init() {
   setupMapTabs();   // перенести Динамику / 3D-пирог / Данные в блок карты
-  // zoomSnap: 0.5 — иначе Leaflet округляет зум до целых и дробный 4.5 не удержится
-  map = L.map('map', { zoomControl: true, attributionControl: false, zoomSnap: 0.5 })
+  // zoomSnap: 0.25 — иначе Leaflet округляет зум и дробный 4.25 не удержится
+  map = L.map('map', { zoomControl: true, attributionControl: false, zoomSnap: 0.25 })
     .setView(KZ_VIEW.center, KZ_VIEW.zoom);
 
   // Home button — resets view smoothly via flyTo
