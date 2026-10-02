@@ -4817,3 +4817,6 @@ thead th{ background:linear-gradient(180deg,#2c3556 0%,#242c4a 100%); border-bot
   [data-variant="v3"] .header-menu > *,
   [data-variant="v3"] .burger-btn{ transition:none; }
 }
+
+/* В разделе МП (всеобуч) скрываем легенду карты */
+html[data-dataset="vseobuch"] .map-legend { display: none !important; }

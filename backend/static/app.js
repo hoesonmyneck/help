@@ -1489,8 +1489,15 @@ function _buildSectionSwitch(menu) {
     `<button type="button" data-ds="mio" class="${cur === 'mio' ? 'on' : ''}" ` +
       `onclick="setDataSource('mio')" title="Статистика МИО">МИО</button>` +
     `<button type="button" data-ds="vseobuch" class="${cur === 'vseobuch' ? 'on' : ''}" ` +
-      `onclick="setDataSource('vseobuch')" title="Данные всеобуча">Всеобуч</button>`;
+      `onclick="setDataSource('vseobuch')" title="Меры поддержки (пилот)">МП</button>`;
   menu.appendChild(wrap);
+}
+
+// В разделе МП (всеобуч) переименовываем KPI «Всего видов помощи»
+function _applyDatasetLabels() {
+  if (currentDataSource() !== 'vseobuch') return;
+  const lbl = document.querySelector('#kpi-card-help-types > .label');
+  if (lbl) lbl.textContent = 'Всего видов помощи в пилотном проекте МП';
 }
 // закрытие бургер-меню по клику вне
 document.addEventListener('click', (e) => {
@@ -4230,6 +4237,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   _buildBurgerMenu();   // бургер-меню во всех вариантах (тёмная/светлая/зелёная)
 
   initPayTooltip();
+  _applyDatasetLabels();   // переименование KPI в разделе МП (всеобуч)
   init();
 
 
