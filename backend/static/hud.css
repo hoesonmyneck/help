@@ -1321,9 +1321,13 @@ html[data-skin="hud"] .v2-layout .kpi-col-left { transition: none !important; }
    90%+ масштабе более длинное значение переносилось по ширине → высота карточки скакала */
 html[data-skin="hud"] .kpi-col-left .kpi-card .value,
 html[data-skin="hud"] .kpi-col-left .kpi-card .kpi-sum-val,
-html[data-skin="hud"] .kpi-col-left .kpi-card .label,
 html[data-skin="hud"] .kpi-col-left .kpi-card .kpi-sub {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* заголовок карточки переносим в 2 строки, если длинный текст не влезает в одну */
+html[data-skin="hud"] .kpi-col-left .kpi-card > .label {
+  white-space: normal;
+  line-height: 1.2;
 }
 /* «на сумму …»: в базе flex-wrap:wrap → при росте числа значение то влезает в строку,
    то переносится, из-за чего строки карточки прыгают. Всегда стекаем в столбец (стабильно) */
