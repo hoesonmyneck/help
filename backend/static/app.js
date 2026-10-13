@@ -3671,12 +3671,15 @@ function formatNum(n) {
   return new Intl.NumberFormat('ru-KZ', { maximumFractionDigits: 2 }).format(n);
 }
 
+// округление ВВЕРХ до 1 знака после запятой (2,44 млрд → 2,5 млрд).
+// Эпсилон 1e-9 гасит ошибку float, чтобы ровно 2,4 не превращалось в 2,5.
+function _ceil1(x) { return Math.ceil(x * 10 - 1e-9) / 10; }
 function formatCompact(n) {
   if (!n && n !== 0) return '—';
   const abs = Math.abs(n);
-  if (abs >= 1e12) return new Intl.NumberFormat('ru-KZ', { maximumFractionDigits: 1 }).format(n / 1e12) + ' трлн';
-  if (abs >= 1e9)  return new Intl.NumberFormat('ru-KZ', { maximumFractionDigits: 1 }).format(n / 1e9)  + ' млрд';
-  if (abs >= 1e6)  return new Intl.NumberFormat('ru-KZ', { maximumFractionDigits: 1 }).format(n / 1e6)  + ' млн';
+  if (abs >= 1e12) return new Intl.NumberFormat('ru-KZ', { maximumFractionDigits: 1 }).format(_ceil1(n / 1e12)) + ' трлн';
+  if (abs >= 1e9)  return new Intl.NumberFormat('ru-KZ', { maximumFractionDigits: 1 }).format(_ceil1(n / 1e9))  + ' млрд';
+  if (abs >= 1e6)  return new Intl.NumberFormat('ru-KZ', { maximumFractionDigits: 1 }).format(_ceil1(n / 1e6))  + ' млн';
   return formatInt(n);
 }
 
