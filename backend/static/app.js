@@ -1741,7 +1741,7 @@ function _populateTopMgpList() {
     return `<div class="kpi-help-item">
       <span class="kpi-help-num">${i + 1}</span>
       <span class="kpi-help-name" title="${name}">${name}</span>
-      <span class="kpi-help-val">${formatCompact(r.total_dec || 0)} ₸</span>
+      <span class="kpi-help-val" title="${formatNum(r.total_dec || 0)} ₸">${formatCompact(r.total_dec || 0)} ₸</span>
     </div>`;
   }).join('');
 }
@@ -1765,7 +1765,7 @@ function renderTopMgp(rows) {
       return `<div class="kpi-top-mgp-item">
         <span class="kpi-top-mgp-num">${i + 1}</span>
         <span class="kpi-top-mgp-name" title="${name}">${name}</span>
-        <span class="kpi-top-mgp-val">${val}</span>
+        <span class="kpi-top-mgp-val" title="${formatNum(r.total_dec || 0)} ₸">${val}</span>
       </div>`;
     }).join('');
 }
@@ -2576,9 +2576,9 @@ function _buildGeoTotalRow(stats, kpi, label = 'Республика Казах�
   const k = kpi || {};
   const recip = k.app_count != null ? formatInt(k.app_count) : '—';   // число заявлений (совпадает с KPI)
   const fact = k.fact_recipients != null ? formatInt(k.fact_recipients) : '—';
-  const dec = k.total_dec_pay_sum != null ? formatCompact(k.total_dec_pay_sum) + ' ₸' : '—';
-  const deliv = k.total_deliv_sum != null ? formatCompact(k.total_deliv_sum) + ' ₸' : '—';
-  const budget = stats && stats._budget > 0 ? formatCompact(stats._budget) + ' ₸' : '—';
+  const dec = k.total_dec_pay_sum != null ? `<span title="${formatNum(k.total_dec_pay_sum)} ₸">${formatCompact(k.total_dec_pay_sum)} ₸</span>` : '—';
+  const deliv = k.total_deliv_sum != null ? `<span title="${formatNum(k.total_deliv_sum)} ₸">${formatCompact(k.total_deliv_sum)} ₸</span>` : '—';
+  const budget = stats && stats._budget > 0 ? `<span title="${formatNum(stats._budget)} ₸">${formatCompact(stats._budget)} ₸</span>` : '—';
   const numHtml = numbered ? `<span class="gp-rownum"></span>` : '';
   const noBudget = _pfxNoBudget(pfx);
   return `<div class="gp-row gp-budget-summary gp-total-kz">
@@ -2608,8 +2608,8 @@ function _buildGauge(deliv, dec) {
         <text x="100" y="88" text-anchor="middle" class="gp-gauge-pct">${pctTxt}</text>
       </svg>
       <div class="gp-gauge-nums">
-        <div><span class="gp-gauge-lbl">Факт выплачено</span><b>${formatCompact(deliv)} ₸</b></div>
-        <div><span class="gp-gauge-lbl">Сумма принятых заявлений</span><b>${formatCompact(dec)} ₸</b></div>
+        <div><span class="gp-gauge-lbl">Факт выплачено</span><b title="${formatNum(deliv)} ₸">${formatCompact(deliv)} ₸</b></div>
+        <div><span class="gp-gauge-lbl">Сумма принятых заявлений</span><b title="${formatNum(dec)} ₸">${formatCompact(dec)} ₸</b></div>
       </div>
     </div>`;
 }
@@ -3073,9 +3073,9 @@ async function renderMapSummary() {
 function _buildRegionRow(r, clickable, isRaionRow, num) {
   const cnt    = formatInt(r.count || 0);
   const fact   = formatInt(r.fact_recipients || 0);
-  const dec    = r.total_dec > 0 ? formatCompact(r.total_dec) + ' ₸' : '0';
-  const deliv  = r.total_deliv > 0 ? formatCompact(r.total_deliv) + ' ₸' : '0';
-  const budget = r.budget > 0 ? formatCompact(r.budget) + ' ₸' : '—';
+  const dec    = r.total_dec > 0 ? `<span title="${formatNum(r.total_dec)} ₸">${formatCompact(r.total_dec)} ₸</span>` : '0';
+  const deliv  = r.total_deliv > 0 ? `<span title="${formatNum(r.total_deliv)} ₸">${formatCompact(r.total_deliv)} ₸</span>` : '0';
+  const budget = r.budget > 0 ? `<span title="${formatNum(r.budget)} ₸">${formatCompact(r.budget)} ₸</span>` : '—';
   const isActive = isRaionRow && _raGeoFilter === r.id;
   const cls = (clickable || isRaionRow) ? `gp-row gp-yes${isActive ? ' gp-active' : ''}` : 'gp-row';
   const onclick = clickable  ? ` onclick="drillRegion(${r.id})"`
@@ -3650,6 +3650,8 @@ function animateCounter(id, end, formatter) {
   if (!el) return;
   const prev = parseFloat(el.dataset.raw ?? 0);
   el.dataset.raw = end;
+  // нативный тултип с полным числом (чтобы за «2,4 млрд» было видно точное значение)
+  try { el.title = formatNum(end); } catch (e) {}
   if (Math.abs(prev - end) < 0.01) { el.textContent = formatter(end); return; }
   // 3D flip-in effect
   el.classList.remove('kpi-count-anim');
