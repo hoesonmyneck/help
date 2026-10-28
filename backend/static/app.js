@@ -785,25 +785,55 @@ async function adminUploadData() {
   const btn = document.getElementById('admin-data-upload-btn');
   const file = input.files && input.files[0];
   if (!file) { statusEl.className = 'admin-upload-status err'; statusEl.textContent = 'Выберите файл .xlsx'; return; }
-  if (!confirm(`Заменить все данные выплат данными из «${file.name}»?`)) return;
+  if (!confirm(`Заменить данные МИО данными из «${file.name}»?\n` +
+               `Если в файле есть столбец VID_ID — обновятся все три подраздела МИО.`)) return;
 
   btn.disabled = true;
   statusEl.className = 'admin-upload-status';
-  statusEl.textContent = 'Загрузка и обработка файла…';
+  statusEl.textContent = 'Отправка файла на сервер…';
   try {
     const fd = new FormData();
     fd.append('file', file);
     const r = await fetch('/api/admin/upload-data', { method: 'POST', credentials: 'include', body: fd });
     const data = await r.json();
-    if (!r.ok) { statusEl.className = 'admin-upload-status err'; statusEl.textContent = data.detail || 'Ошибка загрузки'; return; }
-    statusEl.className = 'admin-upload-status ok';
-    statusEl.textContent = `Готово: загружено ${formatInt(data.rows)} строк. Обновляю страницу…`;
-    setTimeout(() => location.reload(), 1200);
+    if (!r.ok) {
+      statusEl.className = 'admin-upload-status err';
+      statusEl.textContent = data.detail || 'Ошибка загрузки';
+      btn.disabled = false;
+      return;
+    }
+    _pollUploadStatus(statusEl, btn);   // файл принят — обработка идёт в фоне
   } catch {
     statusEl.className = 'admin-upload-status err';
     statusEl.textContent = 'Сеть недоступна';
-  } finally {
     btn.disabled = false;
+  }
+}
+
+const _UPLOAD_DS_LABELS = [['mio', 'доп. виды'], ['mio1', 'праздники'], ['mio2', 'заболевания']];
+async function _pollUploadStatus(statusEl, btn) {
+  try {
+    const r = await fetch('/api/admin/upload-status', { credentials: 'include' });
+    const s = await r.json();
+    if (s.state === 'running') {
+      statusEl.textContent = `Обработка файла… загружено ${formatInt(s.rows || 0)} строк`;
+      setTimeout(() => _pollUploadStatus(statusEl, btn), 2000);
+      return;
+    }
+    if (s.state === 'done') {
+      const by = s.by_dataset || {};
+      const parts = _UPLOAD_DS_LABELS.filter(([k]) => k in by).map(([k, l]) => `${l} — ${formatInt(by[k])}`);
+      statusEl.className = 'admin-upload-status ok';
+      statusEl.textContent = `Готово: загружено ${formatInt(s.rows)} строк` +
+        (parts.length > 1 ? ` (${parts.join(', ')})` : '') + '. Обновляю страницу…';
+      setTimeout(() => location.reload(), 2500);
+      return;
+    }
+    statusEl.className = 'admin-upload-status err';
+    statusEl.textContent = s.error || 'Ошибка загрузки';
+    btn.disabled = false;
+  } catch {
+    setTimeout(() => _pollUploadStatus(statusEl, btn), 4000);   // сеть моргнула — опрашиваем дальше
   }
 }
 
@@ -1148,7 +1178,7 @@ function geoFill(id) {
     return mapColorMode === 'pct' ? getColorPct(geoPct(id)) : getColor(geoVidy(id));
   }
   // Улытауская (62) и Абайская (10) области — помощь не предусмотрена → серый (в обоих режимах)
-  if (REGIONS_NO_NPA.has(+id) || (currentRegion != null && REGIONS_NO_NPA.has(+currentRegion))) {
+  if (_noNpa(id) || (currentRegion != null && _noNpa(currentRegion))) {
     return '#4a5258';
   }
   return mapColorMode === 'pct' ? getColorPct(geoPct(id)) : getColor(geoVidy(id));
@@ -1272,8 +1302,13 @@ function _buildDrillLayer(regionId) {
   return layer;
 }
 
+// Справочник REGION.xlsx (Абай/Улытау без помощи) относится только к доп. видам (VID 6)
+function _noNpa(regionId) {
+  return currentDataSource() === 'mio' && REGIONS_NO_NPA.has(+regionId);
+}
+
 function _npaEmptyMsg(regionId) {
-  return REGIONS_NO_NPA.has(+regionId) ? 'Не предусмотрено в НПА' : 'Нет обращений';
+  return _noNpa(regionId) ? 'Не предусмотрено в НПА' : 'Нет обращений';
 }
 
 function _regionName(id) {
@@ -1468,29 +1503,45 @@ function _buildBurgerMenu() {
   // меню НЕ закрывается при выборе пункта (закрытие — по клику вне или по ☰)
 }
 
-/* Раздел данных: 'mio' — статистика МИО, 'vseobuch' — данные всеобуча (vseobuch.xlsx).
+/* Раздел данных: 'mio' / 'mio1' / 'mio2' — подразделы МИО по виду помощи (VID 6 / 1 / 2),
+   'vseobuch' — меры поддержки (vseobuch.xlsx). Бюджет и справочники есть только у 'mio'.
    Переключение перезагружает страницу — весь дашборд перезапрашивает данные нужного раздела. */
+const DATA_SOURCES = ['mio', 'mio1', 'mio2', 'vseobuch'];
 function currentDataSource() {
-  return localStorage.getItem('dataSource') || 'mio';
+  const ds = localStorage.getItem('dataSource') || 'mio';
+  return DATA_SOURCES.includes(ds) ? ds : 'mio';
 }
 function setDataSource(ds) {
-  if (!['mio', 'vseobuch'].includes(ds)) ds = 'mio';
+  if (!DATA_SOURCES.includes(ds)) ds = 'mio';
+  if (ds === currentDataSource()) return;
   localStorage.setItem('dataSource', ds);
   location.reload();
 }
 function _buildSectionSwitch(menu) {
   if (menu.querySelector('.section-switch')) return;
   const cur = currentDataSource();
+  const isMio = cur.startsWith('mio');   // любой из подразделов МИО
   const wrap = document.createElement('div');
   wrap.className = 'section-switch';
   wrap.setAttribute('role', 'group');
   wrap.setAttribute('aria-label', 'Раздел данных');
   wrap.innerHTML =
-    `<button type="button" data-ds="mio" class="${cur === 'mio' ? 'on' : ''}" ` +
-      `onclick="setDataSource('mio')" title="Статистика МИО">МИО</button>` +
+    `<button type="button" data-ds="mio" class="${isMio ? 'on' : ''}" ` +
+      `onclick="setDataSource('${isMio ? cur : 'mio'}')" title="Статистика МИО">МИО</button>` +
     `<button type="button" data-ds="vseobuch" class="${cur === 'vseobuch' ? 'on' : ''}" ` +
       `onclick="setDataSource('vseobuch')" title="Меры поддержки (пилот)">МП</button>`;
   menu.appendChild(wrap);
+}
+
+// Подсветить активный подраздел МИО в переключателе под заголовком
+// (сам переключатель скрыт CSS-ом вне раздела МИО).
+function _initMioSubSwitch() {
+  const cur = currentDataSource();
+  document.querySelectorAll('#mio-sub-switch button').forEach(b => {
+    const on = b.dataset.ds === cur;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
 }
 
 // В разделе МП (всеобуч) переименовываем KPI «Всего видов помощи»
@@ -1710,6 +1761,8 @@ async function refreshKPI(sduSeq) {
     subEl.innerHTML = srcBreak
       .map(s => `<b>${formatInt(s.count)}</b> (${s.pct}%) ${_escHtml(_srcLabel(s.source))}`)
       .join(' и ');
+  } else if (currentDataSource() !== 'mio') {
+    subEl.innerHTML = '';   // у раздела нет утверждённого бюджета — «% от бюджета» не считаем
   } else {
     const decPct = data.budget_total ? (data.total_dec_pay_sum || 0) / data.budget_total * 100 : 0;
     subEl.innerHTML = `<b id="kpi-dec-pct">${decPct.toFixed(2).replace('.', ',')}%</b> от бюджета`;
@@ -2436,7 +2489,7 @@ function sortRaTable(col) {
     `<div class="gp-hdr-row" id="ra-sort-hdr">${_raSortHdrInner()}</div>` +
     _lastRaTotal +
     (sorted.map((r, i) => _buildRegionRow(r, !_lastRaIsRaion, _lastRaIsRaion, i + 1)).join('') ||
-     `<div class="gp-empty" style="padding:8px 4px">${(_lastRaIsRaion && REGIONS_NO_NPA.has(+currentRegion)) ? 'Не предусмотрено' : 'Нет данных'}</div>`);
+     `<div class="gp-empty" style="padding:8px 4px">${(_lastRaIsRaion && _noNpa(currentRegion)) ? 'Не предусмотрено' : 'Нет данных'}</div>`);
 }
 
 function _geoSortHdrInner(pfx) {
@@ -3100,7 +3153,7 @@ function _buildRegionAnalyticsHtml(titleHtml, rows, stats, kpi, isRaion, totalLa
   const sorted = _raSort.col ? [...rows].sort(_makeRaComparator()) : rows;
   const hdr = `<div class="gp-hdr-row" id="ra-sort-hdr">${_raSortHdrInner()}</div>`;
   // Абайская (10) и Улытауская (62) области — помощь не предусмотрена
-  const emptyMsg = (isRaion && REGIONS_NO_NPA.has(+currentRegion)) ? 'Не предусмотрено' : 'Нет данных';
+  const emptyMsg = (isRaion && _noNpa(currentRegion)) ? 'Не предусмотрено' : 'Нет данных';
   const list = sorted.map((r, i) => _buildRegionRow(r, !isRaion, isRaion, i + 1)).join('') ||
     `<div class="gp-empty" style="padding:8px 4px">${emptyMsg}</div>`;
   const totalHtml = _buildGeoTotalRow(stats, kpi, totalLabel, true);
@@ -4240,6 +4293,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   initPayTooltip();
   _applyDatasetLabels();   // переименование KPI в разделе МП (всеобуч)
+  _initMioSubSwitch();
   init();
 
 

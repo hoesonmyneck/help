@@ -3,14 +3,14 @@ from contextvars import ContextVar
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query, Request, Depends, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import func, distinct, literal, event
 from sqlalchemy.orm import Session, with_loader_criteria
 from database import engine, Payment, User, BudgetItem, RegionBudget, AllowedIin, LoginLog
 import load_data
 from load_data import (load_excel, load_budget, load_region_budget, load_reference_data,
-                       load_vseobuch,
+                       load_vseobuch, load_mio_catalogs,
                        replace_payments_from_file,
                        replace_vseobuch_from_file,
                        region_help_ids, raion_help_ids,
@@ -18,6 +18,10 @@ from load_data import (load_excel, load_budget, load_region_budget, load_referen
                        raion_names_ref, raion_reg_ref, settings_rows, settings_pay_names)
 import auth
 import os
+import threading
+import time
+import urllib.request
+from collections import OrderedDict
 from datetime import datetime
 
 # ─────────────────────── Раздел данных (МИО / Всеобуч) ───────────────────────
@@ -25,20 +29,23 @@ from datetime import datetime
 # Значение хранится в ContextVar и применяется ко ВСЕМ ORM-запросам к payments
 # автоматически (событие do_orm_execute ниже) — эндпоинты править не нужно.
 _current_source: ContextVar[str] = ContextVar("current_source", default="mio")
+# 'mio' / 'mio1' / 'mio2' — подразделы МИО по VID (доп. виды / праздники / заболевания),
+# 'vseobuch' — меры поддержки (пилот).
+DATASETS = ("mio", "mio1", "mio2", "vseobuch")
 
 
 async def _use_source(source: str = Query("mio")):
     """Глобальная зависимость: зафиксировать раздел данных для текущего запроса.
     Асинхронная — значение ContextVar корректно наследуется sync-эндпоинтом."""
-    _current_source.set(source if source in ("mio", "vseobuch") else "mio")
+    _current_source.set(source if source in DATASETS else "mio")
 
 
 @event.listens_for(Session, "do_orm_execute")
 def _dataset_scope(execute_state):
     """Прозрачная фильтрация по разделу данных:
-      • payments — только строки текущего раздела ('mio'/'vseobuch');
-      • бюджет (region_budgets / budget_items) — только в разделе МИО
-        (у всеобуча утверждённого бюджета нет → пустой результат)."""
+      • payments — только строки текущего раздела (см. DATASETS);
+      • бюджет (region_budgets / budget_items) — только в разделе 'mio'
+        (у остальных утверждённого бюджета нет → пустой результат)."""
     if not execute_state.is_select or execute_state.is_column_load:
         return
     if execute_state.execution_options.get("skip_dataset_scope"):
@@ -46,7 +53,7 @@ def _dataset_scope(execute_state):
     ds = _current_source.get()
     # payments: ds — связанный параметр (документированный шаблон мультиарендности)
     opts = [with_loader_criteria(Payment, lambda cls: cls.dataset == ds, include_aliases=True)]
-    # Всеобуч: бюджета нет — добавляем всегда-ложное условие (решение принято здесь,
+    # Всеобуч и подразделы МИО 1/2: бюджета нет — добавляем всегда-ложное условие (решение принято здесь,
     # в Python, а не внутри lambda → безопасно для кэша лямбда-выражений SQLAlchemy).
     if ds != "mio":
         opts.append(with_loader_criteria(RegionBudget, lambda cls: literal(False), include_aliases=True))
@@ -54,17 +61,25 @@ def _dataset_scope(execute_state):
     execute_state.statement = execute_state.statement.options(*opts)
 
 
-# Каталог видов помощи зависит от раздела: МИО — из settings-файлов, Всеобуч — из данных.
+# Каталог видов помощи зависит от раздела: 'mio' — из settings-файлов, остальные —
+# собран из данных (load_data.derived_catalogs).
+def _derived_catalog():
+    return load_data.derived_catalogs.get(_current_source.get())
+
+
 def active_settings_rows():
-    return load_data.vseobuch_settings_rows if _current_source.get() == "vseobuch" else settings_rows
+    cat = _derived_catalog()
+    return cat["rows"] if cat else settings_rows
 
 
 def active_settings_pay_names():
-    return load_data.vseobuch_settings_pay_names if _current_source.get() == "vseobuch" else settings_pay_names
+    cat = _derived_catalog()
+    return cat["pay_names"] if cat else settings_pay_names
 
 
 def active_pay_type_names():
-    return load_data.vseobuch_pay_type_names if _current_source.get() == "vseobuch" else pay_type_names
+    cat = _derived_catalog()
+    return cat["type_names"] if cat else pay_type_names
 
 # Внешний базовый URL сервиса (как его видит браузер пользователя через портал).
 # Используется для абсолютной ссылки redirectUrl в SSO-ответе.
@@ -82,11 +97,13 @@ def _is_excluded(pname: str | None) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     load_excel()
+    load_mio_catalogs()
     load_vseobuch()
     load_budget()
     load_region_budget()
     load_reference_data()
     auth.seed_admin()
+    warm_api_cache_async()   # дождётся, пока сервер начнёт слушать порт
     yield
 
 
@@ -113,7 +130,94 @@ async def auth_gate(request: Request, call_next):
                 valid = False
         if not valid:
             return JSONResponse({"detail": "Требуется авторизация"}, status_code=401)
+        if request.method == "GET" and not path.startswith(_NO_CACHE_PREFIXES):
+            return await _cached_call(request, call_next)
     return await call_next(request)
+
+
+# ─────────────────────────── Кэш ответов API ───────────────────────────
+# Данные меняются только при загрузке выгрузки через админку, а между загрузками
+# ответы /api/* зависят лишь от пути и query (включая ?source=). Поэтому JSON-ответы
+# кэшируются в памяти и сбрасываются при загрузке. Без кэша первое открытие подраздела
+# МИО (~1 млн строк) — это ~15 тяжёлых запросов одновременно, десятки секунд.
+# Кэш живёт после проверки сессии (auth_gate) — без входа ответ из кэша не отдаётся.
+_NO_CACHE_PREFIXES = ("/api/auth/", "/api/admin/", "/api/report")   # report: дата в отчёте
+_CACHE_MAX_BYTES = 200 * 1024 * 1024
+_api_cache: "OrderedDict[str, bytes]" = OrderedDict()
+_api_cache_bytes = 0
+_api_cache_gen = 0          # растёт при сбросе: ответ, начатый до сброса, не кладётся в кэш
+_api_cache_lock = threading.Lock()
+
+
+def _cache_key(request: Request) -> str:
+    items = sorted(request.query_params.multi_items())
+    return request.url.path + "?" + "&".join(f"{k}={v}" for k, v in items)
+
+
+async def _cached_call(request: Request, call_next):
+    global _api_cache_bytes
+    key = _cache_key(request)
+    with _api_cache_lock:
+        body = _api_cache.get(key)
+        if body is not None:
+            _api_cache.move_to_end(key)
+        gen = _api_cache_gen
+    if body is not None:
+        return Response(content=body, media_type="application/json")
+    response = await call_next(request)
+    if response.status_code != 200 or not response.headers.get("content-type", "").startswith("application/json"):
+        return response
+    body = b"".join([chunk async for chunk in response.body_iterator])
+    with _api_cache_lock:
+        if gen == _api_cache_gen and key not in _api_cache:
+            _api_cache[key] = body
+            _api_cache_bytes += len(body)
+            while _api_cache_bytes > _CACHE_MAX_BYTES and _api_cache:
+                _api_cache_bytes -= len(_api_cache.popitem(last=False)[1])
+    return Response(content=body, media_type="application/json")
+
+
+def clear_api_cache():
+    global _api_cache_bytes, _api_cache_gen
+    with _api_cache_lock:
+        _api_cache.clear()
+        _api_cache_bytes = 0
+        _api_cache_gen += 1
+
+
+# Экраны уровня «Казахстан» — то, что дашборд запрашивает при открытии раздела
+# (уровни области/района быстрые за счёт индексов и прогрева не требуют).
+_WARM_PATHS = ("kpi", "regions", "summary", "help-presence", "pay-type-stats", "dynamics",
+               "dynamics?period=week", "ranking-oblasts", "anomalies/kpi",
+               "anomalies/cks-ab", "anomalies/pay-gap")
+
+
+def _warm_api_cache():
+    """Прогреть кэш стартовыми запросами всех разделов — по одному, чтобы не мешать
+    пользователям. Запросы идут через HTTP к самому себе со служебным токеном."""
+    from jose import jwt
+    token = jwt.encode({"sub": "access", "uid": 0, "login": "cache-warmup", "role": "user",
+                        "exp": int(time.time()) + 3600}, auth.JWT_SECRET, algorithm=auth.JWT_ALGORITHM)
+    base = os.environ.get("SELF_URL", "http://127.0.0.1:8000")
+    started = time.time()
+    for ds in DATASETS:
+        for p in _WARM_PATHS:
+            url = f"{base}/api/{p}{'&' if '?' in p else '?'}source={ds}"
+            req = urllib.request.Request(url, headers={"Cookie": f"{auth.COOKIE_NAME}={token}"})
+            for attempt in range(30):   # при старте сервер может ещё не слушать порт
+                try:
+                    urllib.request.urlopen(req, timeout=180).read()
+                    break
+                except urllib.error.HTTPError as e:
+                    print(f"cache warmup: {url} → {e.code}")
+                    break
+                except Exception:
+                    time.sleep(2)
+    print(f"cache warmup: done in {time.time() - started:.0f}s")
+
+
+def warm_api_cache_async():
+    threading.Thread(target=_warm_api_cache, daemon=True).start()
 
 
 def get_db():
@@ -390,20 +494,50 @@ def api_admin_set_password(user_id: int, body: PasswordBody, admin: User = Depen
         return {"ok": True}
 
 
+# Состояние фоновой загрузки МИО: выгрузка на ~1 млн строк обрабатывается минутами,
+# поэтому импорт идёт в отдельном потоке (event loop не блокируется — сайт работает),
+# а админка опрашивает /api/admin/upload-status.
+_upload_job: dict = {"state": "idle"}
+_upload_lock = threading.Lock()
+
+
+def _run_upload_job(content: bytes):
+    def progress(n):
+        _upload_job["rows"] = n
+    try:
+        res = replace_payments_from_file(io.BytesIO(content), progress=progress)
+        clear_api_cache()
+        _upload_job.update(state="done", finished=datetime.now().isoformat(timespec="seconds"), **res)
+        warm_api_cache_async()
+    except ValueError as e:
+        _upload_job.update(state="error", error=str(e))
+    except Exception as e:
+        print(f"upload-data: {e!r}")
+        _upload_job.update(state="error", error=f"Ошибка загрузки: {e}")
+
+
 @app.post("/api/admin/upload-data")
 async def api_admin_upload_data(file: UploadFile = File(...), admin: User = Depends(auth.require_admin)):
-    """Загрузить новый Excel с выплатами: очистить таблицу и залить заново (только админ)."""
+    """Загрузить новую выгрузку МИО и заменить данные (только админ). Если в файле есть
+    VID_ID — обновляются все три подраздела МИО. Обработка идёт в фоне — ответ сразу,
+    ход и результат — в /api/admin/upload-status."""
     name = (file.filename or "").lower()
     if not name.endswith((".xlsx", ".xlsm")):
         raise HTTPException(status_code=400, detail="Нужен файл .xlsx")
     content = await file.read()
-    try:
-        count = replace_payments_from_file(io.BytesIO(content))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка загрузки: {e}")
-    return {"ok": True, "rows": count}
+    with _upload_lock:
+        if _upload_job.get("state") == "running":
+            raise HTTPException(status_code=409, detail="Уже идёт загрузка — дождитесь её окончания")
+        _upload_job.clear()
+        _upload_job.update(state="running", rows=0, filename=file.filename,
+                           started=datetime.now().isoformat(timespec="seconds"))
+    threading.Thread(target=_run_upload_job, args=(content,), daemon=True).start()
+    return {"ok": True, "state": "running"}
+
+
+@app.get("/api/admin/upload-status")
+def api_admin_upload_status(admin: User = Depends(auth.require_admin)):
+    return dict(_upload_job)
 
 
 @app.post("/api/admin/upload-vseobuch")
@@ -417,6 +551,7 @@ async def api_admin_upload_vseobuch(file: UploadFile = File(...), admin: User = 
     content = await file.read()
     try:
         count = replace_vseobuch_from_file(io.BytesIO(content))
+        clear_api_cache()
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -429,6 +564,7 @@ async def api_admin_upload_vseobuch(file: UploadFile = File(...), admin: User = 
             f.write(content)
     except Exception as e:
         print(f"upload-vseobuch: не удалось сохранить файл на диск: {e}")
+    warm_api_cache_async()
     return {"ok": True, "rows": count}
 
 
@@ -584,36 +720,43 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
         def _metric(q):
             return q.filter(Payment.deliv_sum > 0) if demo_metric == "deliv" else q
 
-        total_max = base.with_entities(func.sum(Payment.max_pay_sum)).scalar() or 0
-        total_dec = base.with_entities(func.sum(Payment.dec_pay_sum)).scalar() or 0
-        app_count = base.with_entities(func.count(Payment.id)).scalar() or 0
-        # Разбивка заявлений по источнику (SOURCE_NAME): Е-Собес / ПЭП — для всеобуча.
+        # Верхние KPI — одним проходом по выборке (в подразделах МИО до ~1 млн строк,
+        # каждый отдельный запрос — это полное чтение раздела).
+        # «Фактические» метрики — по реально выплаченным суммам (DELIV_SUM > 0),
+        # независимо от статуса заявки (по решению руководства).
+        paid = Payment.deliv_sum > 0
+        (total_max, total_dec, app_count, deliv_total,
+         fact_help_type_count, fact_recipients, unique_recipients) = base.with_entities(
+            func.sum(Payment.max_pay_sum),
+            func.sum(Payment.dec_pay_sum),
+            func.count(Payment.id),
+            func.sum(Payment.deliv_sum),
+            func.count(distinct(Payment.pay_type_id)).filter(paid),
+            func.count(distinct(Payment.sicid)).filter(paid),
+            func.count(distinct(Payment.sicid)),
+        ).one()
+        total_max, total_dec, deliv_total = total_max or 0, total_dec or 0, deliv_total or 0
+        app_count = app_count or 0
+        fact_help_type_count = fact_help_type_count or 0
+        fact_recipients = fact_recipients or 0
+        unique_recipients = unique_recipients or 0
+        # Разбивка заявлений по источнику (SOURCE_NAME): Е-Собес / ПЭП — только у всеобуча.
         # У МИО source_name пустой → список пустой (фронт покажет «% от бюджета»).
         src_rows = (base.filter(Payment.source_name.isnot(None))
                     .with_entities(Payment.source_name, func.count(Payment.id))
-                    .group_by(Payment.source_name).all())
+                    .group_by(Payment.source_name).all()) if _current_source.get() == "vseobuch" else []
         _src_total = sum(c for _, c in src_rows)
         source_breakdown = [
             {"source": s, "count": c,
              "pct": round(c / _src_total * 100) if _src_total else 0}
             for s, c in sorted(src_rows, key=lambda x: -x[1])
         ]
-        # «Фактические» метрики — по реально выплаченным суммам (DELIV_SUM > 0),
-        # независимо от статуса заявки (по решению руководства)
-        fact_help_type_count = (
-            base.filter(Payment.deliv_sum > 0)
-            .with_entities(func.count(distinct(Payment.pay_type_id)))
-            .scalar() or 0
-        )
-        fact_recipients = (
-            base.filter(Payment.deliv_sum > 0)
-            .with_entities(func.count(distinct(Payment.sicid)))
-            .scalar() or 0
-        )
-        unique_recipients = base.with_entities(func.count(distinct(Payment.sicid))).scalar() or 0
         # пол — без фильтра по полу (иначе один пол обнуляется и его не выбрать)
-        male_count = base_no_gender.filter(Payment.gender_id == 1).with_entities(func.count(distinct(Payment.sicid))).scalar() or 0
-        female_count = base_no_gender.filter(Payment.gender_id == 2).with_entities(func.count(distinct(Payment.sicid))).scalar() or 0
+        male_count, female_count = base_no_gender.with_entities(
+            func.count(distinct(Payment.sicid)).filter(Payment.gender_id == 1),
+            func.count(distinct(Payment.sicid)).filter(Payment.gender_id == 2),
+        ).one()
+        male_count, female_count = male_count or 0, female_count or 0
 
         # ЦКС (уровень благосостояния) — с разбивкой по полу (gender_id 1=муж, 2=жен).
         # Без фильтра по ЦКС: показываем все уровни, чтобы можно было выбрать несколько.
@@ -666,11 +809,8 @@ def kpi(region_id: int = Query(None), raion_id: int = Query(None), sdu_filter: s
             geo = active_settings_rows()
         people_cat_count = len({r[4] for r in geo if r[5] is not None})
 
-        # Фактически выплачено: сумма всех DELIV_SUM независимо от статуса заявки
-        deliv_total = (
-            base.with_entities(func.sum(Payment.deliv_sum))
-            .scalar() or 0
-        )
+        # Фактически выплачено (deliv_total) — сумма всех DELIV_SUM независимо от
+        # статуса заявки — посчитано выше в общем проходе.
 
         # Бюджет: from region_budgets (budget.xlsx); no raion-level breakdown
         bq = db.query(func.sum(RegionBudget.budget))
@@ -2122,24 +2262,29 @@ def pay_type_stats(
     """Per-pay-type totals: app count, budget, dec sum, delivered sum."""
     from sqlalchemy import case as sa_case
     with Session(engine) as db:
-        q = apply_extra_filters(
-            build_filter(
-                db.query(
-                    Payment.pay_type_id,
-                    Payment.pay_type,
-                    func.count(Payment.id).label('cnt'),
-                    func.count(distinct(
-                        sa_case((Payment.deliv_sum > 0, Payment.sicid))
-                    )).label('fact_recipients'),
-                    func.sum(Payment.dec_pay_sum).label('total_dec'),
-                    func.sum(
-                        Payment.deliv_sum
-                    ).label('total_deliv'),
-                ),
-                region_id, raion_id, pay_type_id=pay_type_id,
-            ),
-            sdu_filter, gender_filter, age_group,
-        ).group_by(Payment.pay_type_id, Payment.pay_type).all()
+        def _filtered(query):
+            return apply_extra_filters(
+                build_filter(query, region_id, raion_id, pay_type_id=pay_type_id),
+                sdu_filter, gender_filter, age_group,
+            )
+        # Название вида помощи — отдельным лёгким запросом: длинный текст в основном
+        # (с count distinct) раздувал сортировку до сотен МБ на диске в подразделах МИО.
+        # pay_type_id ↔ pay_type в данных один к одному.
+        names = dict(_filtered(db.query(Payment.pay_type_id, func.max(Payment.pay_type)))
+                     .group_by(Payment.pay_type_id).all())
+        q = _filtered(
+            db.query(
+                Payment.pay_type_id,
+                func.count(Payment.id).label('cnt'),
+                func.count(distinct(
+                    sa_case((Payment.deliv_sum > 0, Payment.sicid))
+                )).label('fact_recipients'),
+                func.sum(Payment.dec_pay_sum).label('total_dec'),
+                func.sum(
+                    Payment.deliv_sum
+                ).label('total_deliv'),
+            )
+        ).group_by(Payment.pay_type_id).all()
 
         # Budget per pay_type_id (optionally filtered by region/raion)
         bq = db.query(BudgetItem.pay_type_id, func.sum(BudgetItem.plansum))
@@ -2155,7 +2300,7 @@ def pay_type_stats(
                 continue
             result.append({
                 'pay_type_id': r.pay_type_id,
-                'pay_type': r.pay_type or '—',
+                'pay_type': names.get(r.pay_type_id) or '—',
                 'count': r.cnt or 0,
                 'fact_recipients': r.fact_recipients or 0,
                 'budget': budget_map.get(r.pay_type_id, 0.0),

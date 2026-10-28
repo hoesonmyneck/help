@@ -28,6 +28,22 @@ vseobuch_settings_rows: list = []            # аналог settings_rows для
 vseobuch_settings_pay_names: dict[int, str] = {}   # {pid: SERVICE_NAME}
 vseobuch_pay_type_names: dict[int, str] = {}       # аналог pay_type_names (REGION.xlsx)
 
+# ── Раздел МИО делится на подразделы по виду помощи (VID_ID в выгрузке) ──
+# VID 6 «Дополнительные виды социальной помощи» — исторический раздел 'mio'
+# (для него есть справочники и бюджет). VID 1 и 2 — подразделы без справочников
+# и бюджета: их каталог видов помощи строится из загруженных строк (как у всеобуча).
+MIO_VID_DATASETS = {6: "mio", 1: "mio1", 2: "mio2"}
+
+# Каталоги разделов без settings-файлов: {dataset: {rows, pay_names, type_names}}.
+# Структуры те же, что settings_rows / settings_pay_names / pay_type_names.
+derived_catalogs: dict[str, dict] = {
+    "vseobuch": {"rows": vseobuch_settings_rows,
+                 "pay_names": vseobuch_settings_pay_names,
+                 "type_names": vseobuch_pay_type_names},
+    "mio1": {"rows": [], "pay_names": {}, "type_names": {}},
+    "mio2": {"rows": [], "pay_names": {}, "type_names": {}},
+}
+
 # Regions that exist on the map / administratively but provide nothing (not in REGION.xlsx)
 EXTRA_REGIONS = [('10', 'АБАЙСКАЯ ОБЛАСТЬ'), ('62', 'УЛЫТАУСКАЯ ОБЛАСТЬ')]
 
@@ -206,10 +222,9 @@ def parse_gender(val):
     return parse_num(val, int)
 
 
-def _detect_app_id_offset(ws) -> int:
+def _detect_app_id_offset(header) -> int:
     """Найти индекс колонки APP_ID в строке заголовков.
     Файлы бывают с ведущим столбцом-счётчиком (offset=1) и без него (offset=0)."""
-    header = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ())
     for idx, val in enumerate(header):
         if val is not None and str(val).strip().upper() == 'APP_ID':
             return idx
@@ -217,13 +232,26 @@ def _detect_app_id_offset(ws) -> int:
     return 1 if len(header) >= 31 else 0
 
 
-def parse_payment_rows(ws, dataset: str = "mio") -> list:
-    """Распарсить лист в список Payment. Колонки идут фиксированным порядком от APP_ID.
-    `dataset` помечает раздел ('mio' или 'vseobuch') — по нему фильтруются все запросы."""
-    b = _detect_app_id_offset(ws)
-    rows_data = []
+def _sheet_header(ws) -> tuple:
+    return next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ()) or ()
+
+
+def _header_index(header, name: str):
+    for idx, val in enumerate(header):
+        if val is not None and str(val).strip().upper() == name:
+            return idx
+    return None
+
+
+def iter_payment_rows(ws):
+    """Строки листа МИО как пары (vid_id, dict колонок payments) — без ORM-объектов,
+    чтобы выгрузка на ~1 млн строк не держала всё в памяти. Колонки идут фиксированным
+    порядком от APP_ID; VID_ID ищется по имени (в старых выгрузках его нет → None)."""
+    header = _sheet_header(ws)
+    b = _detect_app_id_offset(header)
+    vid_idx = _header_index(header, 'VID_ID')
     for row in ws.iter_rows(min_row=2, values_only=True):
-        if row[b] is None:
+        if len(row) <= b or row[b] is None:
             continue
         # Регион/район определяем по KATO_REG/REG (кол. 6-7) и KATO_DIS/DIS (кол. 8-9),
         # а НЕ по KATO_REGION/KATO_RAION (кол. 27-28): последние дробят города
@@ -232,8 +260,8 @@ def parse_payment_rows(ws, dataset: str = "mio") -> list:
         # региона; KATO_DIS // 100_000 = 4-значный код района.
         _kreg = parse_num(row[b + 5], int)   # KATO_REG
         _kdis = parse_num(row[b + 7], int)   # KATO_DIS
-        rows_data.append(Payment(
-            dataset=dataset,
+        vid = parse_num(row[vid_idx], int) if vid_idx is not None and vid_idx < len(row) else None
+        yield vid, dict(
             app_id=parse_num(row[b + 0], int),
             app_date=parse_date(row[b + 1]),
             app_date_close=parse_date(row[b + 2]),
@@ -246,6 +274,7 @@ def parse_payment_rows(ws, dataset: str = "mio") -> list:
             cat_type_id=parse_num(row[b + 11], int),
             cat_type=str(row[b + 12]).strip() if row[b + 12] else None,
             period=str(row[b + 13]).strip() if row[b + 13] else None,
+            source_name=None,
             unit_id=parse_num(row[b + 14], int),
             max_pay_sum=parse_num(row[b + 15]),
             decision=str(row[b + 16]).strip() if row[b + 16] else None,
@@ -262,8 +291,41 @@ def parse_payment_rows(ws, dataset: str = "mio") -> list:
             kato_raion=(_kdis // 100_000) if _kdis is not None else None,
             kato_regname=_fmt_geo_name(row[b + 6]),
             kato_rainame=_fmt_geo_name(row[b + 8]),
-        ))
-    return rows_data
+        )
+
+
+def _payment_sheets(wb) -> list:
+    """Листы книги с данными МИО (есть заголовок APP_ID). Выгрузка больше лимита
+    Excel (1 048 576 строк) может прийти разбитой на несколько листов — читаем все."""
+    return [ws for ws in wb.worksheets if _header_index(_sheet_header(ws), 'APP_ID') is not None]
+
+
+_INSERT_BATCH = 5000
+
+
+def _stage_table():
+    """Описание временной таблицы payments_stage (те же колонки, что у payments, без id)."""
+    from sqlalchemy import Table, MetaData, Column
+    return Table("payments_stage", MetaData(),
+                 *[Column(c.name, c.type) for c in Payment.__table__.columns if c.name != "id"])
+
+
+def _insert_rows(conn, rows_iter, progress=None, table=None) -> dict:
+    """Пакетная вставка словарей (Core insert, без ORM) в payments или `table`. → {dataset: n}."""
+    table = Payment.__table__ if table is None else table
+    counts: dict[str, int] = {}
+    batch = []
+    for rec in rows_iter:
+        counts[rec["dataset"]] = counts.get(rec["dataset"], 0) + 1
+        batch.append(rec)
+        if len(batch) >= _INSERT_BATCH:
+            conn.execute(table.insert(), batch)
+            batch = []
+            if progress:
+                progress(sum(counts.values()))
+    if batch:
+        conn.execute(table.insert(), batch)
+    return counts
 
 
 def ensure_dataset_column():
@@ -277,29 +339,114 @@ def ensure_dataset_column():
             "UPDATE payments SET dataset='mio' WHERE dataset IS NULL"))
         conn.execute(text(
             "ALTER TABLE payments ADD COLUMN IF NOT EXISTS source_name VARCHAR(100)"))
+        # Все запросы фильтруются по разделу — без индекса каждый из них читал бы
+        # всю таблицу (с подразделами МИО это ~1 млн строк).
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_payments_dataset ON payments (dataset)"))
+        # Выбор области / района на карте: строки вставляются отсортированными по
+        # (dataset, kato_region, kato_raion), поэтому индекс читает только страницы участка.
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_payments_ds_region ON payments (dataset, kato_region)"))
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_payments_ds_raion ON payments (dataset, kato_raion)"))
         # Некоторые выгрузки содержат длинные названия/решения (>500 симв.) —
-        # расширяем текстовые колонки до TEXT, чтобы вставка не падала (идемпотентно).
-        for col in ("pay_type", "cat_type", "decision"):
+        # расширяем текстовые колонки до TEXT, чтобы вставка не падала. Только если
+        # ещё не TEXT: ALTER TYPE берёт эксклюзивную блокировку таблицы.
+        narrow = conn.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='payments' AND data_type <> 'text' "
+            "AND column_name IN ('pay_type', 'cat_type', 'decision')")).scalars().all()
+        for col in narrow:
             conn.execute(text(f"ALTER TABLE payments ALTER COLUMN {col} TYPE TEXT"))
 
 
-def replace_payments_from_file(file_obj, dataset: str = "mio") -> int:
-    """Загрузить выплаты из переданного xlsx (файл/поток): заменить строки раздела
-    `dataset` и залить заново. Возвращает число загруженных строк. Другие разделы
-    (напр. всеобуч) не затрагиваются. Используется админ-загрузкой."""
+def replace_payments_from_file(file_obj, progress=None) -> dict:
+    """Загрузить выгрузку МИО (xlsx, файл/поток) и заменить строки в БД.
+
+    Если в выгрузке есть VID_ID — строки раскладываются по подразделам
+    (MIO_VID_DATASETS) и заменяются все три подраздела; строки с другим VID
+    пропускаются. Старый формат без VID_ID целиком идёт в 'mio'. Всеобуч не
+    затрагивается. Замена — одной транзакцией: до коммита сайт показывает старые
+    данные. `progress(n)` вызывается по мере вставки. Используется админ-загрузкой."""
     ensure_dataset_column()
     wb = load_workbook(file_obj, read_only=True, data_only=True)
-    ws = wb.active
-    rows_data = parse_payment_rows(ws, dataset=dataset)
-    wb.close()
-    if not rows_data:
-        raise ValueError("В файле не найдено ни одной строки данных (нет колонки APP_ID?)")
-    with Session(engine) as session:
-        session.execute(text("DELETE FROM payments WHERE dataset=:ds"), {"ds": dataset})
-        session.add_all(rows_data)
-        session.commit()
-    print(f"Admin upload: replaced '{dataset}' payments with {len(rows_data)} rows")
-    return len(rows_data)
+    try:
+        sheets = _payment_sheets(wb)
+        if not sheets:
+            raise ValueError("В файле не найдено ни одной строки данных (нет колонки APP_ID?)")
+        has_vid = any(_header_index(_sheet_header(ws), 'VID_ID') is not None for ws in sheets)
+        targets = list(MIO_VID_DATASETS.values()) if has_vid else ["mio"]
+        skipped = 0
+
+        def records():
+            nonlocal skipped
+            for ws in sheets:
+                for vid, rec in iter_payment_rows(ws):
+                    # лист без VID_ID в «новой» книге считаем VID 6 (доп. виды)
+                    ds = MIO_VID_DATASETS.get(6 if vid is None else vid) if has_vid else "mio"
+                    if ds is None:
+                        skipped += 1
+                        continue
+                    rec["dataset"] = ds
+                    yield rec
+
+        with engine.begin() as conn:
+            # Подразделы в выгрузке перемешаны. Если вставлять как есть, строки одного
+            # подраздела разлетаются по всей таблице, и любой запрос по нему читает
+            # бо́льшую часть её страниц. Поэтому сначала льём во временную таблицу,
+            # а в payments переносим отсортированными по подразделу.
+            conn.execute(text(
+                "CREATE TEMP TABLE payments_stage (LIKE payments INCLUDING DEFAULTS) ON COMMIT DROP"))
+            counts = _insert_rows(conn, records(), progress, table=_stage_table())
+            if not counts:
+                # исключение внутри транзакции → откат, старые данные остаются
+                raise ValueError("В файле не найдено ни одной строки данных (нет колонки APP_ID?)")
+            cols = ", ".join(c.name for c in Payment.__table__.columns if c.name != "id")
+            conn.execute(text("DELETE FROM payments WHERE dataset = ANY(:ds)"), {"ds": targets})
+            conn.execute(text(
+                f"INSERT INTO payments ({cols}) SELECT {cols} FROM payments_stage "
+                f"ORDER BY dataset, kato_region, kato_raion"))
+    finally:
+        wb.close()
+    with engine.begin() as conn:
+        conn.execute(text("ANALYZE payments"))
+    for ds in targets:
+        if ds in derived_catalogs:
+            rebuild_derived_catalog(ds)
+    total = sum(counts.values())
+    print(f"Admin upload: replaced {counts} rows (skipped {skipped} with unknown VID)")
+    return {"rows": total, "by_dataset": {ds: counts.get(ds, 0) for ds in targets}, "skipped": skipped}
+
+
+def rebuild_derived_catalog(ds: str):
+    """Собрать каталог видов помощи подраздела МИО (mio1/mio2) из его строк в БД.
+    Справочников (PAYMENT_SETTING / REGION) для этих видов нет, поэтому «предусмотрено»
+    = то, что встречается в данных. Формат строк — как settings_rows:
+    (kato_reg2, kato_dis4, pay_id, pay_name, cat, max_val). Мутирует на месте."""
+    cat = derived_catalogs[ds]
+    with engine.connect() as conn:
+        rows = conn.execute(text(
+            "SELECT kato_region, kato_raion, pay_type_id, MAX(pay_type), cat_type, MAX(max_pay_sum) "
+            "FROM payments WHERE dataset=:ds AND pay_type_id IS NOT NULL AND kato_region IS NOT NULL "
+            "GROUP BY kato_region, kato_raion, pay_type_id, cat_type"), {"ds": ds}).all()
+    cat["rows"].clear()
+    cat["pay_names"].clear()
+    cat["type_names"].clear()
+    for reg, rai, pid, name, cat_type, mx in rows:
+        name = name or str(pid)
+        cat["pay_names"].setdefault(pid, name)
+        cat["type_names"].setdefault(pid, name)
+        cat["rows"].append((str(reg), str(rai) if rai is not None else None, pid, name,
+                            cat_type or name, float(mx) if mx is not None else 1.0))
+    print(f"Catalog '{ds}': {len(cat['pay_names'])} pay types, {len(cat['rows'])} rows")
+
+
+def load_mio_catalogs():
+    """При старте: собрать из БД каталоги подразделов МИО, у которых нет справочников."""
+    ensure_dataset_column()
+    for ds in MIO_VID_DATASETS.values():
+        if ds in derived_catalogs:
+            rebuild_derived_catalog(ds)
 
 
 def replace_vseobuch_from_file(file_obj) -> int:
@@ -526,14 +673,11 @@ def load_excel():
     path = os.path.join(os.path.dirname(__file__), "data", "new14.xlsx")
     wb = load_workbook(path, read_only=True, data_only=True)
     ws = wb.active
-    rows_data = parse_payment_rows(ws, dataset="mio")
+    with engine.begin() as conn:
+        counts = _insert_rows(conn, (dict(rec, dataset="mio") for _vid, rec in iter_payment_rows(ws)))
     wb.close()
 
-    with Session(engine) as session:
-        session.add_all(rows_data)
-        session.commit()
-
-    print(f"Loaded {len(rows_data)} rows from Excel")
+    print(f"Loaded {counts.get('mio', 0)} rows from Excel")
 
 
 def load_budget():

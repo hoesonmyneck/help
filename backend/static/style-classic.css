@@ -4580,7 +4580,25 @@ header { flex-shrink: 0; }
 .section-switch button:active{ transform:scale(0.97); }
 
 /* Всеобуч: утверждённого бюджета нет — скрываем бюджетную KPI-карточку */
-:root[data-dataset="vseobuch"] #kpi-card-budget{ display:none; }
+:root[data-dataset="vseobuch"] #kpi-card-budget,
+:root[data-dataset="mio1"] #kpi-card-budget,
+:root[data-dataset="mio2"] #kpi-card-budget{ display:none; }
+
+/* Подразделы МИО по виду помощи (VID) — сегменты справа от даты актуализации;
+   только в разделе МИО */
+.mio-sub-switch{
+  display:inline-flex; flex-wrap:wrap; gap:2px; padding:3px;
+  background:var(--bg-deep); border:1px solid var(--bd-mid); border-radius:16px;
+}
+:root:not([data-dataset^="mio"]) .mio-sub-switch{ display:none; }
+.mio-sub-switch button{
+  border:none; background:none; font:inherit; font-size:.7rem; font-weight:600;
+  color:var(--tx-dim); padding:4px 12px; border-radius:999px; cursor:pointer;
+  transition:background .15s, color .15s, transform .16s ease-out; white-space:nowrap;
+}
+.mio-sub-switch button:hover{ color:var(--tx-head); }
+.mio-sub-switch button.on{ background:var(--ac-teal); color:#fff; cursor:default; }
+.mio-sub-switch button:active{ transform:scale(0.97); }
 
 /* меню отчёта должно перекрывать карту; в фуллскрине шапка уходит вниз */
 header{ z-index:1200; }
