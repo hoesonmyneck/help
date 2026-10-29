@@ -612,7 +612,7 @@ function setupAdminPanel() {
             <div class="admin-upload-title">Обновление данных МИО</div>
             <div class="admin-upload-hint"></div>
             <div class="admin-upload-row">
-              <input type="file" id="admin-data-file" accept=".xlsx,.xlsm">
+              <input type="file" id="admin-data-file" accept=".xlsx,.xlsm" multiple>
               <button type="button" id="admin-data-upload-btn" onclick="adminUploadData()">Загрузить и обновить</button>
             </div>
             <div class="admin-upload-status" id="admin-upload-status"></div>
@@ -783,17 +783,20 @@ async function adminUploadData() {
   const input = document.getElementById('admin-data-file');
   const statusEl = document.getElementById('admin-upload-status');
   const btn = document.getElementById('admin-data-upload-btn');
-  const file = input.files && input.files[0];
-  if (!file) { statusEl.className = 'admin-upload-status err'; statusEl.textContent = 'Выберите файл .xlsx'; return; }
-  if (!confirm(`Заменить данные МИО данными из «${file.name}»?\n` +
+  // выгрузка больше лимита Excel приходит несколькими файлами — их строки объединяются
+  const files = [...(input.files || [])];
+  if (!files.length) { statusEl.className = 'admin-upload-status err'; statusEl.textContent = 'Выберите файл .xlsx'; return; }
+  const names = files.map(f => `«${f.name}»`).join(', ');
+  if (!confirm(`Заменить данные МИО данными из ${names}?\n` +
+               (files.length > 1 ? `Строки всех ${files.length} файлов будут объединены.\n` : '') +
                `Если в файле есть столбец VID_ID — обновятся все три подраздела МИО.`)) return;
 
   btn.disabled = true;
   statusEl.className = 'admin-upload-status';
-  statusEl.textContent = 'Отправка файла на сервер…';
+  statusEl.textContent = files.length > 1 ? `Отправка ${files.length} файлов на сервер…` : 'Отправка файла на сервер…';
   try {
     const fd = new FormData();
-    fd.append('file', file);
+    files.forEach(f => fd.append('files', f));
     const r = await fetch('/api/admin/upload-data', { method: 'POST', credentials: 'include', body: fd });
     const data = await r.json();
     if (!r.ok) {

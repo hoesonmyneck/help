@@ -17,6 +17,7 @@ from load_data import (load_excel, load_budget, load_region_budget, load_referen
                        all_region_katos, pay_type_names, REGION_NAMES,
                        raion_names_ref, raion_reg_ref, settings_rows, settings_pay_names)
 import auth
+import hashlib
 import os
 import threading
 import time
@@ -501,11 +502,11 @@ _upload_job: dict = {"state": "idle"}
 _upload_lock = threading.Lock()
 
 
-def _run_upload_job(content: bytes):
+def _run_upload_job(contents: list[bytes]):
     def progress(n):
         _upload_job["rows"] = n
     try:
-        res = replace_payments_from_file(io.BytesIO(content), progress=progress)
+        res = replace_payments_from_file([io.BytesIO(c) for c in contents], progress=progress)
         clear_api_cache()
         _upload_job.update(state="done", finished=datetime.now().isoformat(timespec="seconds"), **res)
         warm_api_cache_async()
@@ -517,21 +518,25 @@ def _run_upload_job(content: bytes):
 
 
 @app.post("/api/admin/upload-data")
-async def api_admin_upload_data(file: UploadFile = File(...), admin: User = Depends(auth.require_admin)):
-    """Загрузить новую выгрузку МИО и заменить данные (только админ). Если в файле есть
-    VID_ID — обновляются все три подраздела МИО. Обработка идёт в фоне — ответ сразу,
-    ход и результат — в /api/admin/upload-status."""
-    name = (file.filename or "").lower()
-    if not name.endswith((".xlsx", ".xlsm")):
-        raise HTTPException(status_code=400, detail="Нужен файл .xlsx")
-    content = await file.read()
+async def api_admin_upload_data(files: list[UploadFile] = File(...), admin: User = Depends(auth.require_admin)):
+    """Загрузить новую выгрузку МИО и заменить данные (только админ). Выгрузка больше
+    лимита Excel передаётся несколькими файлами — их строки объединяются. Если в файлах
+    есть VID_ID — обновляются все три подраздела МИО. Обработка идёт в фоне — ответ
+    сразу, ход и результат — в /api/admin/upload-status."""
+    for f in files:
+        if not (f.filename or "").lower().endswith((".xlsx", ".xlsm")):
+            raise HTTPException(status_code=400, detail=f"Нужен файл .xlsx: «{f.filename}»")
+    contents = [await f.read() for f in files]
+    # один и тот же файл, выбранный дважды, задвоил бы строки
+    if len({hashlib.sha256(c).digest() for c in contents}) < len(contents):
+        raise HTTPException(status_code=400, detail="Один и тот же файл выбран несколько раз")
     with _upload_lock:
         if _upload_job.get("state") == "running":
             raise HTTPException(status_code=409, detail="Уже идёт загрузка — дождитесь её окончания")
         _upload_job.clear()
-        _upload_job.update(state="running", rows=0, filename=file.filename,
+        _upload_job.update(state="running", rows=0, filename=", ".join(f.filename for f in files),
                            started=datetime.now().isoformat(timespec="seconds"))
-    threading.Thread(target=_run_upload_job, args=(content,), daemon=True).start()
+    threading.Thread(target=_run_upload_job, args=(contents,), daemon=True).start()
     return {"ok": True, "state": "running"}
 
 

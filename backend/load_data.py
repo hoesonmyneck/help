@@ -360,8 +360,9 @@ def ensure_dataset_column():
             conn.execute(text(f"ALTER TABLE payments ALTER COLUMN {col} TYPE TEXT"))
 
 
-def replace_payments_from_file(file_obj, progress=None) -> dict:
-    """Загрузить выгрузку МИО (xlsx, файл/поток) и заменить строки в БД.
+def replace_payments_from_file(file_objs, progress=None) -> dict:
+    """Загрузить выгрузку МИО (xlsx, файл/поток или список — выгрузка больше лимита
+    Excel приходит несколькими файлами) и заменить строки в БД.
 
     Если в выгрузке есть VID_ID — строки раскладываются по подразделам
     (MIO_VID_DATASETS) и заменяются все три подраздела; строки с другим VID
@@ -369,9 +370,13 @@ def replace_payments_from_file(file_obj, progress=None) -> dict:
     затрагивается. Замена — одной транзакцией: до коммита сайт показывает старые
     данные. `progress(n)` вызывается по мере вставки. Используется админ-загрузкой."""
     ensure_dataset_column()
-    wb = load_workbook(file_obj, read_only=True, data_only=True)
+    if not isinstance(file_objs, (list, tuple)):
+        file_objs = [file_objs]
+    wbs = []
     try:
-        sheets = _payment_sheets(wb)
+        for f in file_objs:
+            wbs.append(load_workbook(f, read_only=True, data_only=True))
+        sheets = [ws for wb in wbs for ws in _payment_sheets(wb)]
         if not sheets:
             raise ValueError("В файле не найдено ни одной строки данных (нет колонки APP_ID?)")
         has_vid = any(_header_index(_sheet_header(ws), 'VID_ID') is not None for ws in sheets)
@@ -407,7 +412,8 @@ def replace_payments_from_file(file_obj, progress=None) -> dict:
                 f"INSERT INTO payments ({cols}) SELECT {cols} FROM payments_stage "
                 f"ORDER BY dataset, kato_region, kato_raion"))
     finally:
-        wb.close()
+        for wb in wbs:
+            wb.close()
     with engine.begin() as conn:
         conn.execute(text("ANALYZE payments"))
     for ds in targets:
